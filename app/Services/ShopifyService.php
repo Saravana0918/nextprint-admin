@@ -3,49 +3,74 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
+use RuntimeException;
 
 class ShopifyService
 {
-    private string $base;
-    private string $token;
-    private string $version;
+    protected string $shopHandle;   // e.g. "yogireddy" (no protocol, no .myshopify.com)
+    protected string $token;
+    protected string $version;
+    protected string $baseUrl;      // e.g. https://yogireddy.myshopify.com
 
     public function __construct()
     {
-        // .env => SHOPIFY_STORE, SHOPIFY_ADMIN_API_TOKEN, SHOPIFY_API_VERSION
-        $this->base    = 'https://' . env('SHOPIFY_STORE') . '/admin/api';
-        $this->token   = trim((string) env('SHOPIFY_ADMIN_API_TOKEN'));
-        $this->version = env('SHOPIFY_API_VERSION', '2024-07');
+        // Read from .env
+        $rawStore = trim((string) env('SHOPIFY_STORE', ''));
+        $this->token = trim((string) env('SHOPIFY_ADMIN_API_TOKEN', ''));
+        $this->version = env('SHOPIFY_API_VERSION', '2024-10');
+
+        if ($rawStore === '') {
+            throw new RuntimeException('SHOPIFY_STORE not set in .env');
+        }
+        if ($this->token === '') {
+            throw new RuntimeException('SHOPIFY_ADMIN_API_TOKEN not set in .env');
+        }
+
+        // Accept either "handle" or "handle.myshopify.com" or full url
+        $handle = $rawStore;
+        // remove protocol if present
+        $handle = preg_replace('#^https?://#i', '', $handle);
+        // remove trailing slash
+        $handle = rtrim($handle, '/');
+
+        // if input contains ".myshopify.com" remove that
+        if (Str::contains($handle, '.myshopify.com')) {
+            $handle = preg_replace('/\.myshopify\.com$/i', '', $handle);
+        }
+
+        $this->shopHandle = $handle;
+        $this->baseUrl = 'https://' . $this->shopHandle . '.myshopify.com';
     }
 
     /**
-     * Low-level GraphQL caller
+     * Low-level GraphQL caller (keeps your existing GraphQL helpers)
      */
     private function gql(string $query, array $variables = []): array
     {
-        $url = "{$this->base}/{$this->version}/graphql.json";
+        $url = "{$this->baseUrl}/admin/api/{$this->version}/graphql.json";
 
         $resp = Http::withHeaders([
-                    'X-Shopify-Access-Token' => $this->token,
-                ])
-                // If you prefer project-scoped CA bundle instead of php.ini, uncomment:
-                // ->withOptions(['verify' => base_path('storage/certs/cacert.pem')])
-                ->post($url, [
-                    'query'     => $query,
-                    'variables' => $variables,
-                ])
-                ->throw()
-                ->json();
+            'X-Shopify-Access-Token' => $this->token,
+            'Accept' => 'application/json',
+        ])
+            // ->withOptions(['verify' => base_path('storage/certs/cacert.pem')]) // optional
+            ->post($url, [
+                'query' => $query,
+                'variables' => $variables,
+            ])
+            ->throw()
+            ->json();
 
         if (isset($resp['errors'])) {
-            throw new \RuntimeException(json_encode($resp['errors']));
+            throw new RuntimeException(json_encode($resp['errors']));
         }
 
         return $resp['data'] ?? [];
     }
 
     /**
-     * (Legacy) Fetch by collection handle (kept for compatibility)
+     * (Legacy) Fetch by collection handle via GraphQL
      */
     public function productsByCollectionHandle(string $handle): \Generator
     {
@@ -61,15 +86,10 @@ class ShopifyService
                   handle
                   vendor
                   status
-
-                  # Prefer the actual cover media first
                   featuredMedia { preview { image { url } } }
-                  media(first: 5) {
-                    edges { node { ... on MediaImage { image { url } } } }
-                  }
-                  featuredImage { url }                         # legacy fallback
-                  images(first: 1) { edges { node { url } } }   # last fallback
-
+                  media(first: 5) { edges { node { ... on MediaImage { image { url } } } } }
+                  featuredImage { url }
+                  images(first: 1) { edges { node { url } } }
                   priceRangeV2 { minVariantPrice { amount } }
                 }
               }
@@ -81,20 +101,20 @@ class ShopifyService
         $cursor = null;
         do {
             $data = $this->gql($query, ['handle' => $handle, 'cursor' => $cursor]);
-            $col  = $data['collectionByHandle'] ?? null;
+            $col = $data['collectionByHandle'] ?? null;
             if (!$col) break;
 
             foreach (($col['products']['edges'] ?? []) as $e) {
                 yield $e['node'];
             }
 
-            $pi     = $col['products']['pageInfo'] ?? [];
+            $pi = $col['products']['pageInfo'] ?? [];
             $cursor = !empty($pi['hasNextPage']) ? ($pi['endCursor'] ?? null) : null;
         } while ($cursor);
     }
 
     /**
-     * Fetch products that have the metafield nextprint.show=true
+     * Fetch products that have a metafield nextprint.show true (GraphQL)
      */
     public function productsByNextprintFlag(bool $onlyActive = true): \Generator
     {
@@ -111,15 +131,10 @@ class ShopifyService
                 handle
                 vendor
                 status
-
-                # Modern image fields (prefer these)
                 featuredMedia { preview { image { url } } }
-                media(first: 5) {
-                  edges { node { ... on MediaImage { image { url } } } }
-                }
-                featuredImage { url }                         # legacy fallback
-                images(first: 1) { edges { node { url } } }   # last fallback
-
+                media(first: 5) { edges { node { ... on MediaImage { image { url } } } } }
+                featuredImage { url }
+                images(first: 1) { edges { node { url } } }
                 priceRangeV2 { minVariantPrice { amount } }
               }
             }
@@ -129,56 +144,104 @@ class ShopifyService
 
         $after = null;
         do {
-            $data  = $this->gql($gql, ['query' => $queryString, 'after' => $after]);
+            $data = $this->gql($gql, ['query' => $queryString, 'after' => $after]);
             foreach (($data['products']['edges'] ?? []) as $e) {
                 yield $e['node'];
             }
 
-            $pi    = $data['products']['pageInfo'] ?? [];
+            $pi = $data['products']['pageInfo'] ?? [];
             $after = !empty($pi['hasNextPage']) ? ($pi['endCursor'] ?? null) : null;
         } while ($after);
     }
 
     /**
-     * Sync all NextPrint-eligible products to local DB (shopify_products table)
-     * Returns number of upserts.
+     * Sync all NextPrint-eligible products to local DB (shopify_product_id on products table).
+     * Filters using the tag "Show in NextPrint" by default.
+     *
+     * Returns number of upserts performed (approx; counts processed products from REST fetch)
      */
-    public function syncNextprintToLocal(): int
+    public function syncNextprintToLocal(array $options = []): int
     {
-        $count = 0;
+        $limit = $options['limit'] ?? 250; // Shopify REST max 250
+        $sinceId = 0;
+        $upserts = 0;
 
-        foreach ($this->productsByNextprintFlag() as $p) {
-            // Pick the REAL product cover first; fallbacks after that
-            $img = data_get($p, 'featuredMedia.preview.image.url')
-                ?? data_get($p, 'media.edges.0.node.image.url')
-                ?? data_get($p, 'featuredImage.url')
-                ?? data_get($p, 'images.edges.0.node.url')
-                ?? null;
+        // Use Shopify REST products.json, paginated by since_id
+        do {
+            $url = "{$this->baseUrl}/admin/api/{$this->version}/products.json";
 
-            $min = $p['priceRangeV2']['minVariantPrice']['amount'] ?? null;
+            $query = [
+                'limit' => $limit,
+            ];
+            if ($sinceId > 0) {
+                $query['since_id'] = $sinceId;
+            }
 
-            \App\Models\ShopifyProduct::updateOrCreate(
-                ['handle' => $p['handle'] ?? null],
-                [
-                    // If you keep a numeric shopify id column, uncomment:
-                    // 'shopify_id' => self::gidToId($p['id'] ?? ''),
+            $resp = Http::withHeaders([
+                'X-Shopify-Access-Token' => $this->token,
+                'Accept' => 'application/json',
+            ])
+                ->get($url, $query)
+                ->throw()
+                ->json();
 
-                    'title'     => $p['title']  ?? '',
-                    'vendor'    => $p['vendor'] ?? '',
-                    'status'    => $p['status'] ?? 'ACTIVE',
-                    'image_url' => $img,
-                    'min_price' => $min,
-                ]
-            );
+            $products = $resp['products'] ?? [];
 
-            $count++;
-        }
+            if (empty($products)) break;
 
-        return $count;
+            foreach ($products as $product) {
+                // Normalize tags: Shopify returns string "tag1, tag2"
+                $rawTags = $product['tags'] ?? '';
+                $tags = is_array($rawTags) ? $rawTags : array_map('trim', explode(',', $rawTags));
+
+                // Skip if tag "Show in NextPrint" not present
+                if (!in_array('Show in NextPrint', $tags, true)) {
+                    continue;
+                }
+
+                // Upsert into local products table (adjust fields to your schema)
+                $shopifyId = (int) ($product['id'] ?? 0);
+                if ($shopifyId === 0) continue;
+
+                // Some safe extra fields
+                $name = $product['title'] ?? '';
+                $vendor = $product['vendor'] ?? null;
+                $status = $product['status'] ?? ($product['published_at'] ? 'active' : 'draft');
+                $price = 0;
+                if (!empty($product['variants'][0]['price'])) {
+                    $price = $product['variants'][0]['price'];
+                }
+
+                \App\Models\Product::updateOrCreate(
+                    ['shopify_product_id' => $shopifyId],
+                    [
+                        'name' => $name,
+                        'price' => $price,
+                        'vendor' => $vendor,
+                        'status' => $status,
+                        // add any other mapping you need here (thumbnail, description, etc)
+                        'meta' => json_encode([
+                            'handle' => $product['handle'] ?? null,
+                            'tags' => $tags,
+                        ]),
+                    ]
+                );
+
+                $upserts++;
+            }
+
+            // set since_id to last product id in this page for pagination
+            $last = end($products);
+            $sinceId = (int) ($last['id'] ?? 0);
+            // continue until fewer than limit (no more pages)
+            $fewerThanLimit = count($products) < $limit;
+        } while (!$fewerThanLimit && $sinceId > 0);
+
+        return $upserts;
     }
 
     /**
-     * Convert Shopify GID to numeric ID (e.g. gid://shopify/Product/123456789 -> 123456789)
+     * Convert Shopify GID to numeric ID (GraphQL IDs)
      */
     public static function gidToId(?string $gid): ?int
     {
