@@ -160,7 +160,7 @@ query collectionProducts($handle: String!, $first: Int!) {
           images(first: 5) {
             edges { node { url } }
           }
-          image { src }
+          featuredImage { url }
           priceRangeV2 {
             minVariantPrice { amount currencyCode }
             maxVariantPrice { amount currencyCode }
@@ -188,8 +188,8 @@ GQL;
                         if ($url) $images[] = ['src' => $url];
                     }
                 }
-                if (empty($images) && !empty($node['image']['src'])) {
-                    $images[] = ['src' => $node['image']['src']];
+                if (empty($images) && !empty($node['featuredImage']['url'])) {
+                    $images[] = ['src' => $node['featuredImage']['url']];
                 }
 
                 // priceRangeV2 preserved as-is (sync expects priceRangeV2->minVariantPrice->amount)
@@ -200,7 +200,7 @@ GQL;
                     'vendor' => $node['vendor'] ?? null,
                     'tags' => $node['tags'] ?? [],
                     'images' => $images,                 // array of ['src'=>...]
-                    'image' => ['src' => $images[0]['src'] ?? ($node['image']['src'] ?? null)],
+                    'image' => ['src' => $images[0]['src'] ?? ($node['featuredImage']['url'] ?? null)],
                     'priceRangeV2' => $node['priceRangeV2'] ?? null,
                     'raw' => $node,
                 ];
