@@ -49,11 +49,11 @@ DB::table('shopify_products')->updateOrInsert(
 DB::table('products')->updateOrInsert(
     ['shopify_product_id' => $id],
     [
-        'name'            => $p['title'],
-        'image_url'       => $img,              // optional: store image on product row
-        'is_in_nextprint' => 1,                 // <<< THIS ENSURES ADMIN SHOWS IT
-        'updated_at'      => now(),
-        'created_at'      => now(),
+        'name'           => $p['title'],
+        'updated_at'     => now(),
+        'created_at'     => now(),
+        'is_in_nextprint'=> 1, // ✅ Mark product as in NextPrint
+        'image_url'      => $img, // ✅ Save image for preview
     ]
 );
 
