@@ -97,13 +97,6 @@ class SyncShopifyDesignerProducts extends Command
 
                         $min = $p['priceRangeV2']['minVariantPrice']['amount'] ?? null;
 
-                        // debug log current product
-                            'handle' => $handle,
-                            'shopify_id' => $id,
-                            'title' => $p['title'] ?? ($p['name'] ?? null),
-                            'img_found' => $img ? true : false,
-                            'min_price' => $min,
-                        ]);
 
                         // upsert shopify_products table
                         // Keep the shopify_products.id as Shopify product id (if that's your design).
