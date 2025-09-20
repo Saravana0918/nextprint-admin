@@ -13,6 +13,7 @@ class ProductController extends Controller {
 
 public function index()
 {
+    Log::info('ADMIN CHECK - products in DB flagged', ['count' => DB::table('products')->where('is_in_nextprint',1)->count()]);
     $rows = DB::table('products as p')
         ->leftJoin('shopify_products as sp', 'sp.id', '=', 'p.shopify_product_id')
 
@@ -56,7 +57,7 @@ public function index()
         ->orderBy('p.id', 'desc')
 
         // <-- filter by Shopify "Show in NextPrint" collection/tag
-        ->whereRaw("COALESCE(sp.tags,'') LIKE ?", ['%Show in NextPrint%'])
+        ->where('p.is_in_nextprint', 1)
 
         ->paginate(30);
 
