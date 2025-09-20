@@ -58,8 +58,11 @@ public function index()
               NULLIF(p.thumbnail, '')
             ) as preview_image
         ")
-        ->orderBy('p.id')
-        ->get();
+        ->selectRaw(" ... ) as preview_image")
+        ->orderBy('p.id', 'desc')
+        ->where('p.is_in_nextprint', 1)
+        ->paginate(30);
+
 
     // build $r->preview_src like you already do...
     foreach ($rows as $r) {

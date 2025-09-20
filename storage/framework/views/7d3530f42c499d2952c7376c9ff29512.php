@@ -10,115 +10,224 @@
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Oswald:wght@400;600&display=swap" rel="stylesheet">
 
   <style>
-    .np-hidden{display:none!important;}
 
-    /* Preview fonts */
-    .font-bebas{font-family:'Bebas Neue', Impact, 'Arial Black', sans-serif;}
-    .font-anton{font-family:'Anton', Impact, 'Arial Black', sans-serif;}
-    .font-oswald{font-family:'Oswald', Arial, sans-serif;}
-    .font-impact{font-family:Impact, 'Arial Black', sans-serif;}
+  /* =========================
+   NextPrint — Page styling
+   Drop this into <head> or theme CSS
+   ========================= */
 
-    /* Canvas area */
-    .np-stage { position: relative; width:100%; max-width:520px; margin:0 auto; min-height:50px; }
-    .np-stage img { width:100%; height:auto; display:block; }
+/* ---- basic helpers ---- */
+.np-hidden { display: none !important; }
+.font-bebas{font-family:'Bebas Neue', Impact, 'Arial Black', sans-serif;}
+.font-anton{font-family:'Anton', Impact, 'Arial Black', sans-serif;}
+.font-oswald{font-family:'Oswald', Arial, sans-serif;}
+.font-impact{font-family:Impact, 'Arial Black', sans-serif;}
 
-    .np-overlay { position:absolute; left:50%; transform:translateX(-50%); color:#d4af37;
-      text-shadow:0 0 2px rgba(0,0,0,.35); white-space:nowrap; pointer-events:none; font-weight:700; }
-    .np-name { letter-spacing:2px; }
-    .np-num  { letter-spacing:2px; }
+/* page card look */
+.border.rounded.p-3 {
+  background: #fff;
+  border: 1px solid #e6e9ee;
+  border-radius: 8px;
+  padding: 1rem !important;
+  box-shadow: 0 6px 18px rgba(15,23,42,0.04);
+}
 
-    @media (max-width: 767.98px){ .np-col { margin-bottom:1rem; } }
+/* heading */
+h6.mb-3 {
+  margin-bottom: .75rem !important;
+  font-weight: 700;
+  color: #111827;
+  font-size: 2rem;
+}
 
-    .np-swatch{width:28px;height:28px;border-radius:6px;border:1px solid #ddd;cursor:pointer;}
-    .np-swatch.active{outline:2px solid #000; outline-offset:1px;}
+/* status & note */
+#np-status, #np-note {
+  font-size: .85rem;
+  color: #6b7280;
+}
 
-    /* --- MOBILE ONLY OVERRIDES --- */
-    @media (max-width: 767.98px) {
-      body {
-        position: relative;
-        background: url('<?php echo e(asset("images/stadium-bg.jpg")); ?>') no-repeat center center fixed;
-        background-size: cover;
-      }
+/* form-label polish */
+.form-label { font-weight: 600; color: #374151; font-size: 1.3rem; }
 
-      /* dark overlay over stadium */
-      body::before {
-        content: "";
-        position: fixed;
-        top: 0; left: 0; right: 0; bottom: 0;
-        background: rgba(0,0,0,0.55); /* light dim */
-        z-index: 0;
-      }
+/* help & errors */
+.form-text { color: #6b7280; font-size: 1rem; margin-top: .25rem; }
+.text-danger.small { font-size: .8rem; }
 
-        .container, .np-stage, .np-mobile-inputs {
-        position: relative;
-        z-index: 1;
-      }
+/* inputs - make consistent */
+#np-num, #np-name, #np-font, #np-color,
+#np-mobile-name, #np-mobile-num, #np-mobile-font {
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  padding: .55rem .65rem;
+  font-size: .95rem;
+  transition: border-color .12s ease, box-shadow .12s ease;
+}
+#np-num:focus, #np-name:focus, #np-font:focus, #np-color:focus,
+#np-mobile-name:focus, #np-mobile-num:focus, #np-mobile-font:focus {
+  outline: none;
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 6px rgba(96,165,250,0.06);
+}
+
+/* font select custom arrow (desktop) */
+#np-font {
+  -webkit-appearance: none; appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, #6b7280 50%),
+                    linear-gradient(135deg, #6b7280 50%, transparent 50%),
+                    linear-gradient(to right, #fff, #fff);
+  background-position: calc(100% - 18px) calc(1em + 2px), calc(100% - 13px) calc(1em + 2px), 100% 0;
+  background-size: 6px 6px, 6px 6px, 1.5em 100%;
+  background-repeat: no-repeat;
+  padding-right: 2.4rem;
+}
+
+/* color swatches (desktop left panel) */
+.np-swatch {
+  width: 28px; height: 28px; border-radius: 6px;
+  border: 1px solid rgba(0,0,0,0.06); cursor: pointer;
+  box-shadow: 0 4px 10px rgba(16,24,40,0.03);
+  transition: transform .08s ease, box-shadow .08s ease;
+  display: inline-block;
+}
+.np-swatch:hover { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(16,24,40,0.06); }
+.np-swatch.active {
+  box-shadow: 0 0 0 4px rgba(59,130,246,0.14);
+  border-color: rgba(59,130,246,0.9);
+}
+
+/* native color input */
+.form-control-color {
+  padding: .25rem 0;
+  height: 40px;
+  width: 100%;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  box-sizing: border-box;
+  margin-top: .5rem;
+}
+
+/* stage / preview area */
+.np-stage {
+  position: relative;
+  width: 100%;
+  max-width: 562px;
+  margin: 0 auto;
+  min-height: 220px;
+  overflow: visible;
+  background: #fff;
+}
+.np-stage img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 6px;
+}
+
+/* overlay text */
+.np-overlay {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #D4AF37; /* default gold */
+  text-shadow: 0 2px 6px rgba(0,0,0,0.35);
+  white-space: nowrap;
+  pointer-events: none;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  line-height: 1;
+}
+
+/* name smaller and number bigger by default */
+.np-name { font-size: 26px; top: 18%; }
+.np-num  { font-size: 64px; top: 42%; }
+
+/* shrink / responsiveness handled by inline js in your page */
+
+/* mobile-only theme */
+@media (max-width: 767.98px) {
+  body {
+  background-image: url('<?php echo e(asset("images/stadium-bg.jpg")); ?>');
+  background-size: cover;
+  background-position: center top;
+  background-repeat: no-repeat;
+}
+
+.container {
+  background: transparent;
+}
+
+/* If you want overlay to improve readability */
+body::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.45);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Ensure your content sits above */
+.container, .np-stage, .np-mobile-inputs {
+  position: relative;
+  z-index: 2;
+}
 
 
-      /* Hide side panels */
-      .col-md-3.np-col { 
-        display: none !important; 
-      }
+  .container, .np-stage, .np-mobile-inputs { position: relative; z-index: 2; }
 
-      /* Stage full width */
-      .col-md-6.np-col {
-        order: 1 !important;
-        width: 100% !important;
-        flex: 0 0 100% !important;
-        max-width: 100% !important;
-      }
+  .col-md-3.np-col { display: none !important; }
+  .col-md-6.np-col { order: 1 !important; flex: 0 0 100% !important; max-width: 100% !important; }
 
-      /* Mobile inputs like manager screenshot */
-      .np-mobile-inputs {
-        margin-top: 20px;
-        text-align: center;
-        font-family: 'Bebas Neue', sans-serif;
-        background: transparent;
-      }
-
-      .np-mobile-inputs input {
-        background: transparent;
-        border: none;
-        border-bottom: 2px solid #fff;  /* white underline */
-        text-align: center;
-        color: #fff !important;         /* white placeholder + text */
-        font-size: 20px;
-        letter-spacing: 2px;
-        text-transform: uppercase;
-        outline: none;
-        width: 80%;
-        margin: 15px auto 5px auto;
-      }
-
-       .np-mobile-inputs input::placeholder {
-        color: #fff !important;
-        opacity: 1;
-      }
-
-      .np-mobile-inputs small {
-        display: block;
-        font-size: 12px;
-        color: #FFD700;
-        text-align: right;
-        width: 80%;
-        margin: 0 auto 10px auto;
-      }
-      .np-mobile-controls {
-    margin: 20px auto;
-    width: 80%;
-    text-align: center;
+  .np-mobile-inputs { margin-top: 16px; text-align: center; font-family: 'Bebas Neue', sans-serif; background: transparent; z-index:3; }
+  .np-mobile-inputs input {
+    background: transparent; border: none;
+    border-bottom: 2px solid rgba(255,255,255,0.95);
+    text-align: center; color: #fff !important; font-size: 20px;
+    letter-spacing: 2px; text-transform: uppercase; outline: none;
+    width: 80%; margin: 10px auto;
   }
-  .np-mobile-controls select {
-    width: 100%;
-    padding: 6px;
-    border-radius: 6px;
-    font-size: 14px;
+  .np-mobile-inputs input::placeholder { color: rgba(255,255,255,0.9); opacity: 1; }
+  .np-mobile-inputs small { display:block; font-size:12px; color: #FFD700; width:80%; margin:0 auto 8px; text-align:right; }
+
+  .np-mobile-controls { margin: 16px auto; width: 86%; z-index:3; }
+  .np-mobile-controls label { color: #fff; font-weight:600; display:block; margin-bottom:6px; }
+  .np-mobile-controls select.form-select { width: 100%; padding: 8px; border-radius: 8px; }
+  .np-mobile-controls .swatches button {
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 1px solid #ddd; margin-right:4px; cursor:pointer; background-clip:padding-box;
   }
-  .np-mobile-controls .swatches button.active {
-    outline: 2px solid #fff;
-    outline-offset: 2px;
-  }
-    }
+  .np-mobile-controls .swatches button.active { outline: 2px solid #fff; outline-offset: 3px; }
+}
+
+/* right column polish */
+.col-md-3.np-col.order-3 { padding-left: 0.5rem; }
+#np-atc-form .btn {
+  border-radius: 8px;
+  padding: .55rem .75rem;
+  font-weight: 600;
+}
+
+/* responsive spacing */
+@media (min-width: 768px) {
+  .row.g-4 { align-items: flex-start; }
+  .col-md-6.np-col { display: block; }
+}
+
+/* Accessibility focus */
+.np-swatch:focus,
+.np-mobile-controls .swatches button:focus {
+  outline: 3px solid rgba(59,130,246,0.16);
+  outline-offset: 3px;
+}
+
 </style>
 
 </head>

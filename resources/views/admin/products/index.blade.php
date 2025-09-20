@@ -40,18 +40,18 @@
 
           {{-- Preview --}}
           <td>
-            {{-- debug id={{ $p->id }} raw={{ $p->preview_image ?? 'NULL' }} src={{ $p->preview_src ?? 'NULL' }} --}}
-      @php $src = $p->preview_src ?? null; @endphp
-      @if($src)
-        <img src="{{ $src }}" alt="preview"
-             style="width:50px;height:50px;object-fit:contain"
-             loading="lazy" referrerpolicy="no-referrer"
-             onerror="this.onerror=null; this.src='{{ asset('images/placeholder.png') }}'"
-      @else
-        <img src="{{ asset('images/placeholder.png') }}" alt="preview"
-             style="width:50px;height:50px;object-fit:contain">
-      @endif
-    </td>
+  @php $src = $p->preview_src ?? null; @endphp
+  @if($src)
+    <img src="{{ $src }}" alt="preview"
+         style="width:50px;height:50px;object-fit:contain"
+         loading="lazy" referrerpolicy="no-referrer"
+         onerror="this.onerror=null; this.src='{{ asset('images/placeholder.png') }}'">
+  @else
+    <img src="{{ asset('images/placeholder.png') }}" alt="preview"
+         style="width:50px;height:50px;object-fit:contain">
+  @endif
+</td>
+
 
     <td>{{ $p->name }}</td>
     <td>₹{{ $p->min_price }}</td>
@@ -90,5 +90,8 @@
 </tbody>
 
   </table>
+  <div class="mt-3">
+  {{ $rows->links() }}
+</div>
 </div>
 @endsection

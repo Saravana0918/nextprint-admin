@@ -56,13 +56,16 @@ class SyncShopifyDesignerProducts extends Command
     );
 
     DB::table('products')->updateOrInsert(
-        ['shopify_product_id' => $id],
-        [
-            'name'       => $p['title'] ?? null,
-            'updated_at' => now(),
-            'created_at' => now()
-        ]
-    );
+    ['shopify_product_id' => $id],
+    [
+        'name' => $p['title'],
+        'image_url' => $img, // 👈 add this
+        'is_in_nextprint' => 1, // 👈 mark as nextprint product
+        'updated_at' => now(),
+        'created_at' => now()
+    ]
+);
+
 }
 
             }
