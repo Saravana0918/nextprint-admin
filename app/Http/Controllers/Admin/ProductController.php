@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage; 
 use Illuminate\Http\Request;
 use App\Models\PrintMethod;
-
+use Illuminate\Support\Facades\Log;
 
 class ProductController extends Controller {
 
