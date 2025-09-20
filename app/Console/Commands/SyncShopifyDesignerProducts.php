@@ -38,7 +38,6 @@ class SyncShopifyDesignerProducts extends Command
             DB::transaction(function () use ($shopify, $handles) {
                 foreach ($handles as $handle) {
                     $this->info("Fetching collection: {$handle}");
-                    Log::info('SYNC - fetching collection', ['handle' => $handle]);
 
                     $items = $shopify->productsByCollectionHandle($handle);
 
@@ -47,7 +46,6 @@ class SyncShopifyDesignerProducts extends Command
                         $items = (array) $items;
                     }
 
-                    Log::info('SYNC - collection item count', ['handle' => $handle, 'count' => is_array($items) ? count($items) : 0]);
 
                     foreach ($items as $p) {
                         // Ensure array shape
@@ -100,7 +98,6 @@ class SyncShopifyDesignerProducts extends Command
                         $min = $p['priceRangeV2']['minVariantPrice']['amount'] ?? null;
 
                         // debug log current product
-                        Log::info('SYNC DEBUG - processing product', [
                             'handle' => $handle,
                             'shopify_id' => $id,
                             'title' => $p['title'] ?? ($p['name'] ?? null),
@@ -137,7 +134,6 @@ class SyncShopifyDesignerProducts extends Command
                             ]
                         );
 
-                        Log::info('SYNC DEBUG - product flagged', ['shopify_id' => $id, 'is_in_nextprint' => 1]);
                     } // foreach products
                 } // foreach collections
             }); // transaction
