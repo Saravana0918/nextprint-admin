@@ -84,22 +84,37 @@ public function bulkSave(Request $req, Product $product, ProductView $view)
         $row->mask_svg_path = $a['mask_svg_path'] ?? null;
 
         // ✅ Single vs Collage handling
-        if ($view->view_width_pct == 100 && $view->view_height_pct == 100 &&
-            $view->view_left_pct == 0 && $view->view_top_pct == 0) {
-            
-            // 🔹 Single image → use admin % directly
-            $row->left_pct   = $a['left_pct'];
-            $row->top_pct    = $a['top_pct'];
-            $row->width_pct  = $a['width_pct'];
-            $row->height_pct = $a['height_pct'];
+        // If the view has valid non-zero view_width_pct/height_pct we
+// convert relative sub-view % → global %. Otherwise assume the
+// incoming values are already absolute percentages and use them.
+if (!empty($view->view_width_pct) && !empty($view->view_height_pct)) {
+    // defensive numeric casts
+    $vw = floatval($view->view_width_pct);
+    $vh = floatval($view->view_height_pct);
+    $vl = floatval($view->view_left_pct);
+    $vt = floatval($view->view_top_pct);
 
-        } else {
-            // 🔹 Collage view → convert sub-view % → global %
-            $row->left_pct   = $view->view_left_pct + ($a['left_pct'] * $view->view_width_pct / 100);
-            $row->top_pct    = $view->view_top_pct  + ($a['top_pct']  * $view->view_height_pct / 100);
-            $row->width_pct  = $a['width_pct']  * $view->view_width_pct / 100;
-            $row->height_pct = $a['height_pct'] * $view->view_height_pct / 100;
-        }
+    // convert only when view percentages make sense (>0)
+    if ($vw > 0 && $vh > 0) {
+        $row->left_pct   = round($vl + (floatval($a['left_pct']) * $vw / 100.0), 5);
+        $row->top_pct    = round($vt + (floatval($a['top_pct'])  * $vh / 100.0), 5);
+        $row->width_pct  = round(floatval($a['width_pct'])  * $vw / 100.0, 5);
+        $row->height_pct = round(floatval($a['height_pct']) * $vh / 100.0, 5);
+    } else {
+        // fallback — treat incoming as absolute %
+        $row->left_pct   = round(floatval($a['left_pct']), 5);
+        $row->top_pct    = round(floatval($a['top_pct']), 5);
+        $row->width_pct  = round(floatval($a['width_pct']), 5);
+        $row->height_pct = round(floatval($a['height_pct']), 5);
+    }
+} else {
+    // no view percentages defined — use incoming values as-is
+    $row->left_pct   = round(floatval($a['left_pct']), 5);
+    $row->top_pct    = round(floatval($a['top_pct']), 5);
+    $row->width_pct  = round(floatval($a['width_pct']), 5);
+    $row->height_pct = round(floatval($a['height_pct']), 5);
+}
+
 
         $row->rotation   = $a['rotation'] ?? 0;
 
