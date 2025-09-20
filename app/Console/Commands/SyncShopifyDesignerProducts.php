@@ -26,43 +26,34 @@ class SyncShopifyDesignerProducts extends Command
             foreach ($handles as $handle) {
                 foreach ($shopify->productsByCollectionHandle($handle) as $p) {
     // REST product id is numeric
-    $id = $p['id'] ?? null;
+    $id  = ShopifyService::gidToId($p['id']);
+$img = $p['images']['edges'][0]['node']['url'] ?? null;
+$min = $p['priceRangeV2']['minVariantPrice']['amount'] ?? null;
 
-    // image (REST: images[0].src)
-    $img = $p['images'][0]['src'] ?? null;
+DB::table('shopify_products')->updateOrInsert(
+    ['id' => $id],
+    [
+        'title'      => $p['title'],
+        'handle'     => $p['handle'],
+        'vendor'     => $p['vendor'] ?? null,
+        'status'     => $p['status'] ?? null,
+        'image_url'  => $img,
+        'min_price'  => $min,
+        'tags'       => json_encode($p['tags'] ?? []),
+        'updated_at' => now(),
+        'created_at' => now(),
+    ]
+);
 
-    // variants first price as min (approx)
-    $min = $p['variants'][0]['price'] ?? null;
-
-    // tags: REST returns comma-separated string -> array
-    $tagsArr = [];
-    if (!empty($p['tags'])) {
-        $tagsArr = array_map('trim', explode(',', $p['tags']));
-    }
-
-    DB::table('shopify_products')->updateOrInsert(
-        ['id' => $id],
-        [
-            'title'      => $p['title'] ?? null,
-            'handle'     => $p['handle'] ?? null,
-            'vendor'     => $p['vendor'] ?? null,
-            'status'     => $p['status'] ?? null,
-            'image_url'  => $img,
-            'min_price'  => $min,
-            'tags'       => json_encode($tagsArr),
-            'updated_at' => now(),
-            'created_at' => now()
-        ]
-    );
-
-    DB::table('products')->updateOrInsert(
+// IMPORTANT: set is_in_nextprint flag on your local products table
+DB::table('products')->updateOrInsert(
     ['shopify_product_id' => $id],
     [
-        'name' => $p['title'],
-        'image_url' => $img, // 👈 add this
-        'is_in_nextprint' => 1, // 👈 mark as nextprint product
-        'updated_at' => now(),
-        'created_at' => now()
+        'name'            => $p['title'],
+        'image_url'       => $img,              // optional: store image on product row
+        'is_in_nextprint' => 1,                 // <<< THIS ENSURES ADMIN SHOWS IT
+        'updated_at'      => now(),
+        'created_at'      => now(),
     ]
 );
 
