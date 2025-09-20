@@ -16,7 +16,6 @@ public function index()
     $rows = DB::table('products as p')
         ->leftJoin('shopify_products as sp', 'sp.id', '=', 'p.shopify_product_id')
 
-        // 🔽 NEW: subquery that returns "product_id, methods"
         ->leftJoin(DB::raw("
             (
             SELECT ppm.product_id,
@@ -27,8 +26,6 @@ public function index()
             ) m
         "), 'm.product_id', '=', 'p.id')
 
-
-        // your existing join for product_views...
         ->leftJoin(DB::raw("
             (
               SELECT v1.*
@@ -46,8 +43,6 @@ public function index()
             DB::raw('pv.image_path  as view_image'),
             DB::raw('sp.image_url   as shop_image'),
             DB::raw('p.thumbnail    as legacy_image'),
-
-            // 🔽 NEW: selected/aggregated methods
             DB::raw('COALESCE(m.methods, "") as methods'),
         ])
 
@@ -58,13 +53,14 @@ public function index()
               NULLIF(p.thumbnail, '')
             ) as preview_image
         ")
-        ->selectRaw(" ... ) as preview_image")
         ->orderBy('p.id', 'desc')
-        ->where('p.is_in_nextprint', 1)
+
+        // <-- filter by Shopify "Show in NextPrint" collection/tag
+        ->whereRaw("COALESCE(sp.tags,'') LIKE ?", ['%Show in NextPrint%'])
+
         ->paginate(30);
 
-
-    // build $r->preview_src like you already do...
+    // build preview_src
     foreach ($rows as $r) {
         $raw = $r->preview_image;
         if (!$raw) { $r->preview_src = null; continue; }
@@ -72,11 +68,12 @@ public function index()
         if (preg_match('~^https?://~i',$raw)) { $r->preview_src = $raw; continue; }
         $raw = preg_replace('~^/?(storage|public)/~','', $raw);
         $raw = ltrim($raw,'/');
-        $r->preview_src = \Illuminate\Support\Facades\Storage::disk('public')->url($raw);
+        $r->preview_src = Storage::disk('public')->url($raw);
     }
 
     return view('admin.products.index', compact('rows'));
 }
+
 
 public function edit(Product $product)
 {
