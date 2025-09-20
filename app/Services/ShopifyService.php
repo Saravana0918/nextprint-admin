@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+
 
 class ShopifyService
 {
@@ -140,52 +142,156 @@ class ShopifyService
  */
 public function productsByCollectionHandle(string $handle, int $perPage = 250): array
 {
-    // 1) find collection id by handle (try custom_collections and smart_collections)
-    $findByHandle = function(string $type) use ($handle) {
-        $url = "{$this->base}/admin/api/{$this->version}/{$type}.json";
-        $resp = Http::withHeaders(['X-Shopify-Access-Token' => $this->token])->get($url, ['limit' => 250]);
-        $resp->throw();
-        $items = $resp->json()[ $type ] ?? [];
-        foreach ($items as $c) {
-            if (!empty($c['handle']) && $c['handle'] === $handle) {
-                return (int) $c['id'];
+    // Try GraphQL first (preferred) — this will return nodes in the GraphQL shape
+    $gql = <<<'GQL'
+query collectionProducts($handle: String!, $first: Int!) {
+  collectionByHandle(handle: $handle) {
+    id
+    handle
+    title
+    products(first: $first) {
+      edges {
+        node {
+          id
+          title
+          handle
+          vendor
+          tags
+          images(first: 5) {
+            edges { node { url } }
+          }
+          image { src }
+          priceRangeV2 {
+            minVariantPrice { amount currencyCode }
+            maxVariantPrice { amount currencyCode }
+          }
+        }
+      }
+    }
+  }
+}
+GQL;
+
+    try {
+        $data = $this->gql($gql, ['handle' => $handle, 'first' => $perPage]);
+
+        if (!empty($data['collectionByHandle']['products']['edges'])) {
+            $items = [];
+            foreach ($data['collectionByHandle']['products']['edges'] as $edge) {
+                $node = $edge['node'] ?? [];
+
+                // Build images in a shape your sync expects: either images[] or images.edges[].node.url
+                $images = [];
+                if (!empty($node['images']['edges']) && is_array($node['images']['edges'])) {
+                    foreach ($node['images']['edges'] as $ie) {
+                        $url = $ie['node']['url'] ?? null;
+                        if ($url) $images[] = ['src' => $url];
+                    }
+                }
+                if (empty($images) && !empty($node['image']['src'])) {
+                    $images[] = ['src' => $node['image']['src']];
+                }
+
+                // priceRangeV2 preserved as-is (sync expects priceRangeV2->minVariantPrice->amount)
+                $items[] = [
+                    'id' => $node['id'] ?? null,
+                    'title' => $node['title'] ?? null,
+                    'handle' => $node['handle'] ?? null,
+                    'vendor' => $node['vendor'] ?? null,
+                    'tags' => $node['tags'] ?? [],
+                    'images' => $images,                 // array of ['src'=>...]
+                    'image' => ['src' => $images[0]['src'] ?? ($node['image']['src'] ?? null)],
+                    'priceRangeV2' => $node['priceRangeV2'] ?? null,
+                    'raw' => $node,
+                ];
+            }
+
+            Log::info('SHOPIFY SERVICE - graphql matched products', ['handle' => $handle, 'count' => count($items)]);
+            return $items;
+        }
+
+        // GraphQL returned collection but no products (or collection not found)
+        Log::info('SHOPIFY SERVICE - graphql returned no products for handle', ['handle' => $handle]);
+    } catch (\Throwable $e) {
+        Log::warning('SHOPIFY SERVICE - graphql error', ['handle' => $handle, 'error' => $e->getMessage()]);
+    }
+
+    // Fallback: REST path (try to find collection id by handle and fetch products)
+    try {
+        // get custom and smart collections, match by handle
+        $colTypes = ['custom_collections', 'smart_collections'];
+        $collectionId = null;
+        foreach ($colTypes as $type) {
+            $url = "{$this->base}/admin/api/{$this->version}/{$type}.json";
+            $resp = Http::withHeaders(['X-Shopify-Access-Token' => $this->token])->get($url, ['limit' => 250]);
+            if ($resp->failed()) continue;
+            $arr = $resp->json()[$type] ?? [];
+            foreach ($arr as $c) {
+                if (!empty($c['handle']) && $c['handle'] === $handle) {
+                    $collectionId = $c['id'];
+                    break 2;
+                }
             }
         }
-        return null;
-    };
 
-    $collectionId = $findByHandle('custom_collections') ?: $findByHandle('smart_collections');
-    if (!$collectionId) {
-        return [];
-    }
+        if ($collectionId) {
+            $products = [];
+            $pageInfo = null;
+            $baseUrl = "{$this->base}/admin/api/{$this->version}/collections/{$collectionId}/products.json";
 
-    // 2) fetch products for the collection (cursor pagination via Link header)
-    $products = [];
-    $pageInfo = null;
-    $baseUrl = "{$this->base}/admin/api/{$this->version}/collections/{$collectionId}/products.json";
+            while (true) {
+                $params = ['limit' => $perPage];
+                if ($pageInfo) $params['page_info'] = $pageInfo;
 
-    while (true) {
-        $params = ['limit' => $perPage];
-        if ($pageInfo) $params['page_info'] = $pageInfo;
+                $resp = Http::withHeaders(['X-Shopify-Access-Token' => $this->token])->get($baseUrl, $params);
+                $resp->throw();
+                $data = $resp->json();
+                $batch = $data['products'] ?? [];
+                foreach ($batch as $p) {
+                    // normalize REST product to similar shape as GraphQL node
+                    $images = [];
+                    if (!empty($p['images']) && is_array($p['images'])) {
+                        foreach ($p['images'] as $im) {
+                            if (!empty($im['src'])) $images[] = ['src' => $im['src']];
+                            elseif (!empty($im['url'])) $images[] = ['src' => $im['url']];
+                        }
+                    }
+                    $products[] = [
+                        'id' => (string)($p['id'] ?? null),
+                        'title' => $p['title'] ?? null,
+                        'handle' => $p['handle'] ?? null,
+                        'vendor' => $p['vendor'] ?? null,
+                        'tags' => isset($p['tags']) ? array_map('trim', explode(',', $p['tags'])) : [],
+                        'images' => $images,
+                        'image' => ['src' => $images[0]['src'] ?? ($p['image']['src'] ?? null)],
+                        'priceRangeV2' => null,
+                        'raw' => $p,
+                    ];
+                }
 
-        $resp = Http::withHeaders(['X-Shopify-Access-Token' => $this->token])->get($baseUrl, $params);
-        $resp->throw();
-        $data = $resp->json();
-        $batch = $data['products'] ?? [];
-        foreach ($batch as $p) $products[] = $p;
+                // parse next page_info from Link header
+                $linkHeader = $resp->header('Link');
+                $nextPage = null;
+                if ($linkHeader && preg_match('/<[^>]+[?&]page_info=([^&>]+)[^>]*>;\s*rel="next"/', $linkHeader, $m)) {
+                    $nextPage = $m[1];
+                }
+                if (!$nextPage) break;
+                $pageInfo = $nextPage;
+            }
 
-        // parse Link header for next page_info
-        $linkHeader = $resp->header('Link');
-        $nextPageInfo = null;
-        if ($linkHeader && preg_match('/<[^>]+[?&]page_info=([^&>]+)[^>]*>;\\s*rel="next"/', $linkHeader, $m)) {
-            $nextPageInfo = $m[1];
+            Log::info('SHOPIFY SERVICE - rest fallback matched products', ['handle' => $handle, 'count' => count($products)]);
+            return $products;
+        } else {
+            Log::info('SHOPIFY SERVICE - rest fallback found no collection id for handle', ['handle' => $handle]);
         }
-        if (!$nextPageInfo) break;
-        $pageInfo = $nextPageInfo;
+    } catch (\Throwable $e) {
+        Log::warning('SHOPIFY SERVICE - rest fallback error', ['handle' => $handle, 'error' => $e->getMessage()]);
     }
 
-    return $products;
+    // nothing found
+    return [];
 }
+
 
 
     /**
