@@ -25,29 +25,46 @@ class SyncShopifyDesignerProducts extends Command
         DB::transaction(function () use ($shopify, $handles) {
             foreach ($handles as $handle) {
                 foreach ($shopify->productsByCollectionHandle($handle) as $p) {
-                    $id  = ShopifyService::gidToId($p['id']);
-                    $img = $p['images']['edges'][0]['node']['url'] ?? null;
-                    $min = $p['priceRangeV2']['minVariantPrice']['amount'] ?? null;
+    // REST product id is numeric
+    $id = $p['id'] ?? null;
 
-                    DB::table('shopify_products')->updateOrInsert(
-                        ['id'=>$id],
-                        [
-                            'title'=>$p['title'],
-                            'handle'=>$p['handle'],
-                            'vendor'=>$p['vendor'] ?? null,
-                            'status'=>$p['status'] ?? null,
-                            'image_url'=>$img,
-                            'min_price'=>$min,
-                            'tags'=>json_encode($p['tags'] ?? []),
-                            'updated_at'=>now(),'created_at'=>now()
-                        ]
-                    );
+    // image (REST: images[0].src)
+    $img = $p['images'][0]['src'] ?? null;
 
-                    DB::table('products')->updateOrInsert(
-                        ['shopify_product_id'=>$id],
-                        ['name'=>$p['title'],'updated_at'=>now(),'created_at'=>now()]
-                    );
-                }
+    // variants first price as min (approx)
+    $min = $p['variants'][0]['price'] ?? null;
+
+    // tags: REST returns comma-separated string -> array
+    $tagsArr = [];
+    if (!empty($p['tags'])) {
+        $tagsArr = array_map('trim', explode(',', $p['tags']));
+    }
+
+    DB::table('shopify_products')->updateOrInsert(
+        ['id' => $id],
+        [
+            'title'      => $p['title'] ?? null,
+            'handle'     => $p['handle'] ?? null,
+            'vendor'     => $p['vendor'] ?? null,
+            'status'     => $p['status'] ?? null,
+            'image_url'  => $img,
+            'min_price'  => $min,
+            'tags'       => json_encode($tagsArr),
+            'updated_at' => now(),
+            'created_at' => now()
+        ]
+    );
+
+    DB::table('products')->updateOrInsert(
+        ['shopify_product_id' => $id],
+        [
+            'name'       => $p['title'] ?? null,
+            'updated_at' => now(),
+            'created_at' => now()
+        ]
+    );
+}
+
             }
         });
 

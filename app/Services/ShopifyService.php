@@ -133,6 +133,60 @@ class ShopifyService
     return $processed;
 }
 
+/**
+ * Return all products for a collection given its handle (REST).
+ * Uses /collections -> find id by handle -> /collections/{id}/products.json
+ * Returns array of REST product arrays.
+ */
+public function productsByCollectionHandle(string $handle, int $perPage = 250): array
+{
+    // 1) find collection id by handle (try custom_collections and smart_collections)
+    $findByHandle = function(string $type) use ($handle) {
+        $url = "{$this->base}/admin/api/{$this->version}/{$type}.json";
+        $resp = Http::withHeaders(['X-Shopify-Access-Token' => $this->token])->get($url, ['limit' => 250]);
+        $resp->throw();
+        $items = $resp->json()[ $type ] ?? [];
+        foreach ($items as $c) {
+            if (!empty($c['handle']) && $c['handle'] === $handle) {
+                return (int) $c['id'];
+            }
+        }
+        return null;
+    };
+
+    $collectionId = $findByHandle('custom_collections') ?: $findByHandle('smart_collections');
+    if (!$collectionId) {
+        return [];
+    }
+
+    // 2) fetch products for the collection (cursor pagination via Link header)
+    $products = [];
+    $pageInfo = null;
+    $baseUrl = "{$this->base}/admin/api/{$this->version}/collections/{$collectionId}/products.json";
+
+    while (true) {
+        $params = ['limit' => $perPage];
+        if ($pageInfo) $params['page_info'] = $pageInfo;
+
+        $resp = Http::withHeaders(['X-Shopify-Access-Token' => $this->token])->get($baseUrl, $params);
+        $resp->throw();
+        $data = $resp->json();
+        $batch = $data['products'] ?? [];
+        foreach ($batch as $p) $products[] = $p;
+
+        // parse Link header for next page_info
+        $linkHeader = $resp->header('Link');
+        $nextPageInfo = null;
+        if ($linkHeader && preg_match('/<[^>]+[?&]page_info=([^&>]+)[^>]*>;\\s*rel="next"/', $linkHeader, $m)) {
+            $nextPageInfo = $m[1];
+        }
+        if (!$nextPageInfo) break;
+        $pageInfo = $nextPageInfo;
+    }
+
+    return $products;
+}
+
 
     /**
      * Convert Shopify global ID (gid) to numeric ID
