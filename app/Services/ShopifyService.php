@@ -47,60 +47,86 @@ class ShopifyService
     /**
      * Fetch products via REST and sync to local DB
      *
-     * This uses the REST products.json endpoint and filters by tags (client-side).
-     * Returns number of processed products.
+     * Uses REST products.json with cursor (page_info) pagination and
+     * a case-insensitive tag match. Returns number of processed products.
      */
     public function syncNextprintToLocal(): int
     {
         $perPage = 250;
-        $page = 1;
         $processed = 0;
+        $pageInfo = null;
+        $url = "{$this->base}/admin/api/{$this->version}/products.json";
 
-        // Use REST endpoint (products.json) for simple tag-based filtering client-side.
-        do {
-            $url = "{$this->base}/admin/api/{$this->version}/products.json";
+        // tags to match (lowercase). You can change or extend this list as needed.
+        $matchTags = [
+            'show in nextprint',
+            'customized',
+        ];
+
+        while (true) {
+            $params = ['limit' => $perPage];
+            if ($pageInfo) {
+                $params['page_info'] = $pageInfo;
+            }
+
             $resp = Http::withHeaders([
                         'X-Shopify-Access-Token' => $this->token,
-                    ])
-                    ->get($url, ['limit' => $perPage, 'page' => $page]);
+                    ])->get($url, $params);
 
             $resp->throw();
             $data = $resp->json();
-
             $products = $data['products'] ?? [];
 
             foreach ($products as $product) {
-    // Tags may be a comma-separated string
-    $tags = [];
-    if (!empty($product['tags'])) {
-        $tags = array_map('trim', explode(',', $product['tags']));
-    }
+                // Tags may be a comma-separated string
+                $tags = [];
+                if (!empty($product['tags'])) {
+                    $tags = array_map('trim', explode(',', $product['tags']));
+                }
 
-    // Filter: only sync products with the tag "Show in NextPrint" (case-insensitive)
-    $lower = array_map('strtolower', $tags);
-    if (!in_array('show in nextprint', $lower, true)) {
-        continue;
-    }
+                // make tags lowercase for case-insensitive comparison
+                $lower = array_map('strtolower', $tags);
 
-    // Upsert into local products table
-    \App\Models\Product::updateOrCreate(
-        ['shopify_product_id' => $product['id']],
-        [
-            'name'   => $product['title'] ?? null,
-            'price'  => $product['variants'][0]['price'] ?? 0,
-            'vendor' => $product['vendor'] ?? null,
-            'status' => $product['status'] ?? 'active',
-        ]
-    );
+                // if none of the configured matchTags are present, skip
+                $found = false;
+                foreach ($matchTags as $mt) {
+                    if (in_array($mt, $lower, true)) {
+                        $found = true;
+                        break;
+                    }
+                }
+                if (!$found) {
+                    continue;
+                }
 
-    $processed++;
-}
+                // Upsert into local products table (adjust fields to your schema)
+                \App\Models\Product::updateOrCreate(
+                    ['shopify_product_id' => $product['id']],
+                    [
+                        'name'   => $product['title'] ?? null,
+                        'price'  => $product['variants'][0]['price'] ?? 0,
+                        'vendor' => $product['vendor'] ?? null,
+                        'status' => $product['status'] ?? 'active',
+                        // add other mappings as needed
+                    ]
+                );
 
+                $processed++;
+            }
 
-            // if fewer than perPage results, that's the last page
-            $done = count($products) < $perPage;
-            $page++;
-        } while (!$done);
+            // Cursor-based pagination: parse Link header for rel="next"
+            $linkHeader = $resp->header('Link'); // may be null
+            $nextPageInfo = null;
+            if ($linkHeader && preg_match('/<[^>]+[?&]page_info=([^&>]+)[^>]*>;\s*rel="next"/', $linkHeader, $m)) {
+                $nextPageInfo = $m[1];
+            }
+
+            if (!$nextPageInfo) {
+                break; // no more pages
+            }
+
+            $pageInfo = $nextPageInfo;
+        }
 
         return $processed;
     }
