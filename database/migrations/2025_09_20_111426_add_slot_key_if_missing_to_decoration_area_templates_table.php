@@ -13,7 +13,12 @@ return new class extends Migration
     {
         if (! Schema::hasColumn('decoration_area_templates', 'slot_key')) {
             Schema::table('decoration_area_templates', function (Blueprint $table) {
-                $table->string('slot_key')->nullable()->after('svg_path');
+                if (!Schema::hasColumn('decoration_area_templates', 'slot_key')) {
+                    $table->string('slot_key')->nullable()->after('svg_path');
+                }
+                if (!Schema::hasColumn('decoration_area_templates', 'max_chars')) {
+                    $table->integer('max_chars')->nullable()->after('slot_key');
+                }
             });
         }
     }
