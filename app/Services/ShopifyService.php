@@ -51,85 +51,88 @@ class ShopifyService
      * a case-insensitive tag match. Returns number of processed products.
      */
     public function syncNextprintToLocal(): int
-    {
-        $perPage = 250;
-        $processed = 0;
-        $pageInfo = null;
-        $url = "{$this->base}/admin/api/{$this->version}/products.json";
+{
+    // collection name to look for (can set in .env as NEXTPRINT_COLLECTION)
+    $collectionName = trim((string) env('NEXTPRINT_COLLECTION', 'Show in NextPrint'));
+    if ($collectionName === '') {
+        throw new \RuntimeException('NEXTPRINT_COLLECTION not set in .env');
+    }
 
-        // tags to match (lowercase). You can change or extend this list as needed.
-        $matchTags = [
-            'show in nextprint',
-            'customized',
-        ];
-
-        while (true) {
-            $params = ['limit' => $perPage];
-            if ($pageInfo) {
-                $params['page_info'] = $pageInfo;
-            }
-
-            $resp = Http::withHeaders([
-                        'X-Shopify-Access-Token' => $this->token,
-                    ])->get($url, $params);
-
-            $resp->throw();
-            $data = $resp->json();
-            $products = $data['products'] ?? [];
-
-            foreach ($products as $product) {
-                // Tags may be a comma-separated string
-                $tags = [];
-                if (!empty($product['tags'])) {
-                    $tags = array_map('trim', explode(',', $product['tags']));
-                }
-
-                // make tags lowercase for case-insensitive comparison
-                $lower = array_map('strtolower', $tags);
-
-                // if none of the configured matchTags are present, skip
-                $found = false;
-                foreach ($matchTags as $mt) {
-                    if (in_array($mt, $lower, true)) {
-                        $found = true;
-                        break;
-                    }
-                }
-                if (!$found) {
-                    continue;
-                }
-
-                // Upsert into local products table (adjust fields to your schema)
-                \App\Models\Product::updateOrCreate(
-                    ['shopify_product_id' => $product['id']],
-                    [
-                        'name'   => $product['title'] ?? null,
-                        'price'  => $product['variants'][0]['price'] ?? 0,
-                        'vendor' => $product['vendor'] ?? null,
-                        'status' => $product['status'] ?? 'active',
-                        // add other mappings as needed
-                    ]
-                );
-
-                $processed++;
-            }
-
-            // Cursor-based pagination: parse Link header for rel="next"
-            $linkHeader = $resp->header('Link'); // may be null
-            $nextPageInfo = null;
-            if ($linkHeader && preg_match('/<[^>]+[?&]page_info=([^&>]+)[^>]*>;\s*rel="next"/', $linkHeader, $m)) {
-                $nextPageInfo = $m[1];
-            }
-
-            if (!$nextPageInfo) {
-                break; // no more pages
-            }
-
-            $pageInfo = $nextPageInfo;
+    // helper to find collection id (search both custom_collections and smart_collections)
+    $findCollectionId = function(string $name) {
+        // custom_collections
+        $url = "{$this->base}/admin/api/{$this->version}/custom_collections.json";
+        $resp = Http::withHeaders(['X-Shopify-Access-Token' => $this->token])->get($url, ['title' => $name]);
+        $resp->throw();
+        $data = $resp->json();
+        if (!empty($data['custom_collections'][0]['id'])) {
+            return (int) $data['custom_collections'][0]['id'];
         }
 
-        return $processed;
+        // smart_collections
+        $url = "{$this->base}/admin/api/{$this->version}/smart_collections.json";
+        $resp = Http::withHeaders(['X-Shopify-Access-Token' => $this->token])->get($url, ['title' => $name]);
+        $resp->throw();
+        $data = $resp->json();
+        if (!empty($data['smart_collections'][0]['id'])) {
+            return (int) $data['smart_collections'][0]['id'];
+        }
+
+        return null;
+    };
+
+    $collectionId = $findCollectionId($collectionName);
+    if (!$collectionId) {
+        // no collection found — nothing to sync
+        return 0;
     }
+
+    $processed = 0;
+    $perPage = 250;
+    $pageInfo = null;
+    $baseUrl = "{$this->base}/admin/api/{$this->version}/collections/{$collectionId}/products.json";
+
+    while (true) {
+        $params = ['limit' => $perPage];
+        if ($pageInfo) {
+            $params['page_info'] = $pageInfo;
+        }
+
+        $resp = Http::withHeaders(['X-Shopify-Access-Token' => $this->token])->get($baseUrl, $params);
+        $resp->throw();
+        $data = $resp->json();
+        $products = $data['products'] ?? [];
+
+        foreach ($products as $product) {
+            // upsert product into local DB (adjust schema fields as needed)
+            \App\Models\Product::updateOrCreate(
+                ['shopify_product_id' => $product['id']],
+                [
+                    'name'   => $product['title'] ?? null,
+                    'price'  => $product['variants'][0]['price'] ?? 0,
+                    'vendor' => $product['vendor'] ?? null,
+                    'status' => $product['status'] ?? 'active',
+                ]
+            );
+            $processed++;
+        }
+
+        // parse Link header for next page_info
+        $linkHeader = $resp->header('Link');
+        $nextPageInfo = null;
+        if ($linkHeader && preg_match('/<[^>]+[?&]page_info=([^&>]+)[^>]*>;\s*rel="next"/', $linkHeader, $m)) {
+            $nextPageInfo = $m[1];
+        }
+
+        if (!$nextPageInfo) {
+            break;
+        }
+        $pageInfo = $nextPageInfo;
+    }
+
+    return $processed;
+}
+
 
     /**
      * Convert Shopify global ID (gid) to numeric ID
