@@ -106,39 +106,27 @@
 </div>
 
 <script>
-  // Build layoutSlots from $areas (server-side values) safely
   window.layoutSlots = {};
   window.personalizationSupported = false;
 
-  @if(!empty($areas) && count($areas))
+  @if(!empty($layoutSlots) && is_array($layoutSlots))
     window.personalizationSupported = true;
-    @foreach($areas as $a)
-      (function(){
-        var slot = {
-          id: {{ json_encode($a->id) }},
-          template_id: {{ json_encode($a->template_id) }},
-          left_pct: {{ floatval($a->left_pct) }},
-          top_pct: {{ floatval($a->top_pct) }},
-          width_pct: {{ floatval($a->width_pct) }},
-          height_pct: {{ floatval($a->height_pct) }},
-          rotation: {{ intval($a->rotation ?? 0) }},
-          name: {!! json_encode($a->name ?? '') !!},
-          slot_key: {!! json_encode($a->slot_key ?? '') !!}
-        };
-
-        var key = (slot.slot_key || '').toString().toLowerCase();
-        if (key === 'name' || key === 'number') {
-          window.layoutSlots[key] = slot;
-          return;
-        }
-        var nm = (slot.name || '').toString().toLowerCase();
-        if (nm.indexOf('name') !== -1) { window.layoutSlots['name'] = slot; return; }
-        if (nm.indexOf('num') !== -1 || nm.indexOf('no') !== -1) { window.layoutSlots['number'] = slot; return; }
-
-        if (!window.layoutSlots['name']) window.layoutSlots['name'] = slot;
-        else if (!window.layoutSlots['number']) window.layoutSlots['number'] = slot;
-      })();
-    @endforeach
+    window.layoutSlots = {!! json_encode($layoutSlots, JSON_NUMERIC_CHECK) !!};
+  @else
+    @if(!empty($areas) && count($areas))
+      window.personalizationSupported = true;
+      window.layoutSlots = {
+        @foreach($areas as $a)
+          "{{ $a->slot_key }}": {
+            left_pct: {{ floatval($a->left_pct) }},
+            top_pct: {{ floatval($a->top_pct) }},
+            width_pct: {{ floatval($a->width_pct) }},
+            height_pct: {{ floatval($a->height_pct) }},
+            rotation: {{ intval($a->rotation ?? 0) }}
+          },
+        @endforeach
+      };
+    @endif
   @endif
 </script>
 
