@@ -36,7 +36,7 @@ class PublicProductController extends Controller
 
         return response()->json([
             'product_id'   => $product->id,
-            'shopify_id'   => $shop->id,
+            'shopify_product_id'   => $shop->id,
             'method_codes' => $codes,
         ]);
     }

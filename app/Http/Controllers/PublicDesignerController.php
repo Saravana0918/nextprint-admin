@@ -17,7 +17,7 @@ class PublicDesignerController extends Controller
         // Try to find product by Shopify id, internal id or handle
         $product = null;
         if ($productId) {
-            $product = Product::where('shopify_id', $productId)
+            $product = Product::where('shopify_product_id', $productId)
                         ->orWhere('id', $productId)
                         ->orWhere('handle', $productId)
                         ->first();
