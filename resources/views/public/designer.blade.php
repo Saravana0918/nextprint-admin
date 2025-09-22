@@ -15,57 +15,13 @@
     .font-impact{font-family:Impact, 'Arial Black', sans-serif;}
     .np-stage { position: relative; width: 100%; max-width: 562px; margin: 0 auto; min-height: 220px; overflow: visible; background: #fff; }
     .np-stage img { width: 100%; height: auto; display:block; border-radius:6px; }
-    .np-overlay { position:absolute; left:0; top:0; color:#D4AF37; text-shadow: 0 2px 6px rgba(0,0,0,0.35); white-space:nowrap; pointer-events:none; font-weight:700; text-transform:uppercase; letter-spacing:2px; display:flex; align-items:center; justify-content:center; user-select:none; line-height:1;}
+    .np-overlay { position:absolute; left:0; top:0; color:#D4AF37; text-shadow: 0 2px 6px rgba(0,0,0,0.35); white-space:nowrap; pointer-events:none; font-weight:700; text-transform:uppercase; letter-spacing:2px; display:flex; align-items:center; justify-content:center; user-select:none; line-height:1; z-index:10; }
     .np-swatch { width:28px; height:28px; border-radius:4px; border:1px solid #ccc; cursor:pointer; }
   </style>
 </head>
 <body class="py-4">
 @php
-  // safe product image fallback
   $img = $product->image_url ?? ($product->preview_src ?? asset('images/placeholder.png'));
-
-  // build layoutSlots map server-side (simple heuristics)
-  $layoutSlots = [];
-  foreach ($areas as $a) {
-    $slot = [
-      'id' => $a->id,
-      'template_id' => $a->template_id ?? null,
-      'left_pct' => floatval($a->left_pct ?? 0),
-      'top_pct' => floatval($a->top_pct ?? 0),
-      'width_pct' => floatval($a->width_pct ?? 0),
-      'height_pct' => floatval($a->height_pct ?? 0),
-      'rotation' => intval($a->rotation ?? 0),
-      'name' => $a->name ?? '',
-      'slot_key' => $a->slot_key ?? '',
-    ];
-
-    $key = '';
-    $sk = strtolower($slot['slot_key'] ?? '');
-    $nm = strtolower($slot['name'] ?? '');
-
-    if ($sk === 'name' || $sk === 'number') {
-      $key = $sk;
-    } elseif (strpos($nm, 'name') !== false) {
-      $key = 'name';
-    } elseif (strpos($nm, 'num') !== false || strpos($nm, 'no') !== false) {
-      $key = 'number';
-    } else {
-      // fallback mapping by template id
-      if ($slot['template_id'] == 1 && !isset($layoutSlots['name'])) $key = 'name';
-      elseif ($slot['template_id'] == 2 && !isset($layoutSlots['number'])) $key = 'number';
-      else {
-        if (!isset($layoutSlots['name'])) $key = 'name';
-        elseif (!isset($layoutSlots['number'])) $key = 'number';
-        else $key = 'name';
-      }
-    }
-
-    if ($key && !isset($layoutSlots[$key])) {
-      $layoutSlots[$key] = $slot;
-    }
-  }
-
-  $personalizationSupported = count($layoutSlots) > 0;
 @endphp
 
 <div class="container">
@@ -114,7 +70,7 @@
 
           <div class="mb-2">
             <label class="form-label d-block">Text Color</label>
-            <div class="d-flex gap-2 flex-wrap">
+            <div class="d-flex gap-2 flex-wrap mb-2">
               <button type="button" class="np-swatch" data-color="#FFFFFF" style="background:#FFFFFF"></button>
               <button type="button" class="np-swatch" data-color="#000000" style="background:#000000"></button>
               <button type="button" class="np-swatch" data-color="#FFD700" style="background:#FFD700"></button>
@@ -151,11 +107,49 @@
 
 {{-- SERVER → CLIENT: layoutSlots + personalizationSupported values (safe JSON output) --}}
 <script>
-  window.layoutSlots = @json($layoutSlots);
-  window.personalizationSupported = {{ $personalizationSupported ? 'true' : 'false' }};
+  // Build layoutSlots map from server $areas passed to blade
+  window.layoutSlots = {};
+  window.personalizationSupported = false;
+
+  @if(!empty($areas) && count($areas))
+    window.personalizationSupported = true;
+    @foreach($areas as $a)
+      (function(){
+        var slot = {
+          id: {{ json_encode($a->id) }},
+          template_id: {{ json_encode($a->template_id) }},
+          left_pct: {{ floatval($a->left_pct) }},
+          top_pct: {{ floatval($a->top_pct) }},
+          width_pct: {{ floatval($a->width_pct) }},
+          height_pct: {{ floatval($a->height_pct) }},
+          rotation: {{ intval($a->rotation ?? 0) }},
+          name: {!! json_encode($a->name ?? '') !!},
+          slot_key: {!! json_encode($a->slot_key ?? '') !!}
+        };
+
+        var key = (slot.slot_key || '').toString().toLowerCase();
+        if (key === 'name' || key === 'number') {
+          window.layoutSlots[key] = slot; return;
+        }
+        if ((slot.name || '').toString().toLowerCase().indexOf('name') !== -1) {
+          window.layoutSlots['name'] = slot; return;
+        }
+        if ((slot.name || '').toString().toLowerCase().indexOf('num') !== -1 ||
+            (slot.name || '').toString().toLowerCase().indexOf('no') !== -1) {
+          window.layoutSlots['number'] = slot; return;
+        }
+        if (slot.template_id == 1 && !window.layoutSlots['name']) window.layoutSlots['name'] = slot;
+        else if (slot.template_id == 2 && !window.layoutSlots['number']) window.layoutSlots['number'] = slot;
+        else {
+          if (!window.layoutSlots['name']) window.layoutSlots['name'] = slot;
+          else if (!window.layoutSlots['number']) window.layoutSlots['number'] = slot;
+        }
+      })();
+    @endforeach
+  @endif
 </script>
 
-{{-- Robust init script (single place) --}}
+{{-- MAIN JS --}}
 <script>
 (function(){
   const $ = id => document.getElementById(id);
@@ -164,12 +158,9 @@
     const nameEl = $('np-name'), numEl = $('np-num'), fontEl = $('np-font'), colorEl = $('np-color');
     const pvName = $('np-prev-name'), pvNum = $('np-prev-num'), baseImg = $('np-base'), stage = $('np-stage');
     const ctrls = $('np-controls'), note = $('np-note'), status = $('np-status'), btn = $('np-atc-btn');
-
-    if (!stage || !baseImg) {
-      console.warn('Designer: missing stage or baseImg ->', !!stage, !!baseImg);
-    }
-
     const layout = (typeof window.layoutSlots === 'object' && window.layoutSlots !== null) ? window.layoutSlots : {};
+
+    if (!stage || !baseImg) console.warn('Designer: missing stage or baseImg ->', !!stage, !!baseImg);
 
     const NAME_RE = /^[A-Za-z ]{1,12}$/, NUM_RE = /^\d{1,3}$/;
     function validate(){
@@ -227,8 +218,17 @@
     if (pvNum && colorEl) pvNum.style.color = colorEl.value;
     syncPreview(); syncHidden();
 
-    function placeOverlay(el, slot){
-      if (!el || !slot || !stage) return;
+    // ---------- Placement ----------
+    function computeStageSize(){
+      const imgW = (baseImg && baseImg.naturalWidth) ? baseImg.naturalWidth : (baseImg? baseImg.width : stage.clientWidth);
+      const imgH = (baseImg && baseImg.naturalHeight) ? baseImg.naturalHeight : (baseImg? baseImg.clientHeight : stage.clientWidth);
+      const stageW = stage.clientWidth || 300;
+      const stageH = imgW ? Math.round((imgH * stageW)/imgW) : (baseImg? baseImg.clientHeight : 300);
+      return {imgW, imgH, stageW, stageH};
+    }
+
+    function placeOverlay(el, slot, slotKey){
+      if(!el || !slot || !stage) return;
       el.style.position = 'absolute';
       el.style.left = (slot.left_pct||0) + '%';
       el.style.top  = (slot.top_pct||0) + '%';
@@ -243,14 +243,29 @@
       el.style.whiteSpace = 'nowrap';
       el.style.overflow = 'hidden';
 
-      // compute font-size by area height relative to base image render size
-      const imgW = (baseImg && baseImg.naturalWidth) ? baseImg.naturalWidth : (baseImg? baseImg.width : stage.clientWidth);
-      const imgH = (baseImg && baseImg.naturalHeight) ? baseImg.naturalHeight : (baseImg? baseImg.clientHeight : stage.clientWidth);
-      const stageW = stage.clientWidth || 300;
-      const stageH = imgW ? Math.round((imgH * stageW) / imgW) : (baseImg? baseImg.clientHeight : 300);
-      const areaHpx = ((slot.height_pct || 10) / 100) * stageH;
-      let fontSize = Math.max(8, Math.floor(areaHpx * 0.55));
+      // compute stage & area sizes
+      const {imgW, imgH, stageW, stageH} = computeStageSize();
+      const areaWpx = ((slot.width_pct || 10)/100) * stageW;
+      const areaHpx = ((slot.height_pct || 10)/100) * stageH;
+
+      // choose per-slot multiplier (name bigger than number)
+      let multiplier = 0.80; // default
+      if (slotKey === 'name') multiplier = 0.90;
+      if (slotKey === 'number') multiplier = 0.78;
+
+      // initial font size using multiplier
+      let fontSize = Math.max(10, Math.floor(areaHpx * multiplier));
+
+      // limit by width & estimated char count
+      const text = (el.textContent || '').toString().trim() || 'TEXT';
+      const estCharWidth = Math.max(6, fontSize * 0.55);
+      const maxFontByWidth = Math.floor((areaWpx * 0.9) / Math.max(1, text.length) / 0.6) || fontSize;
+      fontSize = Math.min(fontSize, maxFontByWidth);
+
       el.style.fontSize = fontSize + 'px';
+      el.style.lineHeight = '1';
+      el.style.fontWeight = '700';
+
       // shrink if overflow
       while (el.scrollWidth > el.clientWidth && fontSize > 8) {
         fontSize -= 1;
@@ -261,8 +276,8 @@
     function applyLayout(){
       if (!baseImg) return;
       if (!baseImg.complete || !baseImg.naturalWidth) return;
-      if (layout.name) placeOverlay(pvName, layout.name);
-      if (layout.number) placeOverlay(pvNum, layout.number);
+      if (layout.name) placeOverlay(pvName, layout.name, 'name');
+      if (layout.number) placeOverlay(pvNum, layout.number, 'number');
     }
 
     if (baseImg) baseImg.addEventListener('load', applyLayout);
@@ -270,6 +285,7 @@
     setTimeout(applyLayout, 200);
     setTimeout(applyLayout, 800);
 
+    // personalization UI toggles
     if (typeof window.personalizationSupported !== 'undefined' && ctrls) {
       if (window.personalizationSupported) {
         status.textContent = 'Personalization supported.';
@@ -284,6 +300,7 @@
       }
     }
 
+    // safe form submit binding
     const atcForm = $('np-atc-form');
     if (atcForm) {
       atcForm.addEventListener('submit', function(e){
@@ -298,7 +315,7 @@
         syncHidden();
       });
     }
-  } // init end
+  } // init
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);

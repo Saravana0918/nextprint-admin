@@ -68,7 +68,6 @@ class PublicDesignerController extends Controller
                     }
 
                     // GET product JSON from Shopify REST Admin API
-                    // (use stable 2024-10 or appropriate API version)
                     $url = "https://{$shop}/admin/api/2024-10/products/{$pid}.json";
                     $res = Http::withHeaders([
                         'X-Shopify-Access-Token' => $token,
@@ -117,7 +116,6 @@ class PublicDesignerController extends Controller
             $view = ProductView::with('areas')->find($viewId);
         }
         if (!$view) {
-            // If $product is Eloquent and has relation loaded or available
             if ($product instanceof Product) {
                 if ($product->relationLoaded('views') && $product->views->count()) {
                     $view = $product->views->first();
@@ -125,8 +123,7 @@ class PublicDesignerController extends Controller
                     $view = $product->views()->with('areas')->first();
                 }
             } else {
-                // Transient Shopify object -> nothing in DB. Leave $view null.
-                $view = null;
+                $view = null; // Shopify fallback -> no DB view
             }
         }
 
