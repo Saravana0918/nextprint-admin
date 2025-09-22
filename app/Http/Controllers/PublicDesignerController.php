@@ -3,69 +3,75 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
-use App\Models\Product;      // make sure Product model correct
-use App\Models\ProductView;  // make sure ProductView model correct
+use App\Models\Product;
+use App\Models\ProductView;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Log;
 
 class PublicDesignerController extends Controller
 {
-    // Public designer page (no auth)
     public function show(Request $request)
     {
         $productId = $request->query('product_id');
         $viewId    = $request->query('view_id');
 
-        // --------------------------
-        // Find Product
-        // --------------------------
+        // Attempt to find product with minimal queries and safe fallbacks
         $product = null;
 
         if ($productId) {
-            // check numeric id first
-            if (is_numeric($productId)) {
-                $product = Product::where('id', $productId)->first();
+            // try by numeric id first (cast to int)
+            if (ctype_digit((string)$productId)) {
+                $product = Product::with(['views','views.areas'])->find((int)$productId);
             }
 
-            // try shopify_product_id if not found
-            if (!$product && Schema::hasColumn('products', 'shopify_product_id')) {
-                $product = Product::where('shopify_product_id', $productId)->first();
-            }
+            // If not found, try matching against common columns in one query
+            if (!$product) {
+                $query = Product::with(['views','views.areas']);
+                $query->where(function($q) use ($productId) {
+                    $q->where('shopify_product_id', $productId)
+                      ->orWhere('name', $productId)
+                      ->orWhere('sku', $productId);
+                });
 
-            // optional fallback: try name
-            if (!$product && Schema::hasColumn('products', 'name')) {
-                $product = Product::where('name', $productId)->first();
-            }
+                // Only add columns that actually exist to avoid SQL errors
+                // (Schema::hasColumn is safe but avoid excessive calls in heavy traffic)
+                $validCols = Schema::hasColumn('products','shopify_product_id') ||
+                             Schema::hasColumn('products','name') ||
+                             Schema::hasColumn('products','sku');
 
-            // optional fallback: try sku
-            if (!$product && Schema::hasColumn('products', 'sku')) {
-                $product = Product::where('sku', $productId)->first();
+                if ($validCols) {
+                    $product = $query->first();
+                }
             }
         }
 
         if (!$product) {
+            // If you prefer graceful fallback, render view with placeholder instead of abort
+            // return view('designer_placeholder');
             abort(404, 'Product not found');
         }
 
-        // --------------------------
-        // Find Product View
-        // --------------------------
+        // Resolve product view: direct viewId or fallback to first related view
         $view = null;
         if ($viewId) {
-            $view = ProductView::find($viewId);
+            $view = ProductView::with('areas')->find($viewId);
         }
         if (!$view) {
-            $view = $product->views()->first(); // adjust relation if name differs
+            // use loaded relation if available (because we eager-loaded views)
+            if ($product->relationLoaded('views') && $product->views->count()) {
+                $view = $product->views->first();
+            } else {
+                $view = $product->views()->with('areas')->first();
+            }
         }
 
-        // --------------------------
-        // Load Areas
-        // --------------------------
-        $areas = $view ? $view->areas()->get() : collect([]);
+        // Load areas safely (collection)
+        $areas = $view ? ($view->relationLoaded('areas') ? $view->areas : $view->areas()->get()) : collect([]);
 
-        // --------------------------
-        // Return Designer Blade
-        // --------------------------
-        return view('public.designer', [
+        // Return blade: ensure this matches your blade file path.
+        // If file is resources/views/designer.blade.php -> use 'designer'
+        // If file is resources/views/public/designer.blade.php -> use 'public.designer'
+        return view('designer', [
             'product' => $product,
             'view'    => $view,
             'areas'   => $areas,
