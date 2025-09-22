@@ -105,42 +105,43 @@
   </div>
 </div>
 
-{{-- SERVER → CLIENT: layoutSlots + personalizationSupported values (safe JSON output) --}}
 <script>
-  // If controller passed $layoutSlots, use it; otherwise fallback to building from $areas (old behavior)
+  // Build layoutSlots from $areas (server-side values) safely
   window.layoutSlots = {};
   window.personalizationSupported = false;
 
-  @if(!empty($layoutSlots) && is_array($layoutSlots))
+  @if(!empty($areas) && count($areas))
     window.personalizationSupported = true;
-    // ensure JSON encoding safe
-    window.layoutSlots = {!! json_encode($layoutSlots, JSON_THROW_ON_ERROR|JSON_NUMERIC_CHECK) !!};
-  @else
-    // fallback (previous logic) — your existing @if(!empty($areas)) loop can remain here if desired
-    @if(!empty($areas) && count($areas))
-      window.personalizationSupported = true;
-      @foreach($areas as $a)
-        (function(){
-          var slot = {
-            id: {{ json_encode($a->id) }},
-            template_id: {{ json_encode($a->template_id) }},
-            left_pct: {{ floatval($a->left_pct) }},
-            top_pct: {{ floatval($a->top_pct) }},
-            width_pct: {{ floatval($a->width_pct) }},
-            height_pct: {{ floatval($a->height_pct) }},
-            rotation: {{ intval($a->rotation ?? 0) }},
-            name: {!! json_encode($a->name ?? '') !!},
-            slot_key: {!! json_encode($a->slot_key ?? '') !!}
-          };
-          // same heuristics as before (optional)
-        })();
-      @endforeach
-    @endif
+    @foreach($areas as $a)
+      (function(){
+        var slot = {
+          id: {{ json_encode($a->id) }},
+          template_id: {{ json_encode($a->template_id) }},
+          left_pct: {{ floatval($a->left_pct) }},
+          top_pct: {{ floatval($a->top_pct) }},
+          width_pct: {{ floatval($a->width_pct) }},
+          height_pct: {{ floatval($a->height_pct) }},
+          rotation: {{ intval($a->rotation ?? 0) }},
+          name: {!! json_encode($a->name ?? '') !!},
+          slot_key: {!! json_encode($a->slot_key ?? '') !!}
+        };
+
+        var key = (slot.slot_key || '').toString().toLowerCase();
+        if (key === 'name' || key === 'number') {
+          window.layoutSlots[key] = slot;
+          return;
+        }
+        var nm = (slot.name || '').toString().toLowerCase();
+        if (nm.indexOf('name') !== -1) { window.layoutSlots['name'] = slot; return; }
+        if (nm.indexOf('num') !== -1 || nm.indexOf('no') !== -1) { window.layoutSlots['number'] = slot; return; }
+
+        if (!window.layoutSlots['name']) window.layoutSlots['name'] = slot;
+        else if (!window.layoutSlots['number']) window.layoutSlots['number'] = slot;
+      })();
+    @endforeach
   @endif
 </script>
 
-
-{{-- MAIN JS --}}
 <script>
 (function(){
   const $ = id => document.getElementById(id);
@@ -150,8 +151,6 @@
     const pvName = $('np-prev-name'), pvNum = $('np-prev-num'), baseImg = $('np-base'), stage = $('np-stage');
     const ctrls = $('np-controls'), note = $('np-note'), status = $('np-status'), btn = $('np-atc-btn');
     const layout = (typeof window.layoutSlots === 'object' && window.layoutSlots !== null) ? window.layoutSlots : {};
-
-    if (!stage || !baseImg) console.warn('Designer: missing stage or baseImg ->', !!stage, !!baseImg);
 
     const NAME_RE = /^[A-Za-z ]{1,12}$/, NUM_RE = /^\d{1,3}$/;
     function validate(){
@@ -182,10 +181,10 @@
 
     function syncHidden(){
       const set = (id, v) => { const el = $(id); if (el) el.value = v; };
-      set('np-name-hidden', (nameEl? (nameEl.value||'') : '').toUpperCase().trim());
-      set('np-num-hidden', (numEl? (numEl.value||'') : '').replace(/\D/g,'').trim());
-      set('np-font-hidden', fontEl? fontEl.value : '');
-      set('np-color-hidden', colorEl? colorEl.value : '');
+      set('np-name-hidden', (nameEl ? (nameEl.value||'') : '').toUpperCase().trim());
+      set('np-num-hidden',  (numEl  ? (numEl.value||'')  : '').replace(/\D/g,'').trim());
+      set('np-font-hidden', fontEl ? fontEl.value : '');
+      set('np-color-hidden', colorEl ? colorEl.value : '');
     }
 
     if (nameEl) nameEl.addEventListener('input', ()=>{ syncPreview(); validate(); syncHidden(); });
@@ -204,12 +203,12 @@
       });
     });
 
-    applyFont(fontEl? fontEl.value : 'bebas');
+    applyFont(fontEl ? fontEl.value : 'bebas');
     if (pvName && colorEl) pvName.style.color = colorEl.value;
     if (pvNum && colorEl) pvNum.style.color = colorEl.value;
     syncPreview(); syncHidden();
 
-    // ---------- Placement ----------
+    // placement helpers
     function computeStageSize(){
       const imgW = (baseImg && baseImg.naturalWidth) ? baseImg.naturalWidth : (baseImg? baseImg.width : stage.clientWidth);
       const imgH = (baseImg && baseImg.naturalHeight) ? baseImg.naturalHeight : (baseImg? baseImg.clientHeight : stage.clientWidth);
@@ -230,26 +229,20 @@
       el.style.justifyContent = 'center';
       el.style.boxSizing = 'border-box';
       el.style.padding = '2px';
-      el.style.transform = `rotate(${slot.rotation || 0}deg)`;
+      el.style.transform = 'rotate(' + (slot.rotation || 0) + 'deg)';
       el.style.whiteSpace = 'nowrap';
       el.style.overflow = 'hidden';
 
-      // compute stage & area sizes
       const {imgW, imgH, stageW, stageH} = computeStageSize();
       const areaWpx = ((slot.width_pct || 10)/100) * stageW;
       const areaHpx = ((slot.height_pct || 10)/100) * stageH;
 
-      // choose per-slot multiplier (name bigger than number)
-      let multiplier = 0.80; // default
+      let multiplier = 0.80;
       if (slotKey === 'name') multiplier = 0.90;
       if (slotKey === 'number') multiplier = 0.78;
 
-      // initial font size using multiplier
       let fontSize = Math.max(10, Math.floor(areaHpx * multiplier));
-
-      // limit by width & estimated char count
       const text = (el.textContent || '').toString().trim() || 'TEXT';
-      const estCharWidth = Math.max(6, fontSize * 0.55);
       const maxFontByWidth = Math.floor((areaWpx * 0.9) / Math.max(1, text.length) / 0.6) || fontSize;
       fontSize = Math.min(fontSize, maxFontByWidth);
 
@@ -257,7 +250,6 @@
       el.style.lineHeight = '1';
       el.style.fontWeight = '700';
 
-      // shrink if overflow
       while (el.scrollWidth > el.clientWidth && fontSize > 8) {
         fontSize -= 1;
         el.style.fontSize = fontSize + 'px';
@@ -276,7 +268,6 @@
     setTimeout(applyLayout, 200);
     setTimeout(applyLayout, 800);
 
-    // personalization UI toggles
     if (typeof window.personalizationSupported !== 'undefined' && ctrls) {
       if (window.personalizationSupported) {
         status.textContent = 'Personalization supported.';
@@ -291,7 +282,6 @@
       }
     }
 
-    // safe form submit binding
     const atcForm = $('np-atc-form');
     if (atcForm) {
       atcForm.addEventListener('submit', function(e){
