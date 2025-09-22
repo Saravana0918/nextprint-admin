@@ -5,8 +5,6 @@
   <title>{{ $product->name ?? ($product->title ?? 'Product') }} – NextPrint</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Oswald:wght@400;600&display=swap" rel="stylesheet">
-
   <style>
     .np-hidden { display: none !important; }
     .font-bebas{font-family:'Bebas Neue', Impact, 'Arial Black', sans-serif;}
@@ -15,7 +13,7 @@
     .font-impact{font-family:Impact, 'Arial Black', sans-serif;}
     .np-stage { position: relative; width: 100%; max-width: 562px; margin: 0 auto; min-height: 220px; overflow: visible; background: #fff; }
     .np-stage img { width: 100%; height: auto; display:block; border-radius:6px; }
-    .np-overlay { position:absolute; left:0; top:0; color:#D4AF37; text-shadow: 0 2px 6px rgba(0,0,0,0.35); white-space:nowrap; pointer-events:none; font-weight:700; text-transform:uppercase; letter-spacing:2px; display:flex; align-items:center; justify-content:center; user-select:none; line-height:1; z-index:10; }
+    .np-overlay { position:absolute; color:#D4AF37; text-shadow: 0 2px 6px rgba(0,0,0,0.35); white-space:nowrap; pointer-events:none; font-weight:700; text-transform:uppercase; letter-spacing:2px; display:flex; align-items:center; justify-content:center; user-select:none; line-height:1; }
     .np-swatch { width:28px; height:28px; border-radius:4px; border:1px solid #ccc; cursor:pointer; }
   </style>
 </head>
@@ -30,8 +28,8 @@
       <div class="border rounded p-3">
         <div class="np-stage" id="np-stage">
           <img id="np-base" src="{{ $img }}" alt="Preview" onerror="this.onerror=null;this.src='{{ asset('images/placeholder.png') }}'">
-          <div id="np-prev-name" class="np-overlay np-name font-bebas"></div>
-          <div id="np-prev-num"  class="np-overlay np-num  font-bebas"></div>
+          <div id="np-prev-name" class="np-overlay np-name font-bebas" aria-hidden="true"></div>
+          <div id="np-prev-num"  class="np-overlay np-num  font-bebas" aria-hidden="true"></div>
         </div>
       </div>
     </div>
@@ -104,63 +102,12 @@
   </div>
 </div>
 
-{{-- inject JSON --}}
+{{-- inject JSON from server-side normalized layoutSlots --}}
 <script>
-  window.layoutSlots = {};
-  window.personalizationSupported = false;
-
-  @if(!empty($areas) && count($areas))
-    window.personalizationSupported = true;
-    window.layoutSlots = {};
-    @foreach($areas as $a)
-      (function(){
-        // take raw values from DB (may be 0..1 or 0..100)
-        var leftRaw   = {{ json_encode(floatval($a->left_pct)) }};
-        var topRaw    = {{ json_encode(floatval($a->top_pct)) }};
-        var widthRaw  = {{ json_encode(floatval($a->width_pct)) }};
-        var heightRaw = {{ json_encode(floatval($a->height_pct)) }};
-
-        // normalise: if stored as fraction (<=1) convert to percent
-        var toPct = function(v){
-          if (v === null) return 0;
-          if (v <= 1) return v * 100;
-          return v;
-        };
-
-        var slot = {
-          id: {{ json_encode($a->id) }},
-          template_id: {{ json_encode($a->template_id) }},
-          left_pct: toPct(leftRaw),
-          top_pct:  toPct(topRaw),
-          width_pct: toPct(widthRaw),
-          height_pct: toPct(heightRaw),
-          rotation: {{ intval($a->rotation ?? 0) }},
-          name: {!! json_encode($a->name ?? '') !!},
-          slot_key: {!! json_encode($a->slot_key ?? '') !!}
-        };
-
-        // map slot_key / name heuristics (same as before)
-        var key = (slot.slot_key || '').toString().toLowerCase();
-        if (key === 'name' || key === 'number') {
-          window.layoutSlots[key] = slot; return;
-        }
-        if ((slot.name || '').toString().toLowerCase().indexOf('name') !== -1) {
-          window.layoutSlots['name'] = slot; return;
-        }
-        if ((slot.name || '').toString().toLowerCase().indexOf('num') !== -1 ||
-            (slot.name || '').toString().toLowerCase().indexOf('no') !== -1) {
-          window.layoutSlots['number'] = slot; return;
-        }
-        // fallback
-        if (!window.layoutSlots['name']) window.layoutSlots['name'] = slot;
-        else if (!window.layoutSlots['number']) window.layoutSlots['number'] = slot;
-      })();
-    @endforeach
-  @endif
+  window.layoutSlots = {!! json_encode($layoutSlots, JSON_NUMERIC_CHECK) !!};
+  window.personalizationSupported = {{ !empty($layoutSlots) ? 'true' : 'false' }};
 </script>
 
-
-{{-- main JS (placement + preview) --}}
 <script>
 (function(){
   const $ = id => document.getElementById(id);
@@ -193,9 +140,75 @@
       if (pvNum) pvNum.classList.add(c);
     }
 
+    function computeStageSize(){
+      const imgW = (baseImg && baseImg.naturalWidth) ? baseImg.naturalWidth : (baseImg? baseImg.width : stage.clientWidth);
+      const imgH = (baseImg && baseImg.naturalHeight) ? baseImg.naturalHeight : (baseImg? baseImg.clientHeight : stage.clientWidth);
+      const stageW = stage.clientWidth || 300;
+      const stageH = imgW ? Math.round((imgH * stageW)/imgW) : (baseImg? baseImg.clientHeight : 300);
+      return {imgW, imgH, stageW, stageH};
+    }
+
+    // STRONG placeOverlay: height + width caps + numeric shrink
+    function placeOverlay(el, slot, slotKey){
+      if(!el || !slot || !stage) return;
+
+      el.style.position = 'absolute';
+      el.style.left = (slot.left_pct||0) + '%';
+      el.style.top  = (slot.top_pct||0) + '%';
+      el.style.width = (slot.width_pct||10) + '%';
+      el.style.height = (slot.height_pct||10) + '%';
+      el.style.display = 'flex';
+      el.style.alignItems = 'center';
+      el.style.justifyContent = 'center';
+      el.style.boxSizing = 'border-box';
+      el.style.padding = '0 4px';
+      el.style.transform = 'rotate(' + ((slot.rotation||0)) + 'deg)';
+      el.style.whiteSpace = 'nowrap';
+      el.style.overflow = 'hidden';
+      el.style.pointerEvents = 'none';
+      el.style.zIndex = (slotKey === 'number' ? 60 : 50);
+
+      const {imgW, imgH, stageW, stageH} = computeStageSize();
+      const areaWpx = Math.max(8, Math.round(((slot.width_pct || 10)/100) * stageW));
+      const areaHpx = Math.max(8, Math.round(((slot.height_pct || 10)/100) * stageH));
+
+      const text = (el.textContent || '').toString().trim() || 'TEXT';
+      const chars = Math.max(1, text.length);
+
+      const heightCandidate = Math.floor(areaHpx * (slotKey === 'number' ? 0.72 : 0.86));
+      const avgCharRatio = 0.55;
+      const widthCap = Math.floor((areaWpx * 0.95) / (chars * avgCharRatio));
+
+      let numericShrink = 1;
+      if (slotKey === 'number' && chars <= 3) numericShrink = 0.62;
+
+      let fontSize = Math.floor(Math.min(heightCandidate, widthCap) * numericShrink);
+      const maxAllowed = Math.max(12, Math.floor(stageW * 0.18));
+      fontSize = Math.max(8, Math.min(fontSize, maxAllowed));
+
+      el.style.fontSize = fontSize + 'px';
+      el.style.lineHeight = '1';
+      el.style.fontWeight = '700';
+
+      let attempts = 0;
+      while (el.scrollWidth > el.clientWidth && fontSize > 7 && attempts < 30) {
+        fontSize = Math.max(7, Math.floor(fontSize * 0.90));
+        el.style.fontSize = fontSize + 'px';
+        attempts++;
+      }
+    }
+
+    function applyLayout(){
+      if (!baseImg) return;
+      if (!baseImg.complete || !baseImg.naturalWidth) return;
+      if (layout.name) placeOverlay(pvName, layout.name, 'name');
+      if (layout.number) placeOverlay(pvNum, layout.number, 'number');
+    }
+
     function syncPreview(){
       if (pvName && nameEl) pvName.textContent = (nameEl.value||'').toUpperCase();
       if (pvNum && numEl) pvNum.textContent = (numEl.value||'').replace(/\D/g,'');
+      applyLayout(); // IMPORTANT: recalc sizes after updating text
     }
 
     function syncHidden(){
@@ -227,81 +240,7 @@
     if (pvNum && colorEl) pvNum.style.color = colorEl.value;
     syncPreview(); syncHidden();
 
-    // placement helpers
-    function computeStageSize(){
-      const imgW = (baseImg && baseImg.naturalWidth) ? baseImg.naturalWidth : (baseImg? baseImg.width : stage.clientWidth);
-      const imgH = (baseImg && baseImg.naturalHeight) ? baseImg.naturalHeight : (baseImg? baseImg.clientHeight : stage.clientWidth);
-      const stageW = stage.clientWidth || 300;
-      const stageH = imgW ? Math.round((imgH * stageW)/imgW) : (baseImg? baseImg.clientHeight : 300);
-      return {imgW, imgH, stageW, stageH};
-    }
-
-    function placeOverlay(el, slot, slotKey){
-  if(!el || !slot || !stage) return;
-
-  // positioning
-  el.style.position = 'absolute';
-  el.style.left = (slot.left_pct||0) + '%';
-  el.style.top  = (slot.top_pct||0) + '%';
-  el.style.width = (slot.width_pct||10) + '%';
-  el.style.height = (slot.height_pct||10) + '%';
-  el.style.display = 'flex';
-  el.style.alignItems = 'center';
-  el.style.justifyContent = 'center';
-  el.style.boxSizing = 'border-box';
-  el.style.padding = '2px';
-  el.style.transform = 'rotate(' + ((slot.rotation||0)) + 'deg)';
-  el.style.whiteSpace = 'nowrap';
-  el.style.overflow = 'hidden';
-  el.style.pointerEvents = 'none';
-  el.style.zIndex = 50;
-
-  // compute sizes
-  const {imgW, imgH, stageW, stageH} = computeStageSize();
-  const areaWpx = Math.max(8, Math.round(((slot.width_pct || 10)/100) * stageW));
-  const areaHpx = Math.max(8, Math.round(((slot.height_pct || 10)/100) * stageH));
-
-  // multipliers: numbers should be smaller; names slightly larger but still constrained
-  const baseMultName = 0.85;   // try 0.85 of area height
-  const baseMultNumber = 0.6;  // numbers often need smaller multiplier
-
-  // pick multiplier by slot key
-  const mult = (slotKey === 'number') ? baseMultNumber : baseMultName;
-
-  // candidate font from area height
-  let fontByHeight = Math.floor(areaHpx * mult);
-
-  // also compute max font from width (so "45" doesn't overflow)
-  // average approx char width ratio: 0.55 * fontSize (empirical). Use safe divisor 0.55
-  const text = (el.textContent || '').toString().trim() || 'TEXT';
-  const chars = Math.max(1, text.length);
-  const maxFontByWidth = Math.floor((areaWpx * 0.95) / (chars * 0.55));
-
-  // final font is constrained by height & width caps, and a hard clamp to reasonable range
-  let fontSize = Math.min(fontByHeight, maxFontByWidth);
-  fontSize = Math.max(9, Math.min(fontSize, Math.max(12, Math.floor(stageW / 6)))); // clamp between 9 and stageW/6
-
-  el.style.fontSize = Math.floor(fontSize) + 'px';
-  el.style.lineHeight = '1';
-  el.style.fontWeight = '700';
-
-  // If still overflowing horizontally, gradually reduce
-  let tries = 0;
-  while (el.scrollWidth > el.clientWidth && fontSize > 8 && tries < 30) {
-    fontSize = Math.max(8, Math.floor(fontSize * 0.92));
-    el.style.fontSize = fontSize + 'px';
-    tries++;
-  }
-}
-
-
-    function applyLayout(){
-      if (!baseImg) return;
-      if (!baseImg.complete || !baseImg.naturalWidth) return;
-      if (layout.name) placeOverlay(pvName, layout.name, 'name');
-      if (layout.number) placeOverlay(pvNum, layout.number, 'number');
-    }
-
+    // event hooks
     if (baseImg) baseImg.addEventListener('load', applyLayout);
     window.addEventListener('resize', applyLayout);
     setTimeout(applyLayout, 200);
