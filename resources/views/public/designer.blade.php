@@ -114,7 +114,6 @@
     window.personalizationSupported = true;
     window.layoutSlots = {!! json_encode($layoutSlots, JSON_NUMERIC_CHECK) !!};
   @else
-    // fallback: no areas
     window.layoutSlots = {};
     window.personalizationSupported = false;
   @endif
