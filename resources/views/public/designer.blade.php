@@ -29,8 +29,7 @@
     <div class="col-md-6 np-col order-1 order-md-2">
       <div class="border rounded p-3">
         <div class="np-stage" id="np-stage">
-          <img id="np-base" src="{{ $img }}" alt="Preview"
-               onerror="this.onerror=null;this.src='{{ asset('images/placeholder.png') }}'">
+          <img id="np-base" src="{{ $img }}" alt="Preview" onerror="this.onerror=null;this.src='{{ asset('images/placeholder.png') }}'">
           <div id="np-prev-name" class="np-overlay np-name font-bebas"></div>
           <div id="np-prev-num"  class="np-overlay np-num  font-bebas"></div>
         </div>
@@ -105,7 +104,7 @@
   </div>
 </div>
 
-{{-- Build JSON-safe layoutSlots on server side --}}
+{{-- inject JSON --}}
 <script>
   window.layoutSlots = {};
   window.personalizationSupported = false;
@@ -114,11 +113,11 @@
     window.personalizationSupported = true;
     window.layoutSlots = {!! json_encode($layoutSlots, JSON_NUMERIC_CHECK) !!};
   @else
-    window.layoutSlots = {};
     window.personalizationSupported = false;
   @endif
 </script>
 
+{{-- main JS (placement + preview) --}}
 <script>
 (function(){
   const $ = id => document.getElementById(id);
@@ -238,9 +237,6 @@
       if (!baseImg.complete || !baseImg.naturalWidth) return;
       if (layout.name) placeOverlay(pvName, layout.name, 'name');
       if (layout.number) placeOverlay(pvNum, layout.number, 'number');
-      // also try mapping any other 'slot_*' keys to name fallback
-      if (!layout.name && layout.slot_name) placeOverlay(pvName, layout.slot_name, 'name');
-      if (!layout.number && layout.slot_number) placeOverlay(pvNum, layout.slot_number, 'number');
     }
 
     if (baseImg) baseImg.addEventListener('load', applyLayout);
