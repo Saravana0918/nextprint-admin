@@ -105,28 +105,18 @@
   </div>
 </div>
 
+{{-- Build JSON-safe layoutSlots on server side --}}
 <script>
   window.layoutSlots = {};
   window.personalizationSupported = false;
 
-  @if(!empty($layoutSlots) && is_array($layoutSlots))
+  @if(!empty($layoutSlots) && is_array($layoutSlots) && count($layoutSlots))
     window.personalizationSupported = true;
     window.layoutSlots = {!! json_encode($layoutSlots, JSON_NUMERIC_CHECK) !!};
   @else
-    @if(!empty($areas) && count($areas))
-      window.personalizationSupported = true;
-      window.layoutSlots = {
-        @foreach($areas as $a)
-          "{{ $a->slot_key }}": {
-            left_pct: {{ floatval($a->left_pct) }},
-            top_pct: {{ floatval($a->top_pct) }},
-            width_pct: {{ floatval($a->width_pct) }},
-            height_pct: {{ floatval($a->height_pct) }},
-            rotation: {{ intval($a->rotation ?? 0) }}
-          },
-        @endforeach
-      };
-    @endif
+    // fallback: no areas
+    window.layoutSlots = {};
+    window.personalizationSupported = false;
   @endif
 </script>
 
@@ -249,6 +239,9 @@
       if (!baseImg.complete || !baseImg.naturalWidth) return;
       if (layout.name) placeOverlay(pvName, layout.name, 'name');
       if (layout.number) placeOverlay(pvNum, layout.number, 'number');
+      // also try mapping any other 'slot_*' keys to name fallback
+      if (!layout.name && layout.slot_name) placeOverlay(pvName, layout.slot_name, 'name');
+      if (!layout.number && layout.slot_number) placeOverlay(pvNum, layout.slot_number, 'number');
     }
 
     if (baseImg) baseImg.addEventListener('load', applyLayout);
