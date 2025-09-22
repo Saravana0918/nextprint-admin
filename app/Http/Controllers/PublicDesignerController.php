@@ -15,49 +15,54 @@ class PublicDesignerController extends Controller
         $productId = $request->query('product_id');
         $viewId    = $request->query('view_id');
 
-        // Attempt to find product with minimal queries and safe fallbacks
         $product = null;
 
         if ($productId) {
-            // try by numeric id first (cast to int)
+            // 1) if numeric PK
             if (ctype_digit((string)$productId)) {
                 $product = Product::with(['views','views.areas'])->find((int)$productId);
             }
 
-            // If not found, try matching against common columns in one query
+            // 2) fallback: shopify_product_id (exact or partial), or name, or sku
             if (!$product) {
-                $query = Product::with(['views','views.areas']);
-                $query->where(function($q) use ($productId) {
-                    $q->where('shopify_product_id', $productId)
-                      ->orWhere('name', $productId)
-                      ->orWhere('sku', $productId);
-                });
+                $cols = [
+                    'shopify_product_id' => Schema::hasColumn('products','shopify_product_id'),
+                    'name'               => Schema::hasColumn('products','name'),
+                    'sku'                => Schema::hasColumn('products','sku'),
+                ];
 
-                // Only add columns that actually exist to avoid SQL errors
-                // (Schema::hasColumn is safe but avoid excessive calls in heavy traffic)
-                $validCols = Schema::hasColumn('products','shopify_product_id') ||
-                             Schema::hasColumn('products','name') ||
-                             Schema::hasColumn('products','sku');
+                // build query only if at least one relevant column exists
+                if ($cols['shopify_product_id'] || $cols['name'] || $cols['sku']) {
+                    $query = Product::with(['views','views.areas']);
+                    $query->where(function($q) use ($productId, $cols) {
+                        if ($cols['shopify_product_id']) {
+                            $q->where('shopify_product_id', $productId)
+                              ->orWhere('shopify_product_id', 'like', '%' . $productId . '%');
+                        }
+                        if ($cols['name']) {
+                            $q->orWhere('name', $productId);
+                        }
+                        if ($cols['sku']) {
+                            $q->orWhere('sku', $productId);
+                        }
+                    });
 
-                if ($validCols) {
                     $product = $query->first();
                 }
             }
         }
 
         if (!$product) {
-            // If you prefer graceful fallback, render view with placeholder instead of abort
-            // return view('designer_placeholder');
+            // Not found: abort 404 (production). If you want to debug UI, temporarily replace with a placeholder render.
             abort(404, 'Product not found');
         }
 
-        // Resolve product view: direct viewId or fallback to first related view
+        // Resolve product view (explicit view_id or first related view)
         $view = null;
         if ($viewId) {
             $view = ProductView::with('areas')->find($viewId);
         }
         if (!$view) {
-            // use loaded relation if available (because we eager-loaded views)
             if ($product->relationLoaded('views') && $product->views->count()) {
                 $view = $product->views->first();
             } else {
@@ -65,12 +70,10 @@ class PublicDesignerController extends Controller
             }
         }
 
-        // Load areas safely (collection)
+        // Areas collection safe
         $areas = $view ? ($view->relationLoaded('areas') ? $view->areas : $view->areas()->get()) : collect([]);
 
-        // Return blade: ensure this matches your blade file path.
-        // If file is resources/views/designer.blade.php -> use 'designer'
-        // If file is resources/views/public/designer.blade.php -> use 'public.designer'
+        // Render the blade that lives at resources/views/public/designer.blade.php
         return view('public.designer', [
             'product' => $product,
             'view'    => $view,

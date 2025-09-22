@@ -2,14 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>{{ $product->title ?? 'Product' }} – NextPrint</title>
+  <title>{{ $product->name ?? ($product->title ?? 'Product') }} – NextPrint</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Oswald:wght@400;600&display=swap" rel="stylesheet">
 
   <style>
-    /* copy the same styles you used in product.blade.php — trimmed here for brevity */
-    /* paste the full CSS from product.blade.php in your real file */
     .np-hidden { display: none !important; }
     .font-bebas{font-family:'Bebas Neue', Impact, 'Arial Black', sans-serif;}
     .font-anton{font-family:'Anton', Impact, 'Arial Black', sans-serif;}
@@ -18,33 +16,71 @@
     .np-stage { position: relative; width: 100%; max-width: 562px; margin: 0 auto; min-height: 220px; overflow: visible; background: #fff; }
     .np-stage img { width: 100%; height: auto; display:block; border-radius:6px; }
     .np-overlay { position:absolute; left:0; top:0; color:#D4AF37; text-shadow: 0 2px 6px rgba(0,0,0,0.35); white-space:nowrap; pointer-events:none; font-weight:700; text-transform:uppercase; letter-spacing:2px; display:flex; align-items:center; justify-content:center; user-select:none; line-height:1;}
-    /* copy full CSS as needed */
+    .np-swatch { width:28px; height:28px; border-radius:4px; border:1px solid #ccc; cursor:pointer; }
   </style>
 </head>
 <body class="py-4">
 @php
-  // $product, $view, $areas should be passed by PublicDesignerController::show
+  // safe product image fallback
   $img = $product->image_url ?? ($product->preview_src ?? asset('images/placeholder.png'));
-  // Convert $areas to JS-ready structure: map slot type (name/number) if admins set template_id or slot_key
-  // We'll pass an array of areas to JS — JS will find slots by name or template_id (your logic)
+
+  // build layoutSlots map server-side (simple heuristics)
+  $layoutSlots = [];
+  foreach ($areas as $a) {
+    $slot = [
+      'id' => $a->id,
+      'template_id' => $a->template_id ?? null,
+      'left_pct' => floatval($a->left_pct ?? 0),
+      'top_pct' => floatval($a->top_pct ?? 0),
+      'width_pct' => floatval($a->width_pct ?? 0),
+      'height_pct' => floatval($a->height_pct ?? 0),
+      'rotation' => intval($a->rotation ?? 0),
+      'name' => $a->name ?? '',
+      'slot_key' => $a->slot_key ?? '',
+    ];
+
+    $key = '';
+    $sk = strtolower($slot['slot_key'] ?? '');
+    $nm = strtolower($slot['name'] ?? '');
+
+    if ($sk === 'name' || $sk === 'number') {
+      $key = $sk;
+    } elseif (strpos($nm, 'name') !== false) {
+      $key = 'name';
+    } elseif (strpos($nm, 'num') !== false || strpos($nm, 'no') !== false) {
+      $key = 'number';
+    } else {
+      // fallback mapping by template id
+      if ($slot['template_id'] == 1 && !isset($layoutSlots['name'])) $key = 'name';
+      elseif ($slot['template_id'] == 2 && !isset($layoutSlots['number'])) $key = 'number';
+      else {
+        if (!isset($layoutSlots['name'])) $key = 'name';
+        elseif (!isset($layoutSlots['number'])) $key = 'number';
+        else $key = 'name';
+      }
+    }
+
+    if ($key && !isset($layoutSlots[$key])) {
+      $layoutSlots[$key] = $slot;
+    }
+  }
+
+  $personalizationSupported = count($layoutSlots) > 0;
 @endphp
 
 <div class="container">
   <div class="row g-4">
-    {{-- CENTER */}
     <div class="col-md-6 np-col order-1 order-md-2">
       <div class="border rounded p-3">
         <div class="np-stage" id="np-stage">
           <img id="np-base" src="{{ $img }}" alt="Preview"
                onerror="this.onerror=null;this.src='{{ asset('images/placeholder.png') }}'">
-          {{-- overlays — placed & sized by JS --}}
           <div id="np-prev-name" class="np-overlay np-name font-bebas"></div>
-          <div id="np-prev-num" class="np-overlay np-num font-bebas"></div>
+          <div id="np-prev-num"  class="np-overlay np-num  font-bebas"></div>
         </div>
       </div>
     </div>
 
-    {{-- LEFT controls (same as product.blade) --}}
     <div class="col-md-3 np-col order-2 order-md-1">
       <div class="border rounded p-3">
         <h6 class="mb-3">Customize</h6>
@@ -91,9 +127,8 @@
       </div>
     </div>
 
-    {{-- RIGHT product info (light) --}}
     <div class="col-md-3 np-col order-3 order-md-3">
-      <h4 class="mb-1">{{ $product->title }}</h4>
+      <h4 class="mb-1">{{ $product->name ?? ($product->title ?? 'Product') }}</h4>
       <div class="text-muted mb-3">Vendor: {{ $product->vendor ?? '—' }} • ₹ {{ number_format((float)($product->min_price ?? 0), 2) }}</div>
 
       <form id="np-atc-form" method="post" action="#">
@@ -114,196 +149,163 @@
   </div>
 </div>
 
+{{-- SERVER → CLIENT: layoutSlots + personalizationSupported values (safe JSON output) --}}
+<script>
+  window.layoutSlots = @json($layoutSlots);
+  window.personalizationSupported = {{ $personalizationSupported ? 'true' : 'false' }};
+</script>
+
+{{-- Robust init script (single place) --}}
 <script>
 (function(){
   const $ = id => document.getElementById(id);
-  const nameEl = $('np-name'), numEl = $('np-num'), fontEl = $('np-font'), colorEl = $('np-color');
-  const pvName = $('np-prev-name'), pvNum = $('np-prev-num'), baseImg = $('np-base'), stage = $('np-stage');
-  const ctrls = $('np-controls'), note = $('np-note'), status = $('np-status'), btn = $('np-atc-btn');
 
-  // Convert server-passed areas into JS object.
-  // We'll render `window.layoutSlots` from server blade below.
-  const layout = window.layoutSlots || {};
+  function init(){
+    const nameEl = $('np-name'), numEl = $('np-num'), fontEl = $('np-font'), colorEl = $('np-color');
+    const pvName = $('np-prev-name'), pvNum = $('np-prev-num'), baseImg = $('np-base'), stage = $('np-stage');
+    const ctrls = $('np-controls'), note = $('np-note'), status = $('np-status'), btn = $('np-atc-btn');
 
-  // validators
-  const NAME_RE = /^[A-Za-z ]{1,12}$/;
-  const NUM_RE  = /^\d{1,3}$/;
-
-  function validate(){
-    const okName = NAME_RE.test((nameEl.value||'').trim());
-    const okNum  = NUM_RE.test((numEl.value||'').trim());
-    document.getElementById('np-name-err')?.classList.toggle('d-none', okName);
-    document.getElementById('np-num-err')?.classList.toggle('d-none', okNum);
-    if (!ctrls.classList.contains('np-hidden')) btn.disabled = !(okName && okNum);
-    return okName && okNum;
-  }
-
-  function applyFont(val){
-    pvName.classList.remove('font-bebas','font-anton','font-oswald','font-impact');
-    pvNum.classList.remove('font-bebas','font-anton','font-oswald','font-impact');
-    const map={bebas:'font-bebas',anton:'font-anton',oswald:'font-oswald',impact:'font-impact'};
-    const cls = map[val] || 'font-bebas';
-    pvName.classList.add(cls); pvNum.classList.add(cls);
-  }
-
-  function syncPreview(){
-    pvName.textContent = (nameEl.value||'').toUpperCase();
-    pvNum.textContent = (numEl.value||'').replace(/\D/g,'').toUpperCase();
-  }
-
-  function syncHidden(){
-    $('np-name-hidden').value = (nameEl.value||'').toUpperCase().trim();
-    $('np-num-hidden').value = (numEl.value||'').replace(/\D/g,'').trim();
-    $('np-font-hidden').value = fontEl.value;
-    $('np-color-hidden').value = colorEl.value;
-  }
-
-  // basic listeners
-  nameEl?.addEventListener('input', ()=>{ syncPreview(); validate(); syncHidden(); });
-  numEl?.addEventListener('input', e=>{ e.target.value=e.target.value.replace(/\D/g,'').slice(0,3); syncPreview(); validate(); syncHidden(); });
-  fontEl?.addEventListener('change', ()=>{ applyFont(fontEl.value); syncPreview(); syncHidden(); });
-  colorEl?.addEventListener('input', ()=>{ pvName.style.color=colorEl.value; pvNum.style.color=colorEl.value; syncHidden(); });
-
-  document.querySelectorAll('.np-swatch')?.forEach(b=>{
-    b.addEventListener('click', ()=>{
-      document.querySelectorAll('.np-swatch').forEach(x=>x.classList.remove('active'));
-      b.classList.add('active');
-      colorEl.value = b.dataset.color;
-      pvName.style.color = b.dataset.color; pvNum.style.color = b.dataset.color;
-      syncHidden();
-    });
-  });
-
-  applyFont(fontEl.value);
-  pvName.style.color=colorEl.value; pvNum.style.color=colorEl.value;
-  syncPreview(); syncHidden();
-
-  // ---------- Placement using server-provided $areas ----------
-  function placeOverlay(el, slot){
-    if(!slot) return;
-    const W = stage.clientWidth;
-    const H = baseImg.clientHeight || baseImg.naturalHeight || (stage.clientWidth * 1.0);
-    const left = (slot.left_pct/100) * W;
-    const top  = (slot.top_pct/100) * H;
-    const w    = (slot.width_pct/100) * W;
-    const h    = (slot.height_pct/100) * H;
-
-    el.style.position = 'absolute';
-    el.style.left = left + 'px';
-    el.style.top  = top + 'px';
-    el.style.width = Math.max(10, w) + 'px';
-    el.style.height = Math.max(10, h) + 'px';
-    el.style.display = 'flex';
-    el.style.alignItems = 'center';
-    el.style.justifyContent = 'center';
-
-    // set font size relative to area height
-    let fontSize = Math.max(8, Math.floor(h * 0.6));
-    el.style.fontSize = fontSize + 'px';
-    el.style.transform = `rotate(${slot.rotation||0}deg)`;
-    el.style.whiteSpace = 'nowrap';
-    el.style.overflow = 'hidden';
-
-    // shrink to fit
-    while (el.scrollWidth > el.clientWidth && fontSize > 8) {
-      fontSize -= 1;
-      el.style.fontSize = fontSize + 'px';
+    if (!stage || !baseImg) {
+      console.warn('Designer: missing stage or baseImg ->', !!stage, !!baseImg);
     }
-  }
 
-  function applyLayout(){
-    // layout slots object may look like { name: {...}, number: {...} } depending on admin data
-    if (layout.name) placeOverlay(pvName, layout.name);
-    if (layout.number) placeOverlay(pvNum, layout.number);
-  }
+    const layout = (typeof window.layoutSlots === 'object' && window.layoutSlots !== null) ? window.layoutSlots : {};
 
-  // Reapply when image loads and on resize
-  baseImg.addEventListener('load', applyLayout);
-  window.addEventListener('resize', applyLayout);
-  // initial apply (if image already loaded)
-  setTimeout(applyLayout, 50);
+    const NAME_RE = /^[A-Za-z ]{1,12}$/, NUM_RE = /^\d{1,3}$/;
+    function validate(){
+      const okName = nameEl ? NAME_RE.test((nameEl.value||'').trim()) : true;
+      const okNum = numEl ? NUM_RE.test((numEl.value||'').trim()) : true;
+      if (nameEl) document.getElementById('np-name-err')?.classList.toggle('d-none', okName);
+      if (numEl)  document.getElementById('np-num-err')?.classList.toggle('d-none', okNum);
+      if (ctrls && !ctrls.classList.contains('np-hidden')) {
+        if (btn) btn.disabled = !(okName && okNum);
+      }
+      return okName && okNum;
+    }
 
-  // show controls if layout says personalization supported (server passes that flag)
-  if (window.personalizationSupported) {
-    status.textContent = 'Personalization supported.';
-    note.classList.add('d-none');
-    ctrls.classList.remove('np-hidden');
-    btn.disabled = true;
-  } else {
-    status.textContent = 'Personalization not available.';
-    note.classList.remove('d-none');
-    ctrls.classList.add('np-hidden');
-    btn.disabled = false;
-  }
+    function applyFont(val){
+      const classes = ['font-bebas','font-anton','font-oswald','font-impact'];
+      if (pvName) pvName.classList.remove(...classes);
+      if (pvNum) pvNum.classList.remove(...classes);
+      const map = {bebas:'font-bebas', anton:'font-anton', oswald:'font-oswald', impact:'font-impact'};
+      const c = map[val] || 'font-bebas';
+      if (pvName) pvName.classList.add(c);
+      if (pvNum) pvNum.classList.add(c);
+    }
 
-  // Form submit validation
-  document.getElementById('np-atc-form').addEventListener('submit', function(e){
-    if (!ctrls.classList.contains('np-hidden')) {
-      if (!validate()) {
-        e.preventDefault();
-        alert('Please enter a valid Name (A–Z, 1–12) and Number (1–3 digits).');
-        return;
+    function syncPreview(){
+      if (pvName && nameEl) pvName.textContent = (nameEl.value||'').toUpperCase();
+      if (pvNum && numEl) pvNum.textContent = (numEl.value||'').replace(/\D/g,'');
+    }
+
+    function syncHidden(){
+      const set = (id, v) => { const el = $(id); if (el) el.value = v; };
+      set('np-name-hidden', (nameEl? (nameEl.value||'') : '').toUpperCase().trim());
+      set('np-num-hidden', (numEl? (numEl.value||'') : '').replace(/\D/g,'').trim());
+      set('np-font-hidden', fontEl? fontEl.value : '');
+      set('np-color-hidden', colorEl? colorEl.value : '');
+    }
+
+    if (nameEl) nameEl.addEventListener('input', ()=>{ syncPreview(); validate(); syncHidden(); });
+    if (numEl)  numEl.addEventListener('input', e=>{ e.target.value = e.target.value.replace(/\D/g,'').slice(0,3); syncPreview(); validate(); syncHidden(); });
+    if (fontEl) fontEl.addEventListener('change', ()=>{ applyFont(fontEl.value); syncPreview(); syncHidden(); });
+    if (colorEl) colorEl.addEventListener('input', ()=>{ if (pvName) pvName.style.color = colorEl.value; if (pvNum) pvNum.style.color = colorEl.value; syncHidden(); });
+
+    document.querySelectorAll('.np-swatch')?.forEach(b=>{
+      b.addEventListener('click', ()=>{
+        document.querySelectorAll('.np-swatch').forEach(x=>x.classList.remove('active'));
+        b.classList.add('active');
+        if (colorEl) colorEl.value = b.dataset.color;
+        if (pvName) pvName.style.color = b.dataset.color;
+        if (pvNum) pvNum.style.color = b.dataset.color;
+        syncHidden();
+      });
+    });
+
+    applyFont(fontEl? fontEl.value : 'bebas');
+    if (pvName && colorEl) pvName.style.color = colorEl.value;
+    if (pvNum && colorEl) pvNum.style.color = colorEl.value;
+    syncPreview(); syncHidden();
+
+    function placeOverlay(el, slot){
+      if (!el || !slot || !stage) return;
+      el.style.position = 'absolute';
+      el.style.left = (slot.left_pct||0) + '%';
+      el.style.top  = (slot.top_pct||0) + '%';
+      el.style.width = (slot.width_pct||10) + '%';
+      el.style.height = (slot.height_pct||10) + '%';
+      el.style.display = 'flex';
+      el.style.alignItems = 'center';
+      el.style.justifyContent = 'center';
+      el.style.boxSizing = 'border-box';
+      el.style.padding = '2px';
+      el.style.transform = `rotate(${slot.rotation || 0}deg)`;
+      el.style.whiteSpace = 'nowrap';
+      el.style.overflow = 'hidden';
+
+      // compute font-size by area height relative to base image render size
+      const imgW = (baseImg && baseImg.naturalWidth) ? baseImg.naturalWidth : (baseImg? baseImg.width : stage.clientWidth);
+      const imgH = (baseImg && baseImg.naturalHeight) ? baseImg.naturalHeight : (baseImg? baseImg.clientHeight : stage.clientWidth);
+      const stageW = stage.clientWidth || 300;
+      const stageH = imgW ? Math.round((imgH * stageW) / imgW) : (baseImg? baseImg.clientHeight : 300);
+      const areaHpx = ((slot.height_pct || 10) / 100) * stageH;
+      let fontSize = Math.max(8, Math.floor(areaHpx * 0.55));
+      el.style.fontSize = fontSize + 'px';
+      // shrink if overflow
+      while (el.scrollWidth > el.clientWidth && fontSize > 8) {
+        fontSize -= 1;
+        el.style.fontSize = fontSize + 'px';
       }
     }
-    btn.setAttribute('aria-busy','true');
-    syncHidden();
-  });
 
+    function applyLayout(){
+      if (!baseImg) return;
+      if (!baseImg.complete || !baseImg.naturalWidth) return;
+      if (layout.name) placeOverlay(pvName, layout.name);
+      if (layout.number) placeOverlay(pvNum, layout.number);
+    }
+
+    if (baseImg) baseImg.addEventListener('load', applyLayout);
+    window.addEventListener('resize', applyLayout);
+    setTimeout(applyLayout, 200);
+    setTimeout(applyLayout, 800);
+
+    if (typeof window.personalizationSupported !== 'undefined' && ctrls) {
+      if (window.personalizationSupported) {
+        status.textContent = 'Personalization supported.';
+        note.classList.add('d-none');
+        ctrls.classList.remove('np-hidden');
+        if (btn) btn.disabled = true;
+      } else {
+        status.textContent = 'Personalization not available.';
+        note.classList.remove('d-none');
+        ctrls.classList.add('np-hidden');
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    const atcForm = $('np-atc-form');
+    if (atcForm) {
+      atcForm.addEventListener('submit', function(e){
+        if (ctrls && !ctrls.classList.contains('np-hidden')) {
+          if (!validate()) {
+            e.preventDefault();
+            alert('Please enter a valid Name (A–Z, 1–12) and Number (1–3 digits).');
+            return;
+          }
+        }
+        if (btn) btn.setAttribute('aria-busy','true');
+        syncHidden();
+      });
+    }
+  } // init end
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
 })();
-</script>
-
-{{-- SERVER → CLIENT: layoutSlots + personalizationSupported values --}}
-<script>
-  // Build layout map from server $areas passed to blade
-  window.layoutSlots = {};
-  window.personalizationSupported = false;
-
-  @if(!empty($areas) && count($areas))
-    // mark supports true — we have areas
-    window.personalizationSupported = true;
-    @foreach($areas as $a)
-      // You may have a slot_key or template id to know if this area is for 'name' or 'number'.
-      // If admin used slot_key 'name' or 'number' use that. Otherwise fallback to template_id mapping.
-      (function(){
-        var slot = {
-          id: {{ json_encode($a->id) }},
-          template_id: {{ json_encode($a->template_id) }},
-          left_pct: {{ floatval($a->left_pct) }},
-          top_pct: {{ floatval($a->top_pct) }},
-          width_pct: {{ floatval($a->width_pct) }},
-          height_pct: {{ floatval($a->height_pct) }},
-          rotation: {{ intval($a->rotation ?? 0) }},
-          name: {!! json_encode($a->name ?? '') !!},
-          slot_key: {!! json_encode($a->slot_key ?? '') !!}
-        };
-
-        // heuristics to map admin area → "name" or "number":
-        var key = (slot.slot_key || '').toString().toLowerCase();
-        if (key === 'name' || key === 'number') {
-          window.layoutSlots[key] = slot;
-          return;
-        }
-
-        // fallback: if name contains 'name' or 'number'
-        if ((slot.name || '').toString().toLowerCase().indexOf('name') !== -1) {
-          window.layoutSlots['name'] = slot; return;
-        }
-        if ((slot.name || '').toString().toLowerCase().indexOf('num') !== -1 ||
-            (slot.name || '').toString().toLowerCase().indexOf('no') !== -1) {
-          window.layoutSlots['number'] = slot; return;
-        }
-
-        // if no indicator: use template_id mapping you know. e.g. template_id 1 => name, 2 => number
-        if (slot.template_id == 1 && !window.layoutSlots['name']) window.layoutSlots['name'] = slot;
-        else if (slot.template_id == 2 && !window.layoutSlots['number']) window.layoutSlots['number'] = slot;
-        else {
-          // if still not mapped -> push into name if empty, else number
-          if (!window.layoutSlots['name']) window.layoutSlots['name'] = slot;
-          else if (!window.layoutSlots['number']) window.layoutSlots['number'] = slot;
-        }
-      })();
-    @endforeach
-  @endif
 </script>
 
 </body>
