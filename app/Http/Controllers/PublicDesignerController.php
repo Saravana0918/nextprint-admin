@@ -71,7 +71,7 @@ class PublicDesignerController extends Controller
         // Return blade: ensure this matches your blade file path.
         // If file is resources/views/designer.blade.php -> use 'designer'
         // If file is resources/views/public/designer.blade.php -> use 'public.designer'
-        return view('designer', [
+        return view('public.designer', [
             'product' => $product,
             'view'    => $view,
             'areas'   => $areas,
