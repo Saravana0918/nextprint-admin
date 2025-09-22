@@ -237,43 +237,63 @@
     }
 
     function placeOverlay(el, slot, slotKey){
-      if(!el || !slot || !stage) return;
-      el.style.position = 'absolute';
-      el.style.left = (slot.left_pct||0) + '%';
-      el.style.top  = (slot.top_pct||0) + '%';
-      el.style.width = (slot.width_pct||10) + '%';
-      el.style.height = (slot.height_pct||10) + '%';
-      el.style.display = 'flex';
-      el.style.alignItems = 'center';
-      el.style.justifyContent = 'center';
-      el.style.boxSizing = 'border-box';
-      el.style.padding = '2px';
-      el.style.transform = 'rotate(' + (slot.rotation || 0) + 'deg)';
-      el.style.whiteSpace = 'nowrap';
-      el.style.overflow = 'hidden';
+  if(!el || !slot || !stage) return;
 
-      const {imgW, imgH, stageW, stageH} = computeStageSize();
-      const areaWpx = ((slot.width_pct || 10)/100) * stageW;
-      const areaHpx = ((slot.height_pct || 10)/100) * stageH;
+  // positioning
+  el.style.position = 'absolute';
+  el.style.left = (slot.left_pct||0) + '%';
+  el.style.top  = (slot.top_pct||0) + '%';
+  el.style.width = (slot.width_pct||10) + '%';
+  el.style.height = (slot.height_pct||10) + '%';
+  el.style.display = 'flex';
+  el.style.alignItems = 'center';
+  el.style.justifyContent = 'center';
+  el.style.boxSizing = 'border-box';
+  el.style.padding = '2px';
+  el.style.transform = 'rotate(' + ((slot.rotation||0)) + 'deg)';
+  el.style.whiteSpace = 'nowrap';
+  el.style.overflow = 'hidden';
+  el.style.pointerEvents = 'none';
+  el.style.zIndex = 50;
 
-      let multiplier = 0.80;
-      if (slotKey === 'name') multiplier = 0.90;
-      if (slotKey === 'number') multiplier = 0.78;
+  // compute sizes
+  const {imgW, imgH, stageW, stageH} = computeStageSize();
+  const areaWpx = Math.max(8, Math.round(((slot.width_pct || 10)/100) * stageW));
+  const areaHpx = Math.max(8, Math.round(((slot.height_pct || 10)/100) * stageH));
 
-      let fontSize = Math.max(10, Math.floor(areaHpx * multiplier));
-      const text = (el.textContent || '').toString().trim() || 'TEXT';
-      const maxFontByWidth = Math.floor((areaWpx * 0.9) / Math.max(1, text.length) / 0.6) || fontSize;
-      fontSize = Math.min(fontSize, maxFontByWidth);
+  // multipliers: numbers should be smaller; names slightly larger but still constrained
+  const baseMultName = 0.85;   // try 0.85 of area height
+  const baseMultNumber = 0.6;  // numbers often need smaller multiplier
 
-      el.style.fontSize = fontSize + 'px';
-      el.style.lineHeight = '1';
-      el.style.fontWeight = '700';
+  // pick multiplier by slot key
+  const mult = (slotKey === 'number') ? baseMultNumber : baseMultName;
 
-      while (el.scrollWidth > el.clientWidth && fontSize > 8) {
-        fontSize -= 1;
-        el.style.fontSize = fontSize + 'px';
-      }
-    }
+  // candidate font from area height
+  let fontByHeight = Math.floor(areaHpx * mult);
+
+  // also compute max font from width (so "45" doesn't overflow)
+  // average approx char width ratio: 0.55 * fontSize (empirical). Use safe divisor 0.55
+  const text = (el.textContent || '').toString().trim() || 'TEXT';
+  const chars = Math.max(1, text.length);
+  const maxFontByWidth = Math.floor((areaWpx * 0.95) / (chars * 0.55));
+
+  // final font is constrained by height & width caps, and a hard clamp to reasonable range
+  let fontSize = Math.min(fontByHeight, maxFontByWidth);
+  fontSize = Math.max(9, Math.min(fontSize, Math.max(12, Math.floor(stageW / 6)))); // clamp between 9 and stageW/6
+
+  el.style.fontSize = Math.floor(fontSize) + 'px';
+  el.style.lineHeight = '1';
+  el.style.fontWeight = '700';
+
+  // If still overflowing horizontally, gradually reduce
+  let tries = 0;
+  while (el.scrollWidth > el.clientWidth && fontSize > 8 && tries < 30) {
+    fontSize = Math.max(8, Math.floor(fontSize * 0.92));
+    el.style.fontSize = fontSize + 'px';
+    tries++;
+  }
+}
+
 
     function applyLayout(){
       if (!baseImg) return;
