@@ -15,6 +15,7 @@ use App\Http\Controllers\ShopifyWebhookController;
 use App\Http\Controllers\PublicProductController;
 use App\Http\Controllers\StoreController;
 use App\Http\Controllers\ShopifyCartController;
+use App\Http\Controllers\PublicDesignerController;
 
 /*
 |--------------------------------------------------------------------------
@@ -89,6 +90,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
 
 // Public API: methods by Shopify handle (used by PDP JS)
 Route::get('/api/public/products/{handle}/methods', [PublicProductController::class, 'methodsByHandle']);
+Route::get('/designer', [PublicDesignerController::class, 'show'])->name('public.designer.show');
 
 // Simple PDP (preview/test page)
 Route::get('/p/{handle}', [StoreController::class, 'show'])->name('store.product');
