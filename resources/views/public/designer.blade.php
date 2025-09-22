@@ -109,13 +109,56 @@
   window.layoutSlots = {};
   window.personalizationSupported = false;
 
-  @if(!empty($layoutSlots) && is_array($layoutSlots) && count($layoutSlots))
+  @if(!empty($areas) && count($areas))
     window.personalizationSupported = true;
-    window.layoutSlots = {!! json_encode($layoutSlots, JSON_NUMERIC_CHECK) !!};
-  @else
-    window.personalizationSupported = false;
+    window.layoutSlots = {};
+    @foreach($areas as $a)
+      (function(){
+        // take raw values from DB (may be 0..1 or 0..100)
+        var leftRaw   = {{ json_encode(floatval($a->left_pct)) }};
+        var topRaw    = {{ json_encode(floatval($a->top_pct)) }};
+        var widthRaw  = {{ json_encode(floatval($a->width_pct)) }};
+        var heightRaw = {{ json_encode(floatval($a->height_pct)) }};
+
+        // normalise: if stored as fraction (<=1) convert to percent
+        var toPct = function(v){
+          if (v === null) return 0;
+          if (v <= 1) return v * 100;
+          return v;
+        };
+
+        var slot = {
+          id: {{ json_encode($a->id) }},
+          template_id: {{ json_encode($a->template_id) }},
+          left_pct: toPct(leftRaw),
+          top_pct:  toPct(topRaw),
+          width_pct: toPct(widthRaw),
+          height_pct: toPct(heightRaw),
+          rotation: {{ intval($a->rotation ?? 0) }},
+          name: {!! json_encode($a->name ?? '') !!},
+          slot_key: {!! json_encode($a->slot_key ?? '') !!}
+        };
+
+        // map slot_key / name heuristics (same as before)
+        var key = (slot.slot_key || '').toString().toLowerCase();
+        if (key === 'name' || key === 'number') {
+          window.layoutSlots[key] = slot; return;
+        }
+        if ((slot.name || '').toString().toLowerCase().indexOf('name') !== -1) {
+          window.layoutSlots['name'] = slot; return;
+        }
+        if ((slot.name || '').toString().toLowerCase().indexOf('num') !== -1 ||
+            (slot.name || '').toString().toLowerCase().indexOf('no') !== -1) {
+          window.layoutSlots['number'] = slot; return;
+        }
+        // fallback
+        if (!window.layoutSlots['name']) window.layoutSlots['name'] = slot;
+        else if (!window.layoutSlots['number']) window.layoutSlots['number'] = slot;
+      })();
+    @endforeach
   @endif
 </script>
+
 
 {{-- main JS (placement + preview) --}}
 <script>
