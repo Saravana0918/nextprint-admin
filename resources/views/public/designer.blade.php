@@ -4,131 +4,104 @@
   <meta charset="utf-8">
   <title>{{ $product->name ?? ($product->title ?? 'Product') }} – NextPrint</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Oswald:wght@400;600&display=swap" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
+    /* --- core --- */
     .np-hidden { display: none !important; }
     .font-bebas{font-family:'Bebas Neue', Impact, 'Arial Black', sans-serif;}
     .font-anton{font-family:'Anton', Impact, 'Arial Black', sans-serif;}
     .font-oswald{font-family:'Oswald', Arial, sans-serif;}
     .font-impact{font-family:Impact, 'Arial Black', sans-serif;}
-    .np-stage { position: relative; width: 100%; max-width: 562px; margin: 0 auto; min-height: 220px; overflow: visible; background: #fff; }
+
+    .np-stage { position: relative; width: 100%; max-width: 562px; margin: 0 auto; min-height: 220px; overflow: visible; background: #fff; border-radius:8px; padding:8px; }
     .np-stage img { width: 100%; height: auto; display:block; border-radius:6px; }
     .np-overlay { position:absolute; color:#D4AF37; text-shadow: 0 2px 6px rgba(0,0,0,0.35); white-space:nowrap; pointer-events:none; font-weight:700; text-transform:uppercase; letter-spacing:2px; display:flex; align-items:center; justify-content:center; user-select:none; line-height:1; }
-    .np-swatch { width:28px; height:28px; border-radius:4px; border:1px solid #ccc; cursor:pointer; }
+    .np-swatch { width:28px; height:28px; border-radius:50%; border:1px solid #ccc; cursor:pointer; display:inline-block; }
 
-    /* MOBILE: full body stadium background + controls visible */
-@media (max-width: 767px) {
+    /* -------------------- MOBILE ONLY (<=767px) -------------------- */
+    @media (max-width: 767px) {
+      /* full-body stadium background */
+      body {
+        background-image: url('/images/stadium-bg.jpg');
+        background-size: cover;
+        background-position: center center;
+        background-repeat: no-repeat;
+        min-height: 100vh;
+      }
 
-  /* body full-screen background */
-  body {
-    background-image: url('/images/stadium-bg.jpg');
-    background-size: cover;
-    background-position: center center;
-    background-repeat: no-repeat;
-    background-attachment: fixed;
-    min-height: 100vh;
-  }
+      /* layout -> single column */
+      .row.g-4 { display:flex; flex-direction:column; gap:14px; align-items:stretch; }
 
-  /* Keep page padding readable on mobile */
-  body.py-4 { padding-top: 14px; padding-bottom: 24px; }
+      /* show small white preview card on top centered */
+      .np-col.order-1.order-md-2 { order:-1; width:100% !important; max-width:380px !important; margin:0 auto; display:block !important; }
+      .np-stage { max-width:340px; margin:0 auto; background:#fff; padding:10px; border-radius:10px; }
 
-  /* Layout single column */
-  .row.g-4 { display: flex; flex-direction: column; gap: 12px; align-items: stretch; }
+      /* hide right product info column */
+      .col-md-3.order-3.order-md-3 { display:none !important; }
 
-  /* Preview small card centered, with white card look */
-  .np-col.order-1.order-md-2 { order: -1; width: 100% !important; max-width: 380px !important; margin: 0 auto 8px; display: block !important; }
-  .np-stage { max-width: 340px; margin: 0 auto; background: #fff; padding: 10px; border-radius: 8px; }
+      /* controls card translucent so body bg visible */
+      .col-md-3.order-2.order-md-1 {
+        display:block !important;
+        width:100% !important;
+        max-width:none !important;
+        margin:0 auto;
+      }
 
-  /* Hide right product column */
-  .col-md-3.order-3.order-md-3 { display: none !important; }
+      .col-md-3.order-2.order-md-1 .border {
+        position:relative;
+        overflow:hidden;
+        padding:18px !important;
+        border-radius:10px;
+        background: linear-gradient(180deg, rgba(7,58,104,0.78) 0%, rgba(13,103,40,0.78) 100%);
+        border:1px solid rgba(255,255,255,0.06);
+      }
+      .col-md-3.order-2.order-md-1 .border > * { position:relative; z-index:2; color:#fff; }
 
-  /* Make controls full width below preview and semi-transparent overlay so stadium bg visible */
-  .col-md-3.order-2.order-md-1 {
-    display: block !important;
-    width: 100% !important;
-    max-width: none !important;
-    margin: 0 auto;
-  }
+      /* inputs styled like your second screenshot (lined bottom border) */
+      .np-field-wrap { position:relative; margin-bottom:18px; }
+      .np-field-wrap label { display:block; color: rgba(255,255,255,0.92); font-size:12px; margin-bottom:6px; text-transform:uppercase; letter-spacing:1.2px; }
+      .np-field-wrap input.form-control {
+        background: transparent;
+        border: none;
+        border-bottom: 2px solid rgba(255,255,255,0.14);
+        color: #fff;
+        text-align:center;
+        font-weight:700;
+        text-transform:uppercase;
+        letter-spacing:2px;
+        font-size:16px;
+        padding:10px 8px;
+        border-radius:0;
+      }
+      .np-field-wrap input.form-control::placeholder { color: rgba(255,255,255,0.65); text-transform:uppercase; }
 
-  .col-md-3.order-2.order-md-1 .border {
-    position: relative;
-    padding: 18px !important;
-    border-radius: 8px;
-    overflow: hidden;
-    box-shadow: none;
-    /* translucent dark overlay so body background is visible behind */
-    background: linear-gradient(180deg, rgba(7,58,104,0.75) 0%, rgba(13,103,40,0.75) 100%);
-    border: 1px solid rgba(255,255,255,0.06);
-  }
+      /* MAX badges top-right inside the field wrapper */
+      .max-count {
+        position:absolute;
+        right:14px;
+        top:6px;
+        color:#FFD24D;
+        font-weight:700;
+        font-size:11px;
+        z-index:3;
+      }
 
-  /* keep content above background */
-  .col-md-3.order-2.order-md-1 .border > * { position: relative; z-index: 2; color: #fff; }
+      /* show font selector and swatches on mobile */
+      #np-font, .np-swatch, #np-color { display:block !important; }
 
-  /* Inputs: white-ish transparent boxes centered like screenshot */
-  #np-name, #np-num {
-    background: rgba(255,255,255,0.06);
-    border: 2px solid rgba(255,255,255,0.14);
-    color: #fff;
-    border-radius: 8px;
-    padding: 14px 12px;
-    text-align: center;
-    font-weight:700;
-    letter-spacing: 2px;
-    font-size: 16px;
-    text-transform: uppercase;
-  }
-  #np-name::placeholder, #np-num::placeholder { color: rgba(255,255,255,0.45); text-transform:uppercase; }
+      .np-swatch { width:28px; height:28px; border-radius:50%; border:2px solid rgba(255,255,255,0.12); margin-right:6px; }
 
-  /* show label small uppercase */
-  label[for="np-name"], label[for="np-num"] {
-    display:block;
-    color: rgba(255,255,255,0.85);
-    font-size: 12px;
-    margin-bottom: 6px;
-    text-transform: uppercase;
-    letter-spacing: 1.5px;
-  }
+      /* form-select more readable */
+      .form-select { background:#fff; color:#222; border-radius:8px; }
 
-  /* max-count right */
-  .max-count {
-    color: #ffd24d;
-    position: absolute;
-    right: 18px;
-    top: 22px;
-    font-size: 11px;
-    font-weight:700;
-    z-index: 3;
-  }
+      /* CTA */
+      #np-atc-btn { display:block !important; width:100% !important; font-size:16px !important; padding:12px 14px !important; margin-top:8px; }
 
-  .np-field-wrap { position: relative; margin-bottom: 18px; }
-
-  /* Show font selector and swatches on mobile (you wanted them visible) */
-  #np-font, .np-swatch, #np-color { display: block !important; }
-
-  .np-swatch { width:28px; height:28px; border-radius:50%; border:2px solid rgba(255,255,255,0.12); box-shadow: 0 1px 0 rgba(0,0,0,0.2); }
-
-  /* Font select styling */
-  .form-select { background: rgba(255,255,255,0.95); color: #222 !important; border-radius: 8px; }
-
-  /* Text color area spacing */
-  .mb-2 .d-flex { margin-top: 8px; }
-
-  /* CTA button styling */
-  #np-atc-btn {
-    display: block !important;
-    width: 100% !important;
-    font-size: 16px !important;
-    padding: 12px 14px !important;
-    margin-top: 10px;
-  }
-
-  /* small supporting text below CTA */
-  .small-delivery { color: rgba(255,255,255,0.95); font-size:13px; margin-top:10px; text-align:center; }
-
-  /* overlay preview text style tweaks */
-  .np-overlay { color: #FFD700; text-shadow: 0 2px 6px rgba(0,0,0,0.35); }
-}
-
+      /* subtle overlay preview style */
+      .np-overlay { color:#FFD700; text-shadow:none; }
+    }
+    /* -------------------- END MOBILE ONLY -------------------- */
   </style>
 </head>
 <body class="py-4">
@@ -138,6 +111,7 @@
 
 <div class="container">
   <div class="row g-4">
+    <!-- preview column (desktop large) -->
     <div class="col-md-6 np-col order-1 order-md-2">
       <div class="border rounded p-3">
         <div class="np-stage" id="np-stage">
@@ -148,29 +122,34 @@
       </div>
     </div>
 
+    <!-- controls column -->
     <div class="col-md-3 np-col order-2 order-md-1">
       <div class="border rounded p-3">
         <h6 class="mb-3">Customize</h6>
         <div id="np-status" class="small text-muted mb-2">Checking methods…</div>
         <div id="np-note" class="small text-muted mb-3 d-none">Personalization not available for this product.</div>
 
+        <!-- controls -->
         <div id="np-controls" class="np-hidden">
+          <!-- Number -->
           <div class="mb-3 np-field-wrap">
             <label for="np-num" class="form-label">Your Number</label>
             <input id="np-num" type="text" inputmode="numeric" maxlength="3" class="form-control" placeholder="Your number" autocomplete="off">
             <span class="max-count">MAX. 2</span>
             <div id="np-num-help" class="form-text">Digits only. 1–3 digits.</div>
-            <div id="np-num-err"  class="text-danger small d-none">Enter 1–3 digits only.</div>
+            <div id="np-num-err" class="text-danger small d-none">Enter 1–3 digits only.</div>
           </div>
 
+          <!-- Name -->
           <div class="mb-3 np-field-wrap">
             <label for="np-name" class="form-label">Your Name</label>
             <input id="np-name" type="text" maxlength="12" class="form-control" placeholder="Your name" autocomplete="off">
             <span class="max-count">MAX. 11</span>
             <div id="np-name-help" class="form-text">Only A–Z and spaces. 1–12 chars.</div>
-            <div id="np-name-err"  class="text-danger small d-none">Enter 1–12 letters/spaces only.</div>
+            <div id="np-name-err" class="text-danger small d-none">Enter 1–12 letters/spaces only.</div>
           </div>
 
+          <!-- Font select -->
           <div class="mb-3">
             <label class="form-label">Font</label>
             <select id="np-font" class="form-select">
@@ -181,6 +160,7 @@
             </select>
           </div>
 
+          <!-- Color swatches -->
           <div class="mb-2">
             <label class="form-label d-block">Text Color</label>
             <div class="d-flex gap-2 flex-wrap mb-2">
@@ -196,6 +176,7 @@
       </div>
     </div>
 
+    <!-- right product column (desktop) -->
     <div class="col-md-3 np-col order-3 order-md-3">
       <h4 class="mb-1">{{ $product->name ?? ($product->title ?? 'Product') }}</h4>
       <div class="text-muted mb-3">Vendor: {{ $product->vendor ?? '—' }} • ₹ {{ number_format((float)($product->min_price ?? 0), 2) }}</div>
@@ -264,10 +245,8 @@
       return {imgW, imgH, stageW, stageH};
     }
 
-    // STRONG placeOverlay: height + width caps + numeric shrink, mobile-specific caps
     function placeOverlay(el, slot, slotKey){
       if(!el || !slot || !stage) return;
-
       el.style.position = 'absolute';
       el.style.left = (slot.left_pct||0) + '%';
       el.style.top  = (slot.top_pct||0) + '%';
@@ -339,7 +318,7 @@
         const numTxt = (numEl.value||'').replace(/\D/g,'');
         pvNum.textContent = numTxt || 'YOUR NUMBER';
       }
-      applyLayout(); // IMPORTANT: recalc sizes after updating text
+      applyLayout();
     }
 
     function syncHidden(){
