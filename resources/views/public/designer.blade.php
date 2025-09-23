@@ -18,6 +18,9 @@
     .np-stage img { width: 100%; height: auto; display:block; border-radius:6px; }
     .np-overlay { position:absolute; color:#D4AF37; text-shadow: 0 2px 6px rgba(0,0,0,0.35); white-space:nowrap; pointer-events:none; font-weight:700; text-transform:uppercase; letter-spacing:2px; display:flex; align-items:center; justify-content:center; user-select:none; line-height:1; }
     .np-swatch { width:28px; height:28px; border-radius:50%; border:1px solid #ccc; cursor:pointer; display:inline-block; }
+    .max-count{
+      display:none;
+    }
 
     /* -------------------- MOBILE ONLY (<=767px) -------------------- */
 @media (max-width: 767px) {
