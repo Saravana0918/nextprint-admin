@@ -14,7 +14,7 @@
     .font-oswald{font-family:'Oswald', Arial, sans-serif;}
     .font-impact{font-family:Impact, 'Arial Black', sans-serif;}
 
-    .np-stage { position: relative; width: 100%; max-width: 562px; margin: 0 auto; min-height: 220px; overflow: visible; background: #fff; border-radius:8px; padding:8px; }
+    .np-stage { position: relative; width: 100%; max-width: 534px; margin: 0 auto; min-height: 220px; overflow: visible; background: #fff; border-radius:8px; padding:8px; }
     .np-stage img { width: 100%; height: auto; display:block; border-radius:6px; }
     .np-overlay { position:absolute; color:#D4AF37; text-shadow: 0 2px 6px rgba(0,0,0,0.35); white-space:nowrap; pointer-events:none; font-weight:700; text-transform:uppercase; letter-spacing:2px; display:flex; align-items:center; justify-content:center; user-select:none; line-height:1; }
     .np-swatch { width:28px; height:28px; border-radius:50%; border:1px solid #ccc; cursor:pointer; display:inline-block; }
@@ -24,9 +24,32 @@
   body {
     background-image: url('/images/stadium-bg.jpg');
     background-size: cover;
-    background-position: center center;
+    background-position: center;
     background-repeat: no-repeat;
+    background-attachment: fixed;
+    position: relative;
     min-height: 100vh;
+  }
+
+  body::before {
+    content: "";
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.55); /* darkness control: 0.55 = medium dark */
+    z-index: 0;
+  }
+
+  .container, .row, .np-col, .np-stage, .border {
+    position: relative;
+    z-index: 1;
+  }
+
+  .np-overlay {
+    color: #FFD700; /* gold */
+    text-shadow: 0 2px 8px rgba(0,0,0,0.65); /* stronger shadow for clarity */
   }
 
   .row.g-4 { display:flex; flex-direction:column; gap:14px; align-items:stretch; }
@@ -284,7 +307,7 @@
 
       let fontSize = Math.floor(Math.min(heightCandidate, widthCap) * numericShrink);
 
-      const maxAllowed = Math.max(14, Math.floor(stageW * (isMobile ? 0.28 : 0.18)));
+      const maxAllowed = Math.max(14, Math.floor(stageW * (isMobile ? 0.34 : 0.18)));
       fontSize = Math.max(8, Math.min(fontSize, maxAllowed));
 
       el.style.fontSize = fontSize + 'px';
