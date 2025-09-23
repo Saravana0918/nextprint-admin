@@ -152,6 +152,52 @@
   .form-select { background:#fff; color:#222; border-radius:8px; margin-bottom:16px; }
 
   #np-atc-btn { display:block !important; width:100% !important; font-size:16px !important; padding:12px 14px !important; margin-top:10px; }
+  #np-num, #np-name {
+    background: transparent !important;
+    border: none !important;
+    border-bottom: 2px solid rgba(255,255,255,0.25) !important;
+    color: #fff !important;
+    text-align: center;
+    font-weight:700;
+    letter-spacing:1px;
+    font-size: 18px;
+    padding: 10px 12px;
+    border-radius: 6px;
+    outline: none !important;
+    box-shadow: none !important;
+  }
+  #np-num:focus, #np-name:focus {
+    border-bottom-color: #ffd24d !important;
+  }
+
+  /* make stage (tshirt image) fixed in viewport so keyboard does not push it up */
+  body.np-keyboard-open {
+    position: fixed;
+    left: 0;
+    right: 0;
+    /* top will be set dynamically in JS to preserve scroll */
+    overflow: hidden;
+  }
+
+  /* keep stage centered and visible */
+  .np-stage {
+    /* ensure stage doesn't move when keyboard opens */
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+    will-change: transform;
+  }
+
+  /* optional: keep controls scrollable area not affected */
+  .np-controls, .col-md-3.order-2.order-md-1 .border {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* make keyboard overlay friendly: shrink huge fonts on small devices if needed */
+  .np-overlay { 
+    text-shadow: 0 2px 6px rgba(0,0,0,0.35);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
 }
 
     /* -------------------- END MOBILE ONLY -------------------- */
@@ -443,6 +489,64 @@
   } else {
     init();
   }
+})();
+</script>
+<script>
+(function(){
+  // only run on mobile widths
+  function isMobile(){ return window.innerWidth <= 767; }
+
+  // elements
+  const inputs = [document.getElementById('np-name'), document.getElementById('np-num')].filter(Boolean);
+  let scrollY = 0;
+
+  function lockBody() {
+    // save and lock
+    scrollY = window.scrollY || window.pageYOffset || 0;
+    document.body.classList.add('np-keyboard-open');
+    document.body.style.top = '-' + scrollY + 'px';
+  }
+
+  function unlockBody() {
+    document.body.classList.remove('np-keyboard-open');
+    document.body.style.top = '';
+    // restore scroll after short delay to ensure keyboard dismissed
+    setTimeout(function(){
+      window.scrollTo(0, scrollY);
+    }, 50);
+  }
+
+  inputs.forEach(function(inp){
+    inp.addEventListener('focus', function(e){
+      if (!isMobile()) return;
+      // small timeout to allow virtual keyboard to start
+      setTimeout(lockBody, 50);
+      // ensure the focused input remains visible: scroll to the input if needed
+      setTimeout(function(){
+        inp.scrollIntoView({behavior: 'smooth', block: 'center'});
+      }, 120);
+    });
+
+    // on blur -> restore
+    inp.addEventListener('blur', function(){
+      if (!isMobile()) return;
+      // slight delay to allow blur to finalize
+      setTimeout(unlockBody, 80);
+    });
+
+    // also on touchend to prevent browser auto-scroll on some Androids
+    inp.addEventListener('touchend', function(){
+      if (!isMobile()) return;
+      setTimeout(function(){ inp.scrollIntoView({block:'center'}); }, 100);
+    }, {passive:true});
+  });
+
+  // safety: on orientationchange or resize, unlock (prevents stuck body)
+  window.addEventListener('orientationchange', function(){ if (document.body.classList.contains('np-keyboard-open')) unlockBody(); });
+  window.addEventListener('resize', function(){ if (document.body.classList.contains('np-keyboard-open')) {
+    // if viewport height increases (keyboard hidden), restore
+    setTimeout(function(){ if (window.innerHeight > 600) unlockBody(); }, 300);
+  }});
 })();
 </script>
 
