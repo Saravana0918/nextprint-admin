@@ -16,123 +16,119 @@
     .np-overlay { position:absolute; color:#D4AF37; text-shadow: 0 2px 6px rgba(0,0,0,0.35); white-space:nowrap; pointer-events:none; font-weight:700; text-transform:uppercase; letter-spacing:2px; display:flex; align-items:center; justify-content:center; user-select:none; line-height:1; }
     .np-swatch { width:28px; height:28px; border-radius:4px; border:1px solid #ccc; cursor:pointer; }
 
-    /* ===== MOBILE SINGLE-COLUMN LAYOUT (ONLY <=767px) ===== */
-    @media (max-width: 767px) {
+    /* MOBILE: full body stadium background + controls visible */
+@media (max-width: 767px) {
 
-      /* Make layout single column: show preview small on top, then controls */
-      .row.g-4 { display: flex; flex-direction: column; gap: 12px; align-items: stretch; }
+  /* body full-screen background */
+  body {
+    background-image: url('/images/stadium-bg.jpg');
+    background-size: cover;
+    background-position: center center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+    min-height: 100vh;
+  }
 
-      /* small top preview card (centered) */
-      .np-col.order-1.order-md-2 { order: -1; width: 100% !important; max-width: 380px !important; margin: 0 auto 8px; display: block !important; }
-      .np-stage { max-width: 340px; margin: 0 auto; }
+  /* Keep page padding readable on mobile */
+  body.py-4 { padding-top: 14px; padding-bottom: 24px; }
 
-      /* hide right product info column completely on mobile */
-      .col-md-3.order-3.order-md-3 { display: none !important; }
+  /* Layout single column */
+  .row.g-4 { display: flex; flex-direction: column; gap: 12px; align-items: stretch; }
 
-      /* Make controls full width below preview */
-      .col-md-3.order-2.order-md-1 {
-        display: block !important;
-        width: 100% !important;
-        max-width: none !important;
-        margin: 0 auto;
-      }
+  /* Preview small card centered, with white card look */
+  .np-col.order-1.order-md-2 { order: -1; width: 100% !important; max-width: 380px !important; margin: 0 auto 8px; display: block !important; }
+  .np-stage { max-width: 340px; margin: 0 auto; background: #fff; padding: 10px; border-radius: 8px; }
 
-      /* Style the controls card like your screenshot */
-      .col-md-3.order-2.order-md-1 .border {
-      position: relative;
-      padding: 18px !important;
-      border-radius: 8px;
-      overflow: hidden;
-      box-shadow: none;
-      /* fallback color */
-      background-color: #073a68;
-    }
+  /* Hide right product column */
+  .col-md-3.order-3.order-md-3 { display: none !important; }
 
-    .col-md-3.order-2.order-md-1 .border::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background-image: url('/images/stadium-bg.jpg'); /* <-- change path if needed */
-      background-size: cover;
-      background-position: center center;
-      background-repeat: no-repeat;
-      opacity: 0.95;
-      z-index: 0;
-      transform: translateZ(0);
-    }
+  /* Make controls full width below preview and semi-transparent overlay so stadium bg visible */
+  .col-md-3.order-2.order-md-1 {
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 auto;
+  }
 
-    .col-md-3.order-2.order-md-1 .border::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(180deg, rgba(7,58,104,0.88) 0%, rgba(13,103,40,0.88) 100%);
-      z-index: 1;
-    }
+  .col-md-3.order-2.order-md-1 .border {
+    position: relative;
+    padding: 18px !important;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: none;
+    /* translucent dark overlay so body background is visible behind */
+    background: linear-gradient(180deg, rgba(7,58,104,0.75) 0%, rgba(13,103,40,0.75) 100%);
+    border: 1px solid rgba(255,255,255,0.06);
+  }
 
-    .col-md-3.order-2.order-md-1 .border > * {
-      position: relative;
-      z-index: 2;
-      color: #fff;
-    }
+  /* keep content above background */
+  .col-md-3.order-2.order-md-1 .border > * { position: relative; z-index: 2; color: #fff; }
 
-      /* White rounded input boxes with centered placeholder like screenshot */
-      #np-name, #np-num {
-        background: rgba(255,255,255,0.06);
-        border: 2px solid rgba(255,255,255,0.15);
-        color: #fff;
-        border-radius: 8px;
-        padding: 14px 12px;
-        text-align: center;
-        font-weight:700;
-        letter-spacing: 2px;
-        font-size: 16px;
-        text-transform: uppercase;
-      }
-      #np-name::placeholder, #np-num::placeholder { color: rgba(255,255,255,0.45); text-transform:uppercase; }
+  /* Inputs: white-ish transparent boxes centered like screenshot */
+  #np-name, #np-num {
+    background: rgba(255,255,255,0.06);
+    border: 2px solid rgba(255,255,255,0.14);
+    color: #fff;
+    border-radius: 8px;
+    padding: 14px 12px;
+    text-align: center;
+    font-weight:700;
+    letter-spacing: 2px;
+    font-size: 16px;
+    text-transform: uppercase;
+  }
+  #np-name::placeholder, #np-num::placeholder { color: rgba(255,255,255,0.45); text-transform:uppercase; }
 
-      /* Hide help text/extra small notes */
-      #np-name-help, #np-num-help, #np-name-err, #np-num-err, #np-font { display: none !important; }
-      .np-swatch, #np-color { display: none !important; }
+  /* show label small uppercase */
+  label[for="np-name"], label[for="np-num"] {
+    display:block;
+    color: rgba(255,255,255,0.85);
+    font-size: 12px;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+  }
 
-      /* Labels shown above fields as small uppercase (like your screenshot) */
-      label[for="np-name"], label[for="np-num"] {
-        display:block;
-        color: rgba(255,255,255,0.85);
-        font-size: 12px;
-        margin-bottom: 6px;
-        text-transform: uppercase;
-        letter-spacing: 1.5px;
-      }
+  /* max-count right */
+  .max-count {
+    color: #ffd24d;
+    position: absolute;
+    right: 18px;
+    top: 22px;
+    font-size: 11px;
+    font-weight:700;
+    z-index: 3;
+  }
 
-      /* max-count small yellow label to right (we will add small absolute spans) */
-      .max-count {
-        color: #ffd24d;
-        position: absolute;
-        right: 18px;
-        top: 22px;
-        font-size: 11px;
-        font-weight:700;
-      }
+  .np-field-wrap { position: relative; margin-bottom: 18px; }
 
-      /* Input wrappers to allow relative positioning for max-count */
-      .np-field-wrap { position: relative; margin-bottom: 18px; }
+  /* Show font selector and swatches on mobile (you wanted them visible) */
+  #np-font, .np-swatch, #np-color { display: block !important; }
 
-      /* Make Add to Cart appear below controls as full width CTA */
-      #np-atc-btn {
-        display: block !important;
-        width: 100% !important;
-        font-size: 16px !important;
-        padding: 12px 14px !important;
-        margin-top: 10px;
-      }
+  .np-swatch { width:28px; height:28px; border-radius:50%; border:2px solid rgba(255,255,255,0.12); box-shadow: 0 1px 0 rgba(0,0,0,0.2); }
 
-      /* small supporting text below CTA */
-      .small-delivery { color: rgba(255,255,255,0.85); font-size:13px; margin-top:10px; text-align:center; }
+  /* Font select styling */
+  .form-select { background: rgba(255,255,255,0.95); color: #222 !important; border-radius: 8px; }
 
-      /* small polish: white placeholder for empty preview name */
-      .np-overlay { color: #FFD700; text-shadow: none; }
+  /* Text color area spacing */
+  .mb-2 .d-flex { margin-top: 8px; }
 
-    }
+  /* CTA button styling */
+  #np-atc-btn {
+    display: block !important;
+    width: 100% !important;
+    font-size: 16px !important;
+    padding: 12px 14px !important;
+    margin-top: 10px;
+  }
+
+  /* small supporting text below CTA */
+  .small-delivery { color: rgba(255,255,255,0.95); font-size:13px; margin-top:10px; text-align:center; }
+
+  /* overlay preview text style tweaks */
+  .np-overlay { color: #FFD700; text-shadow: 0 2px 6px rgba(0,0,0,0.35); }
+}
+
   </style>
 </head>
 <body class="py-4">
