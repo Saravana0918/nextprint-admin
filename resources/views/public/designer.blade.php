@@ -18,9 +18,7 @@
     .np-stage img { width: 100%; height: auto; display:block; border-radius:6px; }
     .np-overlay { position:absolute; color:#D4AF37; text-shadow: 0 2px 6px rgba(0,0,0,0.35); white-space:nowrap; pointer-events:none; font-weight:700; text-transform:uppercase; letter-spacing:2px; display:flex; align-items:center; justify-content:center; user-select:none; line-height:1; }
     .np-swatch { width:28px; height:28px; border-radius:50%; border:1px solid #ccc; cursor:pointer; display:inline-block; }
-    .max-count{
-      display:none;
-    }
+    .max-count{ display:none; }
 
     /* -------------------- MOBILE ONLY (<=767px) -------------------- */
 @media (max-width: 767px) {
@@ -41,7 +39,7 @@
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0,0,0,0.55); /* darkness control: 0.55 = medium dark */
+    background: rgba(0,0,0,0.55); /* darkness control */
     z-index: 0;
   }
 
@@ -51,17 +49,14 @@
   }
 
   .np-overlay {
-    color: #FFD700; /* gold */
-    text-shadow: 0 2px 8px rgba(0,0,0,0.65); /* stronger shadow for clarity */
+    color: #FFD700;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.65);
+    pointer-events: auto; /* allow tapping */
+    cursor: text; /* hint user can type */
   }
 
-  .font-label{
-    color : white;
-  }
-
-  .color-label{
-    color: white;
-  }
+  .font-label{ color : white; }
+  .color-label{ color: white; }
 
   .row.g-4 { display:flex; flex-direction:column; gap:14px; align-items:stretch; }
 
@@ -70,7 +65,7 @@
 
   .col-md-3.order-3.order-md-3 { display:none !important; }
 
-  /* REMOVE card overlay background — inputs float directly on body bg */
+  /* Controls box transparent so body background shows */
   .col-md-3.order-2.order-md-1 {
     display:block !important;
     width:100% !important;
@@ -84,120 +79,50 @@
     padding: 0 !important;
   }
 
-  /* HIDE headings + helper texts */
+  /* Hide helper texts that would clutter */
   .col-md-3.order-2.order-md-1 h6,
   #np-status,
   #np-note,
   #np-num-help,
-  #np-name-help,
-  #np-num-err,
-  #np-name-err {
+  #np-name-help {
     display: none !important;
   }
 
-  /* inputs styled line-bottom only */
+  /* Style the visible decorative inputs area but we will actually KEEP "real" inputs offscreen */
   .np-field-wrap { position:relative; margin-bottom:20px; }
-  .np-field-wrap label { display:none !important; }
-  .np-field-wrap input.form-control {
-    background: transparent;
-    border: none;
-    border-bottom: 2px solid rgba(255,255,255,0.65);
-    color:#fff;
+  .np-field-wrap .visual-field {
+    display:block;
+    width:100%;
+    border: 2px solid rgba(255,255,255,0.12);
+    border-radius: 8px;
+    padding: 14px 12px;
+    color: #fff;
     text-align:center;
     font-weight:700;
-    text-transform:uppercase;
-    letter-spacing:2px;
-    font-size:18px;
-    padding:12px 8px;
-    border-radius:0;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    background: rgba(0,0,0,0.18);
   }
-  .np-field-wrap input.form-control::placeholder { color: rgba(255,255,255,0.75); }
+  .np-field-wrap .visual-field.placeholder { color: rgba(255,255,255,0.6) }
 
-  .customization-form input[type="text"],
-  .customization-form input[type="number"] {
-    background: transparent !important;
-    border: none !important;
-    border-bottom: 2px solid #fff !important; /* underline மட்டும் */
-    color: #fff !important;
-    text-align: center;
-    font-size: 20px;
-    outline: none !important;
-    box-shadow: none !important;
-  }
-
-  .customization-form input[type="text"]:focus,
-  .customization-form input[type="number"]:focus {
-    background: transparent !important;
-    border: none !important;
-    border-bottom: 2px solid #ffcc00 !important; /* highlight underline */
-    outline: none !important;
-    box-shadow: none !important;
-  }
-
-  .max-count {
-    position:absolute;
-    right:0;
-    top:0;
-    color:#FFD24D;
-    font-weight:700;
-    font-size:12px;
-    display:block;
-  }
-
-  /* font + swatches visible */
-  #np-font, .np-swatch, #np-color { display:block !important; }
+  .customization-form .form-select { background:#fff; color:#222; border-radius:8px; margin-bottom:16px; }
 
   .np-swatch { width:28px; height:28px; border-radius:50%; border:2px solid #fff; margin-right:6px; }
 
-  .form-select { background:#fff; color:#222; border-radius:8px; margin-bottom:16px; }
-
   #np-atc-btn { display:block !important; width:100% !important; font-size:16px !important; padding:12px 14px !important; margin-top:10px; }
-  #np-num, #np-name {
-    background: transparent !important;
-    border: none !important;
-    border-bottom: 2px solid rgba(255,255,255,0.25) !important;
-    color: #fff !important;
-    text-align: center;
-    font-weight:700;
-    letter-spacing:1px;
-    font-size: 18px;
-    padding: 10px 12px;
-    border-radius: 6px;
-    outline: none !important;
-    box-shadow: none !important;
-  }
-  #np-num:focus, #np-name:focus {
-    border-bottom-color: #ffd24d !important;
-  }
 
-  /* make stage (tshirt image) fixed in viewport so keyboard does not push it up */
-  body.np-keyboard-open {
-    position: fixed;
-    left: 0;
-    right: 0;
-    /* top will be set dynamically in JS to preserve scroll */
-    overflow: hidden;
+  /* =================== KEY: hide real inputs offscreen but keep them focusable =================== */
+  /* move the real inputs far off-screen so browser won't scroll them into view */
+  #np-name, #np-num {
+    position: absolute !important;
+    left: -9999px !important;
+    width: 1px !important;
+    height: 1px !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    overflow: hidden !important;
   }
-
-  /* keep stage centered and visible */
-  .np-stage {
-    /* ensure stage doesn't move when keyboard opens */
-    -webkit-transform: translateZ(0);
-    transform: translateZ(0);
-    will-change: transform;
-  }
-
-  /* optional: keep controls scrollable area not affected */
-  .np-controls, .col-md-3.order-2.order-md-1 .border {
-    -webkit-overflow-scrolling: touch;
-  }
-
-  /* make keyboard overlay friendly: shrink huge fonts on small devices if needed */
-  .np-overlay { 
-    text-shadow: 0 2px 6px rgba(0,0,0,0.35);
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
+  /* keep color and font select visible and usable */
 }
 
     /* -------------------- END MOBILE ONLY -------------------- */
@@ -215,6 +140,7 @@
       <div class="border rounded p-3">
         <div class="np-stage" id="np-stage">
           <img id="np-base" src="{{ $img }}" alt="Preview" onerror="this.onerror=null;this.src='{{ asset('images/placeholder.png') }}'">
+          <!-- overlays (clickable on mobile) -->
           <div id="np-prev-name" class="np-overlay np-name font-bebas" aria-hidden="true"></div>
           <div id="np-prev-num"  class="np-overlay np-num  font-bebas" aria-hidden="true"></div>
         </div>
@@ -229,19 +155,20 @@
         <div id="np-note" class="small text-muted mb-3 d-none">Personalization not available for this product.</div>
 
         <!-- controls -->
-        <div id="np-controls" class="np-hidden">
-          <!-- Number -->
+        <div id="np-controls" class="np-hidden customization-form">
+
+          <!-- VISUAL NUMBER (mobile shows this box; clicking it will focus real hidden input) -->
           <div class="mb-3 np-field-wrap">
-            <label for="np-num" class="form-label">Your Number</label>
+            <div id="visual-num" class="visual-field placeholder">YOUR NUMBER</div>
             <input id="np-num" type="text" inputmode="numeric" maxlength="3" class="form-control" placeholder="Your number" autocomplete="off">
             <span class="max-count">MAX. 2</span>
             <div id="np-num-help" class="form-text">Digits only. 1–3 digits.</div>
             <div id="np-num-err" class="text-danger small d-none">Enter 1–3 digits only.</div>
           </div>
 
-          <!-- Name -->
+          <!-- VISUAL NAME -->
           <div class="mb-3 np-field-wrap">
-            <label for="np-name" class="form-label">Your Name</label>
+            <div id="visual-name" class="visual-field placeholder">YOUR NAME</div>
             <input id="np-name" type="text" maxlength="12" class="form-control" placeholder="Your name" autocomplete="off">
             <span class="max-count">MAX. 11</span>
             <div id="np-name-help" class="form-text">Only A–Z and spaces. 1–12 chars.</div>
@@ -311,6 +238,7 @@
   function init(){
     const nameEl = $('np-name'), numEl = $('np-num'), fontEl = $('np-font'), colorEl = $('np-color');
     const pvName = $('np-prev-name'), pvNum = $('np-prev-num'), baseImg = $('np-base'), stage = $('np-stage');
+    const visualName = $('visual-name'), visualNum = $('visual-num');
     const ctrls = $('np-controls'), note = $('np-note'), status = $('np-status'), btn = $('np-atc-btn');
     const layout = (typeof window.layoutSlots === 'object' && window.layoutSlots !== null) ? window.layoutSlots : {};
 
@@ -330,10 +258,14 @@
       const classes = ['font-bebas','font-anton','font-oswald','font-impact'];
       if (pvName) pvName.classList.remove(...classes);
       if (pvNum) pvNum.classList.remove(...classes);
+      if (visualName) visualName.classList.remove(...classes);
+      if (visualNum) visualNum.classList.remove(...classes);
       const map = {bebas:'font-bebas', anton:'font-anton', oswald:'font-oswald', impact:'font-impact'};
       const c = map[val] || 'font-bebas';
       if (pvName) pvName.classList.add(c);
       if (pvNum) pvNum.classList.add(c);
+      if (visualName) visualName.classList.add(c);
+      if (visualNum) visualNum.classList.add(c);
     }
 
     function computeStageSize(){
@@ -417,6 +349,17 @@
         const numTxt = (numEl.value||'').replace(/\D/g,'');
         pvNum.textContent = numTxt || 'YOUR NUMBER';
       }
+
+      // also update the visual placeholders visible inside the controls area (mobile)
+      if (visualName) {
+        visualName.textContent = (nameEl && nameEl.value) ? nameEl.value.toUpperCase() : 'YOUR NAME';
+        visualName.classList.toggle('placeholder', !(nameEl && nameEl.value));
+      }
+      if (visualNum) {
+        visualNum.textContent = (numEl && numEl.value) ? (numEl.value.replace(/\D/g,'')) : 'YOUR NUMBER';
+        visualNum.classList.toggle('placeholder', !(numEl && numEl.value));
+      }
+
       applyLayout();
     }
 
@@ -428,21 +371,57 @@
       set('np-color-hidden', colorEl ? colorEl.value : '');
     }
 
+    // --- click handlers so tapping overlay or visual box focuses real (hidden/offscreen) input ---
+    function focusInputQuiet(el){
+      if (!el) return;
+      // try to focus without scrolling the viewport
+      try {
+        el.focus({preventScroll: true});
+      } catch(e){
+        // fallback
+        el.focus();
+        // attempt to restore scroll if browser scrolled: scroll stage into view
+        try { document.getElementById('np-stage').scrollIntoView({behavior:'smooth', block:'center'}); } catch(err) {}
+      }
+    }
+
+    // overlay click -> focus name/num input (mobile friendly)
+    if (pvName) {
+      pvName.style.pointerEvents = 'auto';
+      pvName.addEventListener('click', function(e){
+        e.preventDefault();
+        focusInputQuiet(nameEl);
+      });
+    }
+    if (pvNum) {
+      pvNum.style.pointerEvents = 'auto';
+      pvNum.addEventListener('click', function(e){
+        e.preventDefault();
+        focusInputQuiet(numEl);
+      });
+    }
+
+    // also make the visual controls boxes clickable (so user taps visual box instead of hidden input)
+    if (visualName) {
+      visualName.addEventListener('click', function(e){
+        e.preventDefault();
+        focusInputQuiet(nameEl);
+      });
+    }
+    if (visualNum) {
+      visualNum.addEventListener('click', function(e){
+        e.preventDefault();
+        focusInputQuiet(numEl);
+      });
+    }
+
+    // live update handlers
     if (nameEl) nameEl.addEventListener('input', ()=>{ syncPreview(); validate(); syncHidden(); });
     if (numEl)  numEl.addEventListener('input', e=>{ e.target.value = e.target.value.replace(/\D/g,'').slice(0,3); syncPreview(); validate(); syncHidden(); });
     if (fontEl) fontEl.addEventListener('change', ()=>{ applyFont(fontEl.value); syncPreview(); syncHidden(); });
     if (colorEl) colorEl.addEventListener('input', ()=>{ if (pvName) pvName.style.color = colorEl.value; if (pvNum) pvNum.style.color = colorEl.value; syncHidden(); });
 
-    document.querySelectorAll('.np-swatch')?.forEach(b=>{
-      b.addEventListener('click', ()=>{
-        document.querySelectorAll('.np-swatch').forEach(x=>x.classList.remove('active'));
-        b.classList.add('active');
-        if (colorEl) colorEl.value = b.dataset.color;
-        if (pvName) pvName.style.color = b.dataset.color;
-        if (pvNum) pvNum.style.color = b.dataset.color;
-        syncHidden();
-      });
-    });
+    document.querySelectorAll('.np-swatch')?.forEach(b=>{ b.addEventListener('click', ()=>{ document.querySelectorAll('.np-swatch').forEach(x=>x.classList.remove('active')); b.classList.add('active'); if (colorEl) colorEl.value = b.dataset.color; if (pvName) pvName.style.color = b.dataset.color; if (pvNum) pvNum.style.color = b.dataset.color; syncHidden(); }); });
 
     applyFont(fontEl ? fontEl.value : 'bebas');
     if (pvName && colorEl) pvName.style.color = colorEl.value;
@@ -489,64 +468,6 @@
   } else {
     init();
   }
-})();
-</script>
-<script>
-(function(){
-  // only run on mobile widths
-  function isMobile(){ return window.innerWidth <= 767; }
-
-  // elements
-  const inputs = [document.getElementById('np-name'), document.getElementById('np-num')].filter(Boolean);
-  let scrollY = 0;
-
-  function lockBody() {
-    // save and lock
-    scrollY = window.scrollY || window.pageYOffset || 0;
-    document.body.classList.add('np-keyboard-open');
-    document.body.style.top = '-' + scrollY + 'px';
-  }
-
-  function unlockBody() {
-    document.body.classList.remove('np-keyboard-open');
-    document.body.style.top = '';
-    // restore scroll after short delay to ensure keyboard dismissed
-    setTimeout(function(){
-      window.scrollTo(0, scrollY);
-    }, 50);
-  }
-
-  inputs.forEach(function(inp){
-    inp.addEventListener('focus', function(e){
-      if (!isMobile()) return;
-      // small timeout to allow virtual keyboard to start
-      setTimeout(lockBody, 50);
-      // ensure the focused input remains visible: scroll to the input if needed
-      setTimeout(function(){
-        inp.scrollIntoView({behavior: 'smooth', block: 'center'});
-      }, 120);
-    });
-
-    // on blur -> restore
-    inp.addEventListener('blur', function(){
-      if (!isMobile()) return;
-      // slight delay to allow blur to finalize
-      setTimeout(unlockBody, 80);
-    });
-
-    // also on touchend to prevent browser auto-scroll on some Androids
-    inp.addEventListener('touchend', function(){
-      if (!isMobile()) return;
-      setTimeout(function(){ inp.scrollIntoView({block:'center'}); }, 100);
-    }, {passive:true});
-  });
-
-  // safety: on orientationchange or resize, unlock (prevents stuck body)
-  window.addEventListener('orientationchange', function(){ if (document.body.classList.contains('np-keyboard-open')) unlockBody(); });
-  window.addEventListener('resize', function(){ if (document.body.classList.contains('np-keyboard-open')) {
-    // if viewport height increases (keyboard hidden), restore
-    setTimeout(function(){ if (window.innerHeight > 600) unlockBody(); }, 300);
-  }});
 })();
 </script>
 
