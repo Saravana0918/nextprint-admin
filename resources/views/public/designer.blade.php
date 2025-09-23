@@ -20,87 +20,84 @@
     .np-swatch { width:28px; height:28px; border-radius:50%; border:1px solid #ccc; cursor:pointer; display:inline-block; }
 
     /* -------------------- MOBILE ONLY (<=767px) -------------------- */
-    @media (max-width: 767px) {
-      /* full-body stadium background */
-      body {
-        background-image: url('/images/stadium-bg.jpg');
-        background-size: cover;
-        background-position: center center;
-        background-repeat: no-repeat;
-        min-height: 100vh;
-      }
+@media (max-width: 767px) {
+  body {
+    background-image: url('/images/stadium-bg.jpg');
+    background-size: cover;
+    background-position: center center;
+    background-repeat: no-repeat;
+    min-height: 100vh;
+  }
 
-      /* layout -> single column */
-      .row.g-4 { display:flex; flex-direction:column; gap:14px; align-items:stretch; }
+  .row.g-4 { display:flex; flex-direction:column; gap:14px; align-items:stretch; }
 
-      /* show small white preview card on top centered */
-      .np-col.order-1.order-md-2 { order:-1; width:100% !important; max-width:380px !important; margin:0 auto; display:block !important; }
-      .np-stage { max-width:340px; margin:0 auto; background:#fff; padding:10px; border-radius:10px; }
+  .np-col.order-1.order-md-2 { order:-1; width:100% !important; max-width:380px !important; margin:0 auto; display:block !important; }
+  .np-stage { max-width:340px; margin:0 auto; background:#fff; padding:10px; border-radius:10px; }
 
-      /* hide right product info column */
-      .col-md-3.order-3.order-md-3 { display:none !important; }
+  .col-md-3.order-3.order-md-3 { display:none !important; }
 
-      /* controls card translucent so body bg visible */
-      .col-md-3.order-2.order-md-1 {
-        display:block !important;
-        width:100% !important;
-        max-width:none !important;
-        margin:0 auto;
-      }
+  /* REMOVE card overlay background — inputs float directly on body bg */
+  .col-md-3.order-2.order-md-1 {
+    display:block !important;
+    width:100% !important;
+    max-width:none !important;
+    margin:0 auto;
+  }
+  .col-md-3.order-2.order-md-1 .border {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
 
-      .col-md-3.order-2.order-md-1 .border {
-        position:relative;
-        overflow:hidden;
-        padding:18px !important;
-        border-radius:10px;
-        background: linear-gradient(180deg, rgba(7,58,104,0.78) 0%, rgba(13,103,40,0.78) 100%);
-        border:1px solid rgba(255,255,255,0.06);
-      }
-      .col-md-3.order-2.order-md-1 .border > * { position:relative; z-index:2; color:#fff; }
+  /* HIDE headings + helper texts */
+  .col-md-3.order-2.order-md-1 h6,
+  #np-status,
+  #np-note,
+  #np-num-help,
+  #np-name-help,
+  #np-num-err,
+  #np-name-err {
+    display: none !important;
+  }
 
-      /* inputs styled like your second screenshot (lined bottom border) */
-      .np-field-wrap { position:relative; margin-bottom:18px; }
-      .np-field-wrap label { display:block; color: rgba(255,255,255,0.92); font-size:12px; margin-bottom:6px; text-transform:uppercase; letter-spacing:1.2px; }
-      .np-field-wrap input.form-control {
-        background: transparent;
-        border: none;
-        border-bottom: 2px solid rgba(255,255,255,0.14);
-        color: #fff;
-        text-align:center;
-        font-weight:700;
-        text-transform:uppercase;
-        letter-spacing:2px;
-        font-size:16px;
-        padding:10px 8px;
-        border-radius:0;
-      }
-      .np-field-wrap input.form-control::placeholder { color: rgba(255,255,255,0.65); text-transform:uppercase; }
+  /* inputs styled line-bottom only */
+  .np-field-wrap { position:relative; margin-bottom:20px; }
+  .np-field-wrap label { display:none !important; }
+  .np-field-wrap input.form-control {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid rgba(255,255,255,0.65);
+    color:#fff;
+    text-align:center;
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:2px;
+    font-size:18px;
+    padding:12px 8px;
+    border-radius:0;
+  }
+  .np-field-wrap input.form-control::placeholder { color: rgba(255,255,255,0.75); }
 
-      /* MAX badges top-right inside the field wrapper */
-      .max-count {
-        position:absolute;
-        right:14px;
-        top:6px;
-        color:#FFD24D;
-        font-weight:700;
-        font-size:11px;
-        z-index:3;
-      }
+  .max-count {
+    position:absolute;
+    right:0;
+    top:0;
+    color:#FFD24D;
+    font-weight:700;
+    font-size:12px;
+  }
 
-      /* show font selector and swatches on mobile */
-      #np-font, .np-swatch, #np-color { display:block !important; }
+  /* font + swatches visible */
+  #np-font, .np-swatch, #np-color { display:block !important; }
 
-      .np-swatch { width:28px; height:28px; border-radius:50%; border:2px solid rgba(255,255,255,0.12); margin-right:6px; }
+  .np-swatch { width:28px; height:28px; border-radius:50%; border:2px solid #fff; margin-right:6px; }
 
-      /* form-select more readable */
-      .form-select { background:#fff; color:#222; border-radius:8px; }
+  .form-select { background:#fff; color:#222; border-radius:8px; margin-bottom:16px; }
 
-      /* CTA */
-      #np-atc-btn { display:block !important; width:100% !important; font-size:16px !important; padding:12px 14px !important; margin-top:8px; }
+  #np-atc-btn { display:block !important; width:100% !important; font-size:16px !important; padding:12px 14px !important; margin-top:10px; }
+}
 
-      /* subtle overlay preview style */
-      .np-overlay { color:#FFD700; text-shadow:none; }
-    }
     /* -------------------- END MOBILE ONLY -------------------- */
   </style>
 </head>
