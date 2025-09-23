@@ -107,15 +107,44 @@ class ShopifyService
 
         foreach ($products as $product) {
             // upsert product into local DB (adjust schema fields as needed)
-            \App\Models\Product::updateOrCreate(
-                ['shopify_product_id' => $product['id']],
-                [
-                    'name'   => $product['title'] ?? null,
-                    'price'  => $product['variants'][0]['price'] ?? 0,
-                    'vendor' => $product['vendor'] ?? null,
-                    'status' => $product['status'] ?? 'active',
-                ]
-            );
+            // compute min price from variants (robust to different REST payload shapes)
+                $variantPrices = [];
+                if (!empty($product['variants']) && is_array($product['variants'])) {
+                    foreach ($product['variants'] as $v) {
+                        // variant price can be in 'price', or 'price_cents', etc.
+                        if (!empty($v['price']) && is_numeric($v['price']) && (float)$v['price'] > 0) {
+                            $variantPrices[] = (float) $v['price'];
+                        } elseif (!empty($v['price_cents']) && (int)$v['price_cents'] > 0) {
+                            $variantPrices[] = (float)$v['price_cents'] / 100;
+                        } elseif (!empty($v['price_in_cents']) && (int)$v['price_in_cents'] > 0) {
+                            $variantPrices[] = (float)$v['price_in_cents'] / 100;
+                        }
+                    }
+                }
+
+                // fallback: if price not in variants, try top-level (some REST shapes)
+                if (empty($variantPrices)) {
+                    if (!empty($product['variants'][0]['price'])) {
+                        $variantPrices[] = (float) $product['variants'][0]['price'];
+                    } elseif (!empty($product['price'])) {
+                        $variantPrices[] = (float) $product['price'];
+                    }
+                }
+
+                $minPrice = !empty($variantPrices) ? min($variantPrices) : 0.00;
+
+                // now upsert product (store both price & min_price)
+                \App\Models\Product::updateOrCreate(
+                    ['shopify_product_id' => $product['id']],
+                    [
+                        'name'      => $product['title'] ?? null,
+                        'price'     => $minPrice,      // displayed price (keep consistent)
+                        'min_price' => $minPrice,
+                        'vendor'    => $product['vendor'] ?? null,
+                        'status'    => $product['status'] ?? 'active',
+                    ]
+                );
+
             $processed++;
         }
 
