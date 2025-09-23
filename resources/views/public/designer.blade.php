@@ -52,6 +52,14 @@
     text-shadow: 0 2px 8px rgba(0,0,0,0.65); /* stronger shadow for clarity */
   }
 
+  .font-label{
+    color : white;
+  }
+
+  .color-label{
+    color: white;
+  }
+
   .row.g-4 { display:flex; flex-direction:column; gap:14px; align-items:stretch; }
 
   .np-col.order-1.order-md-2 { order:-1; width:100% !important; max-width:380px !important; margin:0 auto; display:block !important; }
@@ -171,7 +179,7 @@
 
           <!-- Font select -->
           <div class="mb-3">
-            <label class="form-label">Font</label>
+            <label class="form-label font-label">Font</label>
             <select id="np-font" class="form-select">
               <option value="bebas">Bebas Neue (Bold)</option>
               <option value="anton">Anton</option>
@@ -182,7 +190,7 @@
 
           <!-- Color swatches -->
           <div class="mb-2">
-            <label class="form-label d-block">Text Color</label>
+            <label class="form-label d-block color-label">Text Color</label>
             <div class="d-flex gap-2 flex-wrap mb-2">
               <button type="button" class="np-swatch" data-color="#FFFFFF" style="background:#FFFFFF"></button>
               <button type="button" class="np-swatch" data-color="#000000" style="background:#000000"></button>
