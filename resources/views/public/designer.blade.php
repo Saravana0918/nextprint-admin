@@ -39,12 +39,41 @@
 
       /* Style the controls card like your screenshot */
       .col-md-3.order-2.order-md-1 .border {
-        background: linear-gradient(180deg, #073a68 0%, #0d6728 100%);
-        color: #fff;
-        padding: 18px !important;
-        border-radius: 8px;
-        box-shadow: none;
-      }
+      position: relative;
+      padding: 18px !important;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: none;
+      /* fallback color */
+      background-color: #073a68;
+    }
+
+    .col-md-3.order-2.order-md-1 .border::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background-image: url('/images/stadium-bg.jpg'); /* <-- change path if needed */
+      background-size: cover;
+      background-position: center center;
+      background-repeat: no-repeat;
+      opacity: 0.95;
+      z-index: 0;
+      transform: translateZ(0);
+    }
+
+    .col-md-3.order-2.order-md-1 .border::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(7,58,104,0.88) 0%, rgba(13,103,40,0.88) 100%);
+      z-index: 1;
+    }
+
+    .col-md-3.order-2.order-md-1 .border > * {
+      position: relative;
+      z-index: 2;
+      color: #fff;
+    }
 
       /* White rounded input boxes with centered placeholder like screenshot */
       #np-name, #np-num {
