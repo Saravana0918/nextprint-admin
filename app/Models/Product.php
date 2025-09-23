@@ -26,11 +26,8 @@ class Product extends Model
             'print_method_id'
         )->withTimestamps();
     }
-
-
          public function methods()
-    {
-        
+    {      
         return $this->belongsToMany(
             PrintMethod::class,
             'product_print_method',   // <- pivot table name
