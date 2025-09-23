@@ -9,24 +9,20 @@ return new class extends Migration
     /**
      * Run the migrations.
      */
-    public function up(): void
-    {
-        Schema::table('products', function (Blueprint $table) {
-            if (!Schema::hasColumn('products', 'min_price')) {
+    public function up()
+        {
+            Schema::table('products', function (Blueprint $table) {
                 $table->decimal('min_price', 10, 2)->nullable()->after('price');
-            }
-        });
-    }
+            });
+        }
 
     /**
      * Reverse the migrations.
      */
-    public function down(): void
-    {
-        Schema::table('products', function (Blueprint $table) {
-            if (Schema::hasColumn('products', 'min_price')) {
+    public function down()
+        {
+            Schema::table('products', function (Blueprint $table) {
                 $table->dropColumn('min_price');
-            }
-        });
-    }
+            });
+        }
 };
