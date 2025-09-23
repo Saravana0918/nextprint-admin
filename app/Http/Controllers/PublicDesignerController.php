@@ -15,13 +15,30 @@ class PublicDesignerController extends Controller
         $productId = $request->query('product_id');
         $viewId    = $request->query('view_id');
 
+        // ----------------------------
+        // product lookup (robust)
+        // ----------------------------
         $product = null;
 
         if ($productId) {
-            if (ctype_digit((string)$productId)) {
-                $product = Product::with(['views','views.areas'])->find((int)$productId);
+            // if it's numeric and looks like a Shopify ID (>=8 digits), try shopify_product_id first
+            if (ctype_digit((string)$productId) && strlen((string)$productId) >= 8) {
+                $product = Product::with(['views','views.areas'])
+                            ->where('shopify_product_id', $productId)
+                            ->first();
+
+                if (! $product) {
+                    // fallback to primary key id
+                    $product = Product::with(['views','views.areas'])->find((int)$productId);
+                }
+            } else {
+                // normal: try primary key first
+                if (ctype_digit((string)$productId)) {
+                    $product = Product::with(['views','views.areas'])->find((int)$productId);
+                }
             }
 
+            // existing fallback: try matching on other columns if still not found
             if (!$product) {
                 $query = Product::with(['views','views.areas']);
                 $cols = [];
@@ -41,10 +58,13 @@ class PublicDesignerController extends Controller
         }
 
         if (!$product) {
+            \Log::warning("designer: product not found for product_id={$productId}");
             abort(404, 'Product not found');
         }
 
+        // ----------------------------
         // Resolve view (explicit view_id or fallback to first)
+        // ----------------------------
         $view = null;
         if ($viewId) {
             $view = ProductView::with('areas')->find($viewId);
@@ -59,7 +79,9 @@ class PublicDesignerController extends Controller
 
         $areas = $view ? ($view->relationLoaded('areas') ? $view->areas : $view->areas()->get()) : collect([]);
 
+        // ----------------------------
         // Build layoutSlots with server-side normalization
+        // ----------------------------
         $layoutSlots = [];
 
         foreach ($areas as $a) {
@@ -120,29 +142,70 @@ class PublicDesignerController extends Controller
             ];
         }
 
-        // ---- compute a safe display price to avoid showing 0.00 ----
+        // ----------------------------
+        // compute a safe display price (robust)
+        // ----------------------------
         $displayPrice = null;
 
-        if (isset($product->min_price) && (float)$product->min_price > 0) {
-            $displayPrice = (float)$product->min_price;
-        } elseif (isset($product->price) && (float)$product->price > 0) {
-            $displayPrice = (float)$product->price;
-        } elseif (method_exists($product, 'variants')) {
-            try {
-                if ($product->relationLoaded('variants')) {
-                    $prices = $product->variants->pluck('price')->map(function($p){ return (float)$p; })->filter(function($v){ return $v > 0; });
-                    if ($prices->count()) $displayPrice = $prices->min();
-                } else {
-                    if ($product->variants()->exists()) {
-                        $minVariant = $product->variants()->min('price');
-                        if ($minVariant) $displayPrice = (float)$minVariant;
-                    }
-                }
-            } catch (\Throwable $e) {
-                $displayPrice = $displayPrice ?? null;
+        try {
+            \Log::info("designer: product id={$product->id} shopify_product_id={$product->shopify_product_id} min_price=" . ($product->min_price ?? 'NULL') . " price=" . ($product->price ?? 'NULL'));
+
+            if (isset($product->min_price) && is_numeric($product->min_price) && (float)$product->min_price > 0) {
+                $displayPrice = (float)$product->min_price;
+            } elseif (isset($product->price) && is_numeric($product->price) && (float)$product->price > 0) {
+                $displayPrice = (float)$product->price;
             }
+
+            // fallback: inspect variants for price, price_cents, price_in_cents
+            if ($displayPrice === null && method_exists($product, 'variants')) {
+                // log sample variants for debugging
+                if ($product->relationLoaded('variants')) {
+                    foreach ($product->variants as $v) {
+                        \Log::info("designer: variant sample id=" . ($v->id ?? 'n/a') .
+                                   " price=" . ($v->price ?? 'n/a') .
+                                   " price_cents=" . ($v->price_cents ?? 'n/a') .
+                                   " price_in_cents=" . ($v->price_in_cents ?? 'n/a'));
+                    }
+
+                    // collect variant prices (robust)
+                    $variantPrices = [];
+                    foreach ($product->variants as $v) {
+                        if (!empty($v->price) && (float)$v->price > 0) {
+                            $variantPrices[] = (float)$v->price;
+                        } elseif (!empty($v->price_cents) && (int)$v->price_cents > 0) {
+                            $variantPrices[] = (float)$v->price_cents / 100;
+                        } elseif (!empty($v->price_in_cents) && (int)$v->price_in_cents > 0) {
+                            $variantPrices[] = (float)$v->price_in_cents / 100;
+                        }
+                    }
+                    if (count($variantPrices)) $displayPrice = min($variantPrices);
+                } else {
+                    // DB-level checks (min queries) if relation not loaded
+                    $variantPrices = [];
+
+                    if (Schema::hasColumn('variants','price')) {
+                        $minP = $product->variants()->min('price');
+                        if ($minP && $minP > 0) $variantPrices[] = (float)$minP;
+                    }
+
+                    if (Schema::hasColumn('variants','price_cents')) {
+                        $minPc = $product->variants()->whereNotNull('price_cents')->min('price_cents');
+                        if ($minPc && $minPc > 0) $variantPrices[] = (float)$minPc / 100;
+                    }
+
+                    if (Schema::hasColumn('variants','price_in_cents')) {
+                        $minPi = $product->variants()->whereNotNull('price_in_cents')->min('price_in_cents');
+                        if ($minPi && $minPi > 0) $variantPrices[] = (float)$minPi / 100;
+                    }
+
+                    if (count($variantPrices)) $displayPrice = min($variantPrices);
+                }
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('designer: price compute failed: ' . $e->getMessage());
         }
 
+        // final fallback: zero (blade will show formatted)
         if ($displayPrice === null) $displayPrice = 0.00;
 
         return view('public.designer', [
