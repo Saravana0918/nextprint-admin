@@ -232,6 +232,9 @@
     <!-- right product column (desktop) -->
     <div class="col-md-3 np-col order-3 order-md-3">
       <h4 class="mb-1">{{ $product->name ?? ($product->title ?? 'Product') }}</h4>
+      <div style="background:#fee; color:#900; padding:5px; margin-bottom:10px;">
+        DEBUG: displayPrice={{ $displayPrice ?? 'NULL' }} | min_price={{ $product->min_price ?? 'NULL' }} | price={{ $product->price ?? 'NULL' }} | shopify_id={{ $product->shopify_product_id ?? 'NULL' }}
+      </div>
       <div class="text-muted mb-3">Vendor: {{ $product->vendor ?? '—' }} • ₹ {{ number_format((float)($displayPrice ?? ($product->min_price ?? 0)), 2) }}</div>
 
       <form id="np-atc-form" method="post" action="#">
