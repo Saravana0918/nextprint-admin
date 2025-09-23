@@ -15,51 +15,95 @@
     .np-stage img { width: 100%; height: auto; display:block; border-radius:6px; }
     .np-overlay { position:absolute; color:#D4AF37; text-shadow: 0 2px 6px rgba(0,0,0,0.35); white-space:nowrap; pointer-events:none; font-weight:700; text-transform:uppercase; letter-spacing:2px; display:flex; align-items:center; justify-content:center; user-select:none; line-height:1; }
     .np-swatch { width:28px; height:28px; border-radius:4px; border:1px solid #ccc; cursor:pointer; }
-    /* Add into <style> in resources/views/public/designer.blade.php */
 
-@media (max-width: 767px) {
-  /* Hide large preview column and right product info column */
-  .np-col.order-1.order-md-2,
-  .col-md-3.order-3.order-md-3 {
-    display: none !important;
-  }
+    /* ===== MOBILE SINGLE-COLUMN LAYOUT (ONLY <=767px) ===== */
+    @media (max-width: 767px) {
 
-  /* Make controls full width (the middle column becomes full page) */
-  .col-md-3.order-2.order-md-1 {
-    display: block !important;
-    width: 100% !important;
-    max-width: none !important;
-    margin: 0 auto;
-  }
+      /* Make layout single column: show preview small on top, then controls */
+      .row.g-4 { display: flex; flex-direction: column; gap: 12px; align-items: stretch; }
 
-  /* Hide font selector + color swatches and any extra text help to keep it minimal */
-  #np-font, .np-swatch, #np-color, #np-name-help, #np-num-help, .form-text {
-    display: none !important;
-  }
+      /* small top preview card (centered) */
+      .np-col.order-1.order-md-2 { order: -1; width: 100% !important; max-width: 380px !important; margin: 0 auto 8px; display: block !important; }
+      .np-stage { max-width: 340px; margin: 0 auto; }
 
-  /* Make the controls card visually large and centered */
-  .col-md-3.order-2.order-md-1 .border {
-    padding: 20px !important;
-  }
+      /* hide right product info column completely on mobile */
+      .col-md-3.order-3.order-md-3 { display: none !important; }
 
-  /* Make Add to Cart (and Buy Now) large CTA */
-  #np-atc-btn {
-    display: block !important;
-    width: 100% !important;
-    font-size: 16px !important;
-    padding: 12px 14px !important;
-    margin-top: 12px !important;
-  }
+      /* Make controls full width below preview */
+      .col-md-3.order-2.order-md-1 {
+        display: block !important;
+        width: 100% !important;
+        max-width: none !important;
+        margin: 0 auto;
+      }
 
-  /* Optional small free-delivery line styling */
-  .small-delivery {
-    display: block;
-    font-size: 13px;
-    color: #666;
-    margin-top: 8px;
-  }
-}
+      /* Style the controls card like your screenshot */
+      .col-md-3.order-2.order-md-1 .border {
+        background: linear-gradient(180deg, #073a68 0%, #0d6728 100%);
+        color: #fff;
+        padding: 18px !important;
+        border-radius: 8px;
+        box-shadow: none;
+      }
 
+      /* White rounded input boxes with centered placeholder like screenshot */
+      #np-name, #np-num {
+        background: rgba(255,255,255,0.06);
+        border: 2px solid rgba(255,255,255,0.15);
+        color: #fff;
+        border-radius: 8px;
+        padding: 14px 12px;
+        text-align: center;
+        font-weight:700;
+        letter-spacing: 2px;
+        font-size: 16px;
+        text-transform: uppercase;
+      }
+      #np-name::placeholder, #np-num::placeholder { color: rgba(255,255,255,0.45); text-transform:uppercase; }
+
+      /* Hide help text/extra small notes */
+      #np-name-help, #np-num-help, #np-name-err, #np-num-err, #np-font { display: none !important; }
+      .np-swatch, #np-color { display: none !important; }
+
+      /* Labels shown above fields as small uppercase (like your screenshot) */
+      label[for="np-name"], label[for="np-num"] {
+        display:block;
+        color: rgba(255,255,255,0.85);
+        font-size: 12px;
+        margin-bottom: 6px;
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+      }
+
+      /* max-count small yellow label to right (we will add small absolute spans) */
+      .max-count {
+        color: #ffd24d;
+        position: absolute;
+        right: 18px;
+        top: 22px;
+        font-size: 11px;
+        font-weight:700;
+      }
+
+      /* Input wrappers to allow relative positioning for max-count */
+      .np-field-wrap { position: relative; margin-bottom: 18px; }
+
+      /* Make Add to Cart appear below controls as full width CTA */
+      #np-atc-btn {
+        display: block !important;
+        width: 100% !important;
+        font-size: 16px !important;
+        padding: 12px 14px !important;
+        margin-top: 10px;
+      }
+
+      /* small supporting text below CTA */
+      .small-delivery { color: rgba(255,255,255,0.85); font-size:13px; margin-top:10px; text-align:center; }
+
+      /* small polish: white placeholder for empty preview name */
+      .np-overlay { color: #FFD700; text-shadow: none; }
+
+    }
   </style>
 </head>
 <body class="py-4">
@@ -86,22 +130,24 @@
         <div id="np-note" class="small text-muted mb-3 d-none">Personalization not available for this product.</div>
 
         <div id="np-controls" class="np-hidden">
-          <div class="mb-3">
-            <label for="np-num" class="form-label">Number (1–3 digits)</label>
-            <input id="np-num" type="text" inputmode="numeric" maxlength="3" class="form-control" placeholder="e.g. 10" autocomplete="off">
+          <div class="mb-3 np-field-wrap">
+            <label for="np-num" class="form-label">Your Number</label>
+            <input id="np-num" type="text" inputmode="numeric" maxlength="3" class="form-control" placeholder="Your number" autocomplete="off">
+            <span class="max-count">MAX. 2</span>
             <div id="np-num-help" class="form-text">Digits only. 1–3 digits.</div>
             <div id="np-num-err"  class="text-danger small d-none">Enter 1–3 digits only.</div>
           </div>
 
-          <div class="mb-3">
-            <label for="np-name" class="form-label">Name (max 12)</label>
-            <input id="np-name" type="text" maxlength="12" class="form-control" placeholder="e.g. SACHIN" autocomplete="off">
+          <div class="mb-3 np-field-wrap">
+            <label for="np-name" class="form-label">Your Name</label>
+            <input id="np-name" type="text" maxlength="12" class="form-control" placeholder="Your name" autocomplete="off">
+            <span class="max-count">MAX. 11</span>
             <div id="np-name-help" class="form-text">Only A–Z and spaces. 1–12 chars.</div>
             <div id="np-name-err"  class="text-danger small d-none">Enter 1–12 letters/spaces only.</div>
           </div>
 
           <div class="mb-3">
-            <label class="form-label">Select Font</label>
+            <label class="form-label">Font</label>
             <select id="np-font" class="form-select">
               <option value="bebas">Bebas Neue (Bold)</option>
               <option value="anton">Anton</option>
@@ -142,7 +188,7 @@
 
         <button id="np-atc-btn" type="submit" class="btn btn-primary w-100" disabled aria-busy="false">Add to Cart</button>
       </form>
-      <div class="small text-muted mt-2">Button enables when both Name &amp; Number are valid.</div>
+      <div class="small-delivery text-muted mt-2">Button enables when both Name & Number are valid.</div>
     </div>
   </div>
 </div>
@@ -193,73 +239,64 @@
       return {imgW, imgH, stageW, stageH};
     }
 
-    // STRONG placeOverlay: height + width caps + numeric shrink
+    // STRONG placeOverlay: height + width caps + numeric shrink, mobile-specific caps
     function placeOverlay(el, slot, slotKey){
-  if(!el || !slot || !stage) return;
+      if(!el || !slot || !stage) return;
 
-  el.style.position = 'absolute';
-  el.style.left = (slot.left_pct||0) + '%';
-  el.style.top  = (slot.top_pct||0) + '%';
-  el.style.width = (slot.width_pct||10) + '%';
-  el.style.height = (slot.height_pct||10) + '%';
-  el.style.display = 'flex';
-  el.style.alignItems = 'center';
-  el.style.justifyContent = 'center';
-  el.style.boxSizing = 'border-box';
-  el.style.padding = '0 4px';
-  el.style.transform = 'rotate(' + ((slot.rotation||0)) + 'deg)';
-  el.style.whiteSpace = 'nowrap';
-  el.style.overflow = 'hidden';
-  el.style.pointerEvents = 'none';
-  el.style.zIndex = (slotKey === 'number' ? 60 : 50);
+      el.style.position = 'absolute';
+      el.style.left = (slot.left_pct||0) + '%';
+      el.style.top  = (slot.top_pct||0) + '%';
+      el.style.width = (slot.width_pct||10) + '%';
+      el.style.height = (slot.height_pct||10) + '%';
+      el.style.display = 'flex';
+      el.style.alignItems = 'center';
+      el.style.justifyContent = 'center';
+      el.style.boxSizing = 'border-box';
+      el.style.padding = '0 4px';
+      el.style.transform = 'rotate(' + ((slot.rotation||0)) + 'deg)';
+      el.style.whiteSpace = 'nowrap';
+      el.style.overflow = 'hidden';
+      el.style.pointerEvents = 'none';
+      el.style.zIndex = (slotKey === 'number' ? 60 : 50);
 
-  const {imgW, imgH, stageW, stageH} = computeStageSize();
-  const areaWpx = Math.max(8, Math.round(((slot.width_pct || 10)/100) * stageW));
-  const areaHpx = Math.max(8, Math.round(((slot.height_pct || 10)/100) * stageH));
+      const {imgW, imgH, stageW, stageH} = computeStageSize();
+      const areaWpx = Math.max(8, Math.round(((slot.width_pct || 10)/100) * stageW));
+      const areaHpx = Math.max(8, Math.round(((slot.height_pct || 10)/100) * stageH));
 
-  const text = (el.textContent || '').toString().trim() || 'TEXT';
-  const chars = Math.max(1, text.length);
+      const text = (el.textContent || '').toString().trim() || 'TEXT';
+      const chars = Math.max(1, text.length);
 
-  // detect mobile viewport (only for sizing; desktop unchanged otherwise)
-  const isMobile = window.innerWidth <= 767;
+      const isMobile = window.innerWidth <= 767;
 
-  // Height multiplier: give numbers more height allowance
-  const heightFactorName = 0.86;
-  const heightFactorNumber = isMobile ? 0.95 : 0.9; // larger number on mobile, slightly larger on desktop
+      const heightFactorName = 0.86;
+      const heightFactorNumber = isMobile ? 0.95 : 0.9;
 
-  const heightCandidate = Math.floor(areaHpx * (slotKey === 'number' ? heightFactorNumber : heightFactorName));
+      const heightCandidate = Math.floor(areaHpx * (slotKey === 'number' ? heightFactorNumber : heightFactorName));
 
-  // Width cap (empirical)
-  const avgCharRatio = 0.55;
-  const widthCap = Math.floor((areaWpx * 0.95) / (chars * avgCharRatio));
+      const avgCharRatio = 0.55;
+      const widthCap = Math.floor((areaWpx * 0.95) / (chars * avgCharRatio));
 
-  // numeric shrink base (smaller value => smaller final for short numbers)
-  // we want number larger, so set shrink closer to 1 (no shrink). On mobile maybe slight increase.
-  let numericShrink = 1.0;
-  if (slotKey === 'number') {
-    // make number more prominent:
-    numericShrink = isMobile ? 1.0 : 0.98;
-  }
+      let numericShrink = 1.0;
+      if (slotKey === 'number') {
+        numericShrink = isMobile ? 1.0 : 0.98;
+      }
 
-  let fontSize = Math.floor(Math.min(heightCandidate, widthCap) * numericShrink);
+      let fontSize = Math.floor(Math.min(heightCandidate, widthCap) * numericShrink);
 
-  // safety clamp: allow numbers bigger but within stage fraction
-  const maxAllowed = Math.max(14, Math.floor(stageW * (isMobile ? 0.28 : 0.18))); // mobile larger cap
-  fontSize = Math.max(8, Math.min(fontSize, maxAllowed));
+      const maxAllowed = Math.max(14, Math.floor(stageW * (isMobile ? 0.28 : 0.18)));
+      fontSize = Math.max(8, Math.min(fontSize, maxAllowed));
 
-  el.style.fontSize = fontSize + 'px';
-  el.style.lineHeight = '1';
-  el.style.fontWeight = '700';
+      el.style.fontSize = fontSize + 'px';
+      el.style.lineHeight = '1';
+      el.style.fontWeight = '700';
 
-  // final fit loop: reduce until fits horizontally
-  let attempts = 0;
-  while (el.scrollWidth > el.clientWidth && fontSize > 7 && attempts < 30) {
-    fontSize = Math.max(7, Math.floor(fontSize * 0.92));
-    el.style.fontSize = fontSize + 'px';
-    attempts++;
-  }
-}
-
+      let attempts = 0;
+      while (el.scrollWidth > el.clientWidth && fontSize > 7 && attempts < 30) {
+        fontSize = Math.max(7, Math.floor(fontSize * 0.92));
+        el.style.fontSize = fontSize + 'px';
+        attempts++;
+      }
+    }
 
     function applyLayout(){
       if (!baseImg) return;
@@ -269,8 +306,14 @@
     }
 
     function syncPreview(){
-      if (pvName && nameEl) pvName.textContent = (nameEl.value||'').toUpperCase();
-      if (pvNum && numEl) pvNum.textContent = (numEl.value||'').replace(/\D/g,'');
+      if (pvName && nameEl) {
+        const txt = (nameEl.value||'').toUpperCase();
+        pvName.textContent = txt || 'YOUR NAME';
+      }
+      if (pvNum && numEl) {
+        const numTxt = (numEl.value||'').replace(/\D/g,'');
+        pvNum.textContent = numTxt || 'YOUR NUMBER';
+      }
       applyLayout(); // IMPORTANT: recalc sizes after updating text
     }
 
@@ -303,7 +346,6 @@
     if (pvNum && colorEl) pvNum.style.color = colorEl.value;
     syncPreview(); syncHidden();
 
-    // event hooks
     if (baseImg) baseImg.addEventListener('load', applyLayout);
     window.addEventListener('resize', applyLayout);
     setTimeout(applyLayout, 200);
