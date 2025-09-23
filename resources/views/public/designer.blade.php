@@ -113,6 +113,27 @@
   }
   .np-field-wrap input.form-control::placeholder { color: rgba(255,255,255,0.75); }
 
+  .customization-form input[type="text"],
+  .customization-form input[type="number"] {
+    background: transparent !important;
+    border: none !important;
+    border-bottom: 2px solid #fff !important; /* underline மட்டும் */
+    color: #fff !important;
+    text-align: center;
+    font-size: 20px;
+    outline: none !important;
+    box-shadow: none !important;
+  }
+
+  .customization-form input[type="text"]:focus,
+  .customization-form input[type="number"]:focus {
+    background: transparent !important;
+    border: none !important;
+    border-bottom: 2px solid #ffcc00 !important; /* highlight underline */
+    outline: none !important;
+    box-shadow: none !important;
+  }
+
   .max-count {
     position:absolute;
     right:0;
@@ -120,6 +141,7 @@
     color:#FFD24D;
     font-weight:700;
     font-size:12px;
+    display:block;
   }
 
   /* font + swatches visible */
