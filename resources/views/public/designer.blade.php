@@ -15,6 +15,51 @@
     .np-stage img { width: 100%; height: auto; display:block; border-radius:6px; }
     .np-overlay { position:absolute; color:#D4AF37; text-shadow: 0 2px 6px rgba(0,0,0,0.35); white-space:nowrap; pointer-events:none; font-weight:700; text-transform:uppercase; letter-spacing:2px; display:flex; align-items:center; justify-content:center; user-select:none; line-height:1; }
     .np-swatch { width:28px; height:28px; border-radius:4px; border:1px solid #ccc; cursor:pointer; }
+    /* Add into <style> in resources/views/public/designer.blade.php */
+
+@media (max-width: 767px) {
+  /* Hide large preview column and right product info column */
+  .np-col.order-1.order-md-2,
+  .col-md-3.order-3.order-md-3 {
+    display: none !important;
+  }
+
+  /* Make controls full width (the middle column becomes full page) */
+  .col-md-3.order-2.order-md-1 {
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 auto;
+  }
+
+  /* Hide font selector + color swatches and any extra text help to keep it minimal */
+  #np-font, .np-swatch, #np-color, #np-name-help, #np-num-help, .form-text {
+    display: none !important;
+  }
+
+  /* Make the controls card visually large and centered */
+  .col-md-3.order-2.order-md-1 .border {
+    padding: 20px !important;
+  }
+
+  /* Make Add to Cart (and Buy Now) large CTA */
+  #np-atc-btn {
+    display: block !important;
+    width: 100% !important;
+    font-size: 16px !important;
+    padding: 12px 14px !important;
+    margin-top: 12px !important;
+  }
+
+  /* Optional small free-delivery line styling */
+  .small-delivery {
+    display: block;
+    font-size: 13px;
+    color: #666;
+    margin-top: 8px;
+  }
+}
+
   </style>
 </head>
 <body class="py-4">
@@ -150,53 +195,71 @@
 
     // STRONG placeOverlay: height + width caps + numeric shrink
     function placeOverlay(el, slot, slotKey){
-      if(!el || !slot || !stage) return;
+  if(!el || !slot || !stage) return;
 
-      el.style.position = 'absolute';
-      el.style.left = (slot.left_pct||0) + '%';
-      el.style.top  = (slot.top_pct||0) + '%';
-      el.style.width = (slot.width_pct||10) + '%';
-      el.style.height = (slot.height_pct||10) + '%';
-      el.style.display = 'flex';
-      el.style.alignItems = 'center';
-      el.style.justifyContent = 'center';
-      el.style.boxSizing = 'border-box';
-      el.style.padding = '0 4px';
-      el.style.transform = 'rotate(' + ((slot.rotation||0)) + 'deg)';
-      el.style.whiteSpace = 'nowrap';
-      el.style.overflow = 'hidden';
-      el.style.pointerEvents = 'none';
-      el.style.zIndex = (slotKey === 'number' ? 60 : 50);
+  el.style.position = 'absolute';
+  el.style.left = (slot.left_pct||0) + '%';
+  el.style.top  = (slot.top_pct||0) + '%';
+  el.style.width = (slot.width_pct||10) + '%';
+  el.style.height = (slot.height_pct||10) + '%';
+  el.style.display = 'flex';
+  el.style.alignItems = 'center';
+  el.style.justifyContent = 'center';
+  el.style.boxSizing = 'border-box';
+  el.style.padding = '0 4px';
+  el.style.transform = 'rotate(' + ((slot.rotation||0)) + 'deg)';
+  el.style.whiteSpace = 'nowrap';
+  el.style.overflow = 'hidden';
+  el.style.pointerEvents = 'none';
+  el.style.zIndex = (slotKey === 'number' ? 60 : 50);
 
-      const {imgW, imgH, stageW, stageH} = computeStageSize();
-      const areaWpx = Math.max(8, Math.round(((slot.width_pct || 10)/100) * stageW));
-      const areaHpx = Math.max(8, Math.round(((slot.height_pct || 10)/100) * stageH));
+  const {imgW, imgH, stageW, stageH} = computeStageSize();
+  const areaWpx = Math.max(8, Math.round(((slot.width_pct || 10)/100) * stageW));
+  const areaHpx = Math.max(8, Math.round(((slot.height_pct || 10)/100) * stageH));
 
-      const text = (el.textContent || '').toString().trim() || 'TEXT';
-      const chars = Math.max(1, text.length);
+  const text = (el.textContent || '').toString().trim() || 'TEXT';
+  const chars = Math.max(1, text.length);
 
-      const heightCandidate = Math.floor(areaHpx * (slotKey === 'number' ? 0.72 : 0.86));
-      const avgCharRatio = 0.55;
-      const widthCap = Math.floor((areaWpx * 0.95) / (chars * avgCharRatio));
+  // detect mobile viewport (only for sizing; desktop unchanged otherwise)
+  const isMobile = window.innerWidth <= 767;
 
-      let numericShrink = 1;
-      if (slotKey === 'number' && chars <= 3) numericShrink = 0.62;
+  // Height multiplier: give numbers more height allowance
+  const heightFactorName = 0.86;
+  const heightFactorNumber = isMobile ? 0.95 : 0.9; // larger number on mobile, slightly larger on desktop
 
-      let fontSize = Math.floor(Math.min(heightCandidate, widthCap) * numericShrink);
-      const maxAllowed = Math.max(12, Math.floor(stageW * 0.18));
-      fontSize = Math.max(8, Math.min(fontSize, maxAllowed));
+  const heightCandidate = Math.floor(areaHpx * (slotKey === 'number' ? heightFactorNumber : heightFactorName));
 
-      el.style.fontSize = fontSize + 'px';
-      el.style.lineHeight = '1';
-      el.style.fontWeight = '700';
+  // Width cap (empirical)
+  const avgCharRatio = 0.55;
+  const widthCap = Math.floor((areaWpx * 0.95) / (chars * avgCharRatio));
 
-      let attempts = 0;
-      while (el.scrollWidth > el.clientWidth && fontSize > 7 && attempts < 30) {
-        fontSize = Math.max(7, Math.floor(fontSize * 0.90));
-        el.style.fontSize = fontSize + 'px';
-        attempts++;
-      }
-    }
+  // numeric shrink base (smaller value => smaller final for short numbers)
+  // we want number larger, so set shrink closer to 1 (no shrink). On mobile maybe slight increase.
+  let numericShrink = 1.0;
+  if (slotKey === 'number') {
+    // make number more prominent:
+    numericShrink = isMobile ? 1.0 : 0.98;
+  }
+
+  let fontSize = Math.floor(Math.min(heightCandidate, widthCap) * numericShrink);
+
+  // safety clamp: allow numbers bigger but within stage fraction
+  const maxAllowed = Math.max(14, Math.floor(stageW * (isMobile ? 0.28 : 0.18))); // mobile larger cap
+  fontSize = Math.max(8, Math.min(fontSize, maxAllowed));
+
+  el.style.fontSize = fontSize + 'px';
+  el.style.lineHeight = '1';
+  el.style.fontWeight = '700';
+
+  // final fit loop: reduce until fits horizontally
+  let attempts = 0;
+  while (el.scrollWidth > el.clientWidth && fontSize > 7 && attempts < 30) {
+    fontSize = Math.max(7, Math.floor(fontSize * 0.92));
+    el.style.fontSize = fontSize + 'px';
+    attempts++;
+  }
+}
+
 
     function applyLayout(){
       if (!baseImg) return;
