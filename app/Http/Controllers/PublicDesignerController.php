@@ -120,11 +120,37 @@ class PublicDesignerController extends Controller
             ];
         }
 
+        // ---- compute a safe display price to avoid showing 0.00 ----
+        $displayPrice = null;
+
+        if (isset($product->min_price) && (float)$product->min_price > 0) {
+            $displayPrice = (float)$product->min_price;
+        } elseif (isset($product->price) && (float)$product->price > 0) {
+            $displayPrice = (float)$product->price;
+        } elseif (method_exists($product, 'variants')) {
+            try {
+                if ($product->relationLoaded('variants')) {
+                    $prices = $product->variants->pluck('price')->map(function($p){ return (float)$p; })->filter(function($v){ return $v > 0; });
+                    if ($prices->count()) $displayPrice = $prices->min();
+                } else {
+                    if ($product->variants()->exists()) {
+                        $minVariant = $product->variants()->min('price');
+                        if ($minVariant) $displayPrice = (float)$minVariant;
+                    }
+                }
+            } catch (\Throwable $e) {
+                $displayPrice = $displayPrice ?? null;
+            }
+        }
+
+        if ($displayPrice === null) $displayPrice = 0.00;
+
         return view('public.designer', [
             'product' => $product,
             'view'    => $view,
             'areas'   => $areas,
             'layoutSlots' => $layoutSlots,
+            'displayPrice' => (float)$displayPrice,
         ]);
     }
 }

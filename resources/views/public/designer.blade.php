@@ -232,7 +232,7 @@
     <!-- right product column (desktop) -->
     <div class="col-md-3 np-col order-3 order-md-3">
       <h4 class="mb-1">{{ $product->name ?? ($product->title ?? 'Product') }}</h4>
-      <div class="text-muted mb-3">Vendor: {{ $product->vendor ?? '—' }} • ₹ {{ number_format((float)($product->min_price ?? 0), 2) }}</div>
+      <div class="text-muted mb-3">Vendor: {{ $product->vendor ?? '—' }} • ₹ {{ number_format((float)($displayPrice ?? ($product->min_price ?? 0)), 2) }}</div>
 
       <form id="np-atc-form" method="post" action="#">
         @csrf
