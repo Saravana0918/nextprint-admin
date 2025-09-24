@@ -568,6 +568,77 @@
   }
 })();
 </script>
+<script>
+(function(){
+  const atcForm = document.getElementById('np-atc-form');
+  const btn = document.getElementById('np-atc-btn');
+  // preview canvas/data - assume you have a way to get base64 preview: window.html2canvasPreview() or existing method
+  async function getPreviewBase64(){
+    // if you already generate preview image dataURL into window.npPreviewDataUrl, use that
+    if (window.npPreviewDataUrl) return window.npPreviewDataUrl;
+    // else try to capture stage using html2canvas if available
+    if (window.html2canvas && document.getElementById('np-stage')) {
+      const canvas = await html2canvas(document.getElementById('np-stage'));
+      return canvas.toDataURL('image/png', 0.9);
+    }
+    return null;
+  }
+
+  if (atcForm) {
+    atcForm.addEventListener('submit', async function(e){
+      // normal validation already done earlier.
+      e.preventDefault();
+      if (btn) { btn.disabled = true; btn.textContent = 'Preparing...'; }
+
+      try {
+        const previewData = await getPreviewBase64();
+        let previewUrl = '';
+
+        if (previewData) {
+          // upload preview first
+          const fd = new FormData();
+          fd.append('_token', document.querySelector('input[name="_token"]').value);
+          fd.append('preview_data', previewData);
+
+          const resp = await fetch("{{ route('designer.upload_preview') }}", {
+            method: 'POST',
+            credentials: 'same-origin',
+            body: fd,
+            headers: { 'Accept': 'application/json' }
+          });
+
+          if (!resp.ok) {
+            const txt = await resp.text();
+            alert('Failed to prepare preview. Try again.');
+            throw new Error('preview upload failed: ' + resp.status);
+          }
+          const json = await resp.json();
+          previewUrl = json.url || '';
+        }
+
+        // set hidden input preview_url then submit real form (to add-to-cart)
+        let inp = document.getElementById('np-preview-url-hidden');
+        if (!inp) {
+          inp = document.createElement('input');
+          inp.type = 'hidden';
+          inp.name = 'preview_url';
+          inp.id = 'np-preview-url-hidden';
+          atcForm.appendChild(inp);
+        }
+        inp.value = previewUrl;
+
+        // finally POST add-to-cart (normal submission)
+        atcForm.submit();
+
+      } catch (err) {
+        console.error(err);
+        alert('Failed to prepare preview. Try again.');
+        if (btn) { btn.disabled = false; btn.textContent = 'Add to Cart'; }
+      }
+    });
+  }
+})();
+</script>
 
 </body>
 </html>
