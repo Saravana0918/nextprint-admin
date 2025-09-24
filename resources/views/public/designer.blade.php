@@ -235,18 +235,44 @@
       <div class="text-muted mb-3">Vendor: {{ $product->vendor ?? '—' }} • ₹ {{ number_format((float)($displayPrice ?? ($product->min_price ?? 0)), 2) }}</div>
 
       <form id="np-atc-form" method="post" action="#">
-        @csrf
-        <input type="hidden" id="np-product-id" value="{{ $product->id }}">
-        <input type="hidden" id="np-shopify-id" value="{{ $product->shopify_product_id ?? '' }}">
-        <input type="hidden" id="np-method" value="ADD TEXT">
+      @csrf
+      <input type="hidden" id="np-product-id" name="product_id" value="{{ $product->id }}">
+      <input type="hidden" id="np-shopify-id" name="shopify_product_id" value="{{ $product->shopify_product_id ?? '' }}">
+      <input type="hidden" id="np-method" value="ADD TEXT">
 
-        <input type="hidden" name="name_text"     id="np-name-hidden">
-        <input type="hidden" name="number_text"   id="np-num-hidden">
-        <input type="hidden" name="selected_font" id="np-font-hidden">
-        <input type="hidden" name="text_color"    id="np-color-hidden">
+      <!-- Hidden fields for personalization (kept names matching controller expectation) -->
+      <input type="hidden" name="name_text" id="np-name-hidden">
+      <input type="hidden" name="number_text" id="np-num-hidden">
+      <input type="hidden" name="font" id="np-font-hidden">
+      <input type="hidden" name="color" id="np-color-hidden">
 
-        <button id="np-atc-btn" type="submit" class="btn btn-primary w-100" disabled aria-busy="false">Add to Cart</button>
-      </form>
+      <!-- Size & quantity fields (visible) -->
+      <div class="mb-3">
+        <label class="form-label">Size</label>
+        <select id="np-size" name="size" class="form-select" required>
+          <option value="">Select Size</option>
+          <option value="S">S</option>
+          <option value="M">M</option>
+          <option value="L">L</option>
+          <option value="XL">XL</option>
+          <option value="XXL">XXL</option>
+        </select>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Quantity</label>
+        <input id="np-qty" name="quantity" type="number" class="form-control" min="1" value="1" required>
+      </div>
+
+      <!-- Hidden variant_id for the Shopify variant (we'll populate this later from variant map) -->
+      <input type="hidden" name="variant_id" id="np-variant-id" value="">
+
+      <!-- preview image base64 (captures final preview before submit) -->
+      <input type="hidden" name="preview_data" id="np-preview-data">
+
+      <button id="np-atc-btn" type="submit" class="btn btn-primary w-100" disabled aria-busy="false">Add to Cart</button>
+    </form>
+
       <div class="small-delivery text-muted mt-2">Button enables when both Name & Number are valid.</div>
     </div>
   </div>
@@ -442,6 +468,106 @@
     document.addEventListener('DOMContentLoaded', init);
   } else {
     init();
+  }
+})();
+</script>
+<!-- insert once, just before </body> or after your existing scripts -->
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+
+<script>
+(function(){
+  // small helper to set hidden inputs from current fields
+  function syncHiddenFields(){
+    const nameEl = document.getElementById('np-name'), numEl = document.getElementById('np-num'),
+          fontEl = document.getElementById('np-font'), colorEl = document.getElementById('np-color');
+
+    const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.value = val ?? ''; };
+
+    setVal('np-name-hidden', nameEl ? (nameEl.value||'').toUpperCase().trim() : '');
+    setVal('np-num-hidden',  numEl  ? (numEl.value||'').replace(/\D/g,'').trim() : '');
+    setVal('np-font-hidden', fontEl ? fontEl.value : '');
+    setVal('np-color-hidden', colorEl ? colorEl.value : '');
+  }
+
+  // validate name & number (same rules as your UI)
+  const NAME_RE = /^[A-Za-z ]{1,12}$/, NUM_RE = /^\d{1,3}$/;
+  function validNameNumber(){
+    const name = document.getElementById('np-name')?.value || '';
+    const num  = document.getElementById('np-num')?.value || '';
+    return NAME_RE.test(name.trim()) && NUM_RE.test(num.trim());
+  }
+
+  // enable/disable ATC button when inputs are valid and size chosen
+  function refreshATCState(){
+    const btn = document.getElementById('np-atc-btn');
+    const size = document.getElementById('np-size')?.value || '';
+    if (!btn) return;
+    // if personalization controls visible (np-controls not hidden), require both name & number valid
+    const controlsHidden = document.getElementById('np-controls')?.classList.contains('np-hidden');
+    const ok = size && (controlsHidden ? true : validNameNumber());
+    btn.disabled = !ok;
+  }
+
+  // wire up change events
+  ['np-name','np-num','np-font','np-color','np-size','np-qty'].forEach(id=>{
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('input', refreshATCState);
+    el.addEventListener('change', refreshATCState);
+  });
+
+  // on initial load run once
+  document.addEventListener('DOMContentLoaded', refreshATCState);
+
+  // submit handler: capture preview canvas then submit form
+  const atcForm = document.getElementById('np-atc-form');
+  if (atcForm) {
+    atcForm.addEventListener('submit', async function(evt){
+      // run validation again
+      const size = document.getElementById('np-size')?.value || '';
+      if (!size) {
+        evt.preventDefault();
+        alert('Please select a size.');
+        return;
+      }
+      // if controls visible, validate name & number
+      if (!document.getElementById('np-controls')?.classList.contains('np-hidden')) {
+        if (!validNameNumber()) {
+          evt.preventDefault();
+          alert('Please enter valid Name (A–Z, 1–12) and Number (1–3 digits).');
+          return;
+        }
+      }
+
+      // prevent default submit — we'll capture preview then submit
+      evt.preventDefault();
+
+      // sync hidden fields
+      syncHiddenFields();
+
+      const btn = document.getElementById('np-atc-btn');
+      if (btn) { btn.disabled = true; btn.setAttribute('aria-busy','true'); btn.innerText = 'Preparing...'; }
+
+      try {
+        // capture the stage area (np-stage)
+        const stage = document.getElementById('np-stage');
+        // note: backgroundColor:null preserves transparent background — set as you prefer
+        const canvas = await html2canvas(stage, { backgroundColor: null, scale: window.devicePixelRatio || 1 });
+        const dataUrl = canvas.toDataURL('image/png');
+        document.getElementById('np-preview-data').value = dataUrl;
+
+        // If you later implement variant map, set np-variant-id here before submit.
+        // const variantId = (window.VARIANT_MAP && window.VARIANT_MAP[document.getElementById('np-size').value]) || '';
+        // document.getElementById('np-variant-id').value = variantId;
+
+        // finally submit native
+        atcForm.submit();
+      } catch (err) {
+        console.error('Preview capture failed', err);
+        alert('Failed to prepare preview. Try again.');
+        if (btn) { btn.disabled = false; btn.removeAttribute('aria-busy'); btn.innerText = 'Add to Cart'; }
+      }
+    });
   }
 })();
 </script>
