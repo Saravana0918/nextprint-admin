@@ -23,7 +23,7 @@ use App\Http\Controllers\PublicDesignerController;
 |--------------------------------------------------------------------------
 */
 Route::post('/webhooks/shopify', [ShopifyWebhookController::class, 'handle']);
-
+Route::post('/api/shopify/cart/add', [ShopifyCartController::class, 'addToCart'])->name('shopify.cart.add');
 /*
 |--------------------------------------------------------------------------
 | Admin routes
@@ -91,6 +91,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
 // Public API: methods by Shopify handle (used by PDP JS)
 Route::get('/api/public/products/{handle}/methods', [PublicProductController::class, 'methodsByHandle']);
 Route::get('/designer', [PublicDesignerController::class, 'show'])->name('public.designer.show');
+Route::post('/designer/add-to-cart', [ShopifyCartController::class, 'addToCart'])->name('designer.addtocart');
 
 // Simple PDP (preview/test page)
 Route::get('/p/{handle}', [StoreController::class, 'show'])->name('store.product');
