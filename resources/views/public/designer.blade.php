@@ -4,14 +4,8 @@
   <meta charset="utf-8">
   <title>{{ $product->name ?? ($product->title ?? 'Product') }} – NextPrint</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-
-    <!-- Shopify theme CSS -->
-  <link rel="stylesheet" href="{{ $themeCssUrl ?? '' }}">
-  <link rel="stylesheet" href="{{ $componentListPaymentCss ?? '' }}">
-
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Oswald:wght@400;600&display=swap" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-
   <style>
     .np-hidden { display: none !important; }
     .font-bebas{font-family:'Bebas Neue', Impact, 'Arial Black', sans-serif;}
@@ -33,12 +27,10 @@
     }
   </style>
 </head>
-<body>
-  @include('partials.header')
-
-  @php
-    $img = $product->image_url ?? ($product->preview_src ?? asset('images/placeholder.png'));
-  @endphp
+<body class="py-4">
+@php
+  $img = $product->image_url ?? ($product->preview_src ?? asset('images/placeholder.png'));
+@endphp
 
 <div class="container">
   <div class="row g-4">
@@ -110,8 +102,6 @@
         <input type="hidden" id="np-product-id" name="product_id" value="{{ $product->id }}">
         <input type="hidden" id="np-shopify-id" name="shopify_product_id" value="{{ $product->shopify_product_id ?? '' }}">
         <input type="hidden" name="variant_id" id="np-variant-id" value="">
-        <input type="hidden" name="preview_url" id="np-preview-url">
-        <input type="hidden" name="preview_data" id="np-preview-hidden">
 
         <!-- personalization hidden values (names match controller) -->
         <input type="hidden" name="name_text" id="np-name-hidden">
@@ -387,7 +377,6 @@
   }
 })();
 </script>
-<script src="{{ $themeJsUrl ?? '' }}"></script>
-@include('partials.footer')
+
 </body>
 </html>

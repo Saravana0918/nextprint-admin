@@ -208,35 +208,12 @@ class PublicDesignerController extends Controller
         // final fallback: zero (blade will show formatted)
         if ($displayPrice === null) $displayPrice = 0.00;
 
-        // build variantMap (example: size -> variant_id)
-        $variantMap = [];
-        if ($product && method_exists($product,'variants')) {
-            foreach ($product->variants as $v) {
-                $sizeKey = strtoupper($v->option1 ?? ($v->size ?? ''));
-                if ($sizeKey) $variantMap[$sizeKey] = $v->id;
-            }
-        }
-
         return view('public.designer', [
-            'product'       => $product,
-            'view'          => $view,
-            'areas'         => $areas,
-            'layoutSlots'   => $layoutSlots,
-            'displayPrice'  => (float)$displayPrice,
-
-            // header/footer/theme assets
-            'themeCssUrl'   => 'https://cdn.shopify.com/s/files/1/XXX/t/YYY/assets/theme.css?v=123',
-            'themeJsUrl'    => 'https://cdn.shopify.com/s/files/1/XXX/t/YYY/assets/theme.js?v=123',
-            'componentListPaymentCss' => 'https://cdn.shopify.com/s/files/1/XXX/t/YYY/assets/component-list-payment.css?v=123',
-            'logoUrl'       => asset('images/logo.png'),
-            'cartItemCount' => 0,
-            'customerServiceText' => 'Call us: +91 12345 67890',
-            'footerBlocks'  => [],
-            'footerBottom'  => [],
-            'hasLogoImage'  => true,
-
-            'variantMap'    => $variantMap,
+            'product' => $product,
+            'view'    => $view,
+            'areas'   => $areas,
+            'layoutSlots' => $layoutSlots,
+            'displayPrice' => (float)$displayPrice,
         ]);
     }
 }
- 
