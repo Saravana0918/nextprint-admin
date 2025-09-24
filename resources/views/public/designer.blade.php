@@ -234,7 +234,7 @@
       <h4 class="mb-1">{{ $product->name ?? ($product->title ?? 'Product') }}</h4>
       <div class="text-muted mb-3">Vendor: {{ $product->vendor ?? '—' }} • ₹ {{ number_format((float)($displayPrice ?? ($product->min_price ?? 0)), 2) }}</div>
 
-      <form id="np-atc-form" method="post" action="#">
+      <form id="np-atc-form" method="post" action="{{ route('designer.addtocart') }}">
       @csrf
       <input type="hidden" id="np-product-id" name="product_id" value="{{ $product->id }}">
       <input type="hidden" id="np-shopify-id" name="shopify_product_id" value="{{ $product->shopify_product_id ?? '' }}">
