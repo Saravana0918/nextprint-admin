@@ -4,66 +4,27 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Schema;
-use App\Models\ProductVariant; // if present
+use App\Models\ProductVariant;
 
 class ShopifyCartController extends Controller
 {
-    // Endpoint: POST /designer/upload-preview
-    // Accepts: preview_data (base64 image)
-    // Returns: JSON { success: true, url: '/previews/preview_xxx.png' } on success
-    public function uploadPreview(Request $request)
-    {
-        $request->validate([
-            'preview_data' => 'required|string',
-        ]);
-
-        $data = $request->input('preview_data');
-
-        try {
-            // strip prefix if provided
-            $payload = preg_replace('/^data:image\/\w+;base64,/', '', $data);
-            $payload = str_replace(' ', '+', $payload);
-
-            $fileName = 'preview_' . Str::random(10) . '.png';
-            $dir = public_path('previews');
-
-            if (!is_dir($dir)) {
-                if (!mkdir($dir, 0755, true) && !is_dir($dir)) {
-                    throw new \RuntimeException("Cannot create previews directory");
-                }
-            }
-
-            $filePath = $dir . DIRECTORY_SEPARATOR . $fileName;
-            file_put_contents($filePath, base64_decode($payload));
-            // ensure file is readable by web: chmod 0644
-            @chmod($filePath, 0644);
-
-            $url = url('previews/' . $fileName);
-            return response()->json(['success' => true, 'url' => $url]);
-        } catch (\Throwable $e) {
-            Log::error('designer: uploadPreview_failed', ['err' => $e->getMessage()]);
-            return response()->json(['success' => false, 'message' => 'Preview save failed'], 500);
-        }
-    }
-
-    // Existing addToCart: expects preview_url OR preview_data already uploaded
     public function addToCart(Request $request)
     {
         $validated = $request->validate([
-            'product_id'   => 'required|integer',
+            'product_id'         => 'required|integer',
             'shopify_product_id' => 'nullable|string',
-            'variant_id'   => 'nullable',
-            'size'         => 'nullable|string',
-            'quantity'     => 'nullable|integer|min:1',
-            'name_text'    => 'nullable|string|max:40',
-            'number_text'  => 'nullable|string|max:6',
-            'font'         => 'nullable|string|max:100',
-            'color'        => 'nullable|string|max:20',
-            'preview_url'  => 'nullable|url',
-            // if you used preview_data directly previously, prefer uploadPreview flow
+            'variant_id'         => 'nullable',
+            'size'               => 'nullable|string',
+            'quantity'           => 'nullable|integer|min:1',
+            'name_text'          => 'nullable|string|max:60',
+            'number_text'        => 'nullable|string|max:20',
+            'font'               => 'nullable|string|max:100',
+            'color'              => 'nullable|string|max:20',
+            'preview_url'        => 'nullable|url',
+            'preview_data'       => 'nullable|string', // optional base64
         ]);
 
         $productId = $validated['product_id'];
@@ -72,21 +33,22 @@ class ShopifyCartController extends Controller
         $size = $validated['size'] ?? null;
         $shopifyProductId = $validated['shopify_product_id'] ?? null;
 
-        // Step 1: db lookup (if table exists)
+        // 1) Try DB lookup if product_variants table exists
         if (empty($variantId) && Schema::hasTable('product_variants')) {
             try {
-                $pvQuery = ProductVariant::where('product_id', $productId);
-                if ($size) $pvQuery->where('option_value', $size);
-                $pv = $pvQuery->first();
+                $pv = ProductVariant::where('product_id', $productId)
+                     ->when($size, function ($q) use ($size) {
+                         return $q->where('option_value', $size);
+                     })->first();
                 if ($pv && !empty($pv->shopify_variant_id)) {
                     $variantId = $pv->shopify_variant_id;
                 }
             } catch (\Throwable $e) {
-                Log::warning('designer: product_variants lookup failed', ['err' => $e->getMessage()]);
+                Log::warning('designer: product_variants lookup failed', ['err'=>$e->getMessage()]);
             }
         }
 
-        // Step 2: fetch from Shopify Admin API if needed (fallback)
+        // 2) If still no variant -> fetch product from Shopify Admin API and pick variant (fallback)
         if (empty($variantId) && $shopifyProductId) {
             try {
                 $shop = env('SHOPIFY_STORE');
@@ -114,25 +76,41 @@ class ShopifyCartController extends Controller
                     }
                 }
             } catch (\Throwable $e) {
-                Log::warning('designer: shopify variants fetch failed', ['err' => $e->getMessage()]);
+                Log::warning('designer: shopify variants fetch failed', ['err'=>$e->getMessage()]);
             }
         }
 
         if (empty($variantId)) {
-            Log::error('designer: no_variant', ['product_id' => $productId, 'size' => $size, 'shopify_product_id' => $shopifyProductId]);
+            Log::error('designer: no_variant', ['product_id'=>$productId, 'size'=>$size, 'shopify_product_id'=>$shopifyProductId]);
             return back()->withErrors(['variant' => 'Could not determine a product variant (size).']);
         }
 
-        // Build custom attributes
+        // Optionally save preview_data to file and generate preview_url
+        $previewUrl = $validated['preview_url'] ?? null;
+        if (empty($previewUrl) && !empty($validated['preview_data'])) {
+            try {
+                $data = preg_replace('/^data:image\/\w+;base64,/', '', $validated['preview_data']);
+                $data = str_replace(' ', '+', $data);
+                $file = 'preview_' . Str::random(8) . '.png';
+                $dir = public_path('previews');
+                if (!is_dir($dir)) mkdir($dir, 0755, true);
+                file_put_contents($dir . '/' . $file, base64_decode($data));
+                $previewUrl = url('previews/'.$file);
+            } catch (\Throwable $e) {
+                Log::warning('designer: preview save failed', ['err'=>$e->getMessage()]);
+            }
+        }
+
+        // Build custom attributes (for cart line item)
         $customAttrs = [
-            ['key' => 'Name', 'value' => $validated['name_text'] ?? ''],
+            ['key' => 'Name',   'value' => $validated['name_text'] ?? ''],
             ['key' => 'Number', 'value' => $validated['number_text'] ?? ''],
-            ['key' => 'Font', 'value' => $validated['font'] ?? ''],
-            ['key' => 'Color', 'value' => $validated['color'] ?? ''],
-            ['key' => 'PreviewUrl', 'value' => $validated['preview_url'] ?? ''],
+            ['key' => 'Font',   'value' => $validated['font'] ?? ''],
+            ['key' => 'Color',  'value' => $validated['color'] ?? ''],
+            ['key' => 'PreviewUrl', 'value' => $previewUrl ?? ''],
         ];
 
-        // Use Storefront API to create checkout and redirect user to checkout URL
+        // --- Use Storefront API cartCreate mutation (recommended) ---
         $shop = env('SHOPIFY_STORE');
         $storefrontToken = env('SHOPIFY_STOREFRONT_TOKEN');
 
@@ -141,15 +119,17 @@ class ShopifyCartController extends Controller
             return back()->withErrors(['shopify' => 'Storefront token or shop config missing.']);
         }
 
-        // variant gid
+        // convert variant id to gid
         $variantGid = 'gid://shopify/ProductVariant/' . (string)$variantId;
 
         $mutation = <<<'GRAPHQL'
-mutation checkoutCreate($input: CheckoutCreateInput!) {
-  checkoutCreate(input: $input) {
-    checkout {
+mutation cartCreate($input: CartInput!) {
+  cartCreate(input: $input) {
+    cart {
       id
-      webUrl
+      checkoutUrl
+      createdAt
+      updatedAt
     }
     userErrors {
       field
@@ -160,17 +140,18 @@ mutation checkoutCreate($input: CheckoutCreateInput!) {
 GRAPHQL;
 
         $lineItem = [
-            'variantId' => $variantGid,
-            'quantity'  => (int)$quantity,
-            'customAttributes' => array_map(function ($a) {
-                return ['key' => $a['key'], 'value' => $a['value']];
+            'merchandiseId' => $variantGid,
+            'quantity' => (int)$quantity,
+            'attributes' => array_map(function($a){
+                // Storefront cart attributes use key/value
+                return ['key'=>$a['key'], 'value'=>$a['value']];
             }, $customAttrs),
         ];
 
         $variables = [
             'input' => [
-                'lineItems' => [$lineItem],
-            ],
+                'lines' => [$lineItem]
+            ]
         ];
 
         try {
@@ -184,21 +165,32 @@ GRAPHQL;
             ]);
 
             if (!$resp->successful()) {
-                Log::error('designer: checkoutCreate_failed', ['status' => $resp->status(), 'body' => $resp->body()]);
-                return back()->withErrors(['shopify' => 'Failed to create checkout (storefront API).']);
+                Log::error('designer: cartCreate_failed', ['status'=>$resp->status(), 'body'=>$resp->body()]);
+                return back()->withErrors(['shopify' => 'Failed to create cart (storefront API).']);
             }
 
             $data = $resp->json();
-            $webUrl = data_get($data, 'data.checkoutCreate.checkout.webUrl');
+            $cart = data_get($data, 'data.cartCreate.cart');
+            $userErrors = data_get($data, 'data.cartCreate.userErrors', []);
 
-            if (empty($webUrl)) {
-                Log::error('designer: checkoutCreate_no_weburl', ['body' => $resp->body()]);
-                return back()->withErrors(['shopify' => 'Checkout created but no webUrl returned.']);
+            if (!empty($userErrors)) {
+                Log::error('designer: cartCreate_userErrors', ['errors'=>$userErrors, 'body'=>$resp->body()]);
+                return back()->withErrors(['shopify' => 'Storefront error: '.json_encode($userErrors)]);
             }
 
-            return redirect()->away($webUrl);
+            // Some API versions return checkoutUrl or webUrl differently - check both
+            $checkoutUrl = data_get($cart, 'checkoutUrl') ?: data_get($cart, 'url') ?: null;
+
+            if (empty($checkoutUrl)) {
+                Log::error('designer: cartCreate_no_url', ['body'=>$resp->body()]);
+                return back()->withErrors(['shopify' => 'Cart created but no checkout URL returned.']);
+            }
+
+            // Redirect user to Shopify checkout/cart
+            return redirect()->away($checkoutUrl);
+
         } catch (\Throwable $e) {
-            Log::error('designer: checkoutCreate_exception', ['err' => $e->getMessage()]);
+            Log::error('designer: cartCreate_exception', ['err'=>$e->getMessage()]);
             return back()->withErrors(['shopify' => 'Checkout creation failed.']);
         }
     }
