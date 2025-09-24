@@ -4,32 +4,167 @@
   <meta charset="utf-8">
   <title>{{ $product->name ?? ($product->title ?? 'Product') }} – NextPrint</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="csrf-token" content="{{ csrf_token() }}">
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Oswald:wght@400;600&display=swap" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
-    /* --- keep all your previous CSS as-is --- */
-    /* (omitted here for brevity — paste your full CSS from original) */
-    /* ... copy the CSS from your version above ... */
+    /* --- core --- */
+    .np-hidden { display: none !important; }
+    .font-bebas{font-family:'Bebas Neue', Impact, 'Arial Black', sans-serif;}
+    .font-anton{font-family:'Anton', Impact, 'Arial Black', sans-serif;}
+    .font-oswald{font-family:'Oswald', Arial, sans-serif;}
+    .font-impact{font-family:Impact, 'Arial Black', sans-serif;}
+
+    .np-stage { position: relative; width: 100%; max-width: 534px; margin: 0 auto; min-height: 220px; overflow: visible; background: #fff; border-radius:8px; padding:8px; }
+    .np-stage img { width: 100%; height: auto; display:block; border-radius:6px; }
+    .np-overlay { position:absolute; color:#D4AF37; text-shadow: 0 2px 6px rgba(0,0,0,0.35); white-space:nowrap; pointer-events:none; font-weight:700; text-transform:uppercase; letter-spacing:2px; display:flex; align-items:center; justify-content:center; user-select:none; line-height:1; }
+    .np-swatch { width:28px; height:28px; border-radius:50%; border:1px solid #ccc; cursor:pointer; display:inline-block; }
+    .max-count{
+      display:none;
+    }
+
+    /* -------------------- MOBILE ONLY (<=767px) -------------------- */
+@media (max-width: 767px) {
+  body {
+    background-image: url('/images/stadium-bg.jpg');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+    position: relative;
+    min-height: 100vh;
+  }
+
+  body::before {
+    content: "";
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.55); /* darkness control: 0.55 = medium dark */
+    z-index: 0;
+  }
+
+  .container, .row, .np-col, .np-stage, .border {
+    position: relative;
+    z-index: 1;
+  }
+
+  .np-overlay {
+    color: #FFD700; /* gold */
+    text-shadow: 0 2px 8px rgba(0,0,0,0.65); /* stronger shadow for clarity */
+  }
+
+  .font-label{
+    color : white;
+  }
+
+  .color-label{
+    color: white;
+  }
+
+  .row.g-4 { display:flex; flex-direction:column; gap:14px; align-items:stretch; }
+
+  .np-col.order-1.order-md-2 { order:-1; width:100% !important; max-width:380px !important; margin:0 auto; display:block !important; }
+  .np-stage { max-width:340px; margin:0 auto; background:#fff; padding:10px; border-radius:10px; }
+
+  .col-md-3.order-3.order-md-3 { display:none !important; }
+
+  /* REMOVE card overlay background — inputs float directly on body bg */
+  .col-md-3.order-2.order-md-1 {
+    display:block !important;
+    width:100% !important;
+    max-width:none !important;
+    margin:0 auto;
+  }
+  .col-md-3.order-2.order-md-1 .border {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+
+  /* HIDE headings + helper texts */
+  .col-md-3.order-2.order-md-1 h6,
+  #np-status,
+  #np-note,
+  #np-num-help,
+  #np-name-help,
+  #np-num-err,
+  #np-name-err {
+    display: none !important;
+  }
+
+  /* inputs styled line-bottom only */
+  .np-field-wrap { position:relative; margin-bottom:20px; }
+  .np-field-wrap label { display:none !important; }
+  .np-field-wrap input.form-control {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid rgba(255,255,255,0.65);
+    color:#fff;
+    text-align:center;
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:2px;
+    font-size:18px;
+    padding:12px 8px;
+    border-radius:0;
+  }
+  .np-field-wrap input.form-control::placeholder { color: rgba(255,255,255,0.75); }
+
+  .customization-form input[type="text"],
+  .customization-form input[type="number"] {
+    background: transparent !important;
+    border: none !important;
+    border-bottom: 2px solid #fff !important; /* underline மட்டும் */
+    color: #fff !important;
+    text-align: center;
+    font-size: 20px;
+    outline: none !important;
+    box-shadow: none !important;
+  }
+
+  .customization-form input[type="text"]:focus,
+  .customization-form input[type="number"]:focus {
+    background: transparent !important;
+    border: none !important;
+    border-bottom: 2px solid #ffcc00 !important; /* highlight underline */
+    outline: none !important;
+    box-shadow: none !important;
+  }
+
+  .max-count {
+    position:absolute;
+    right:0;
+    top:0;
+    color:#FFD24D;
+    font-weight:700;
+    font-size:12px;
+    display:block;
+  }
+
+  /* font + swatches visible */
+  #np-font, .np-swatch, #np-color { display:block !important; }
+
+  .np-swatch { width:28px; height:28px; border-radius:50%; border:2px solid #fff; margin-right:6px; }
+
+  .form-select { background:#fff; color:#222; border-radius:8px; margin-bottom:16px; }
+
+  #np-atc-btn { display:block !important; width:100% !important; font-size:16px !important; padding:12px 14px !important; margin-top:10px; }
+}
+
+    /* -------------------- END MOBILE ONLY -------------------- */
   </style>
 </head>
 <body class="py-4">
 @php
   $img = $product->image_url ?? ($product->preview_src ?? asset('images/placeholder.png'));
-  // Build a simple variant map for JS: size => shopify_variant_id
-  // $productVariants should be passed from controller as collection
-  $variantMap = [];
-  if (!empty($productVariants)) {
-      foreach($productVariants as $pv){
-          if (!empty($pv->option_value) && !empty($pv->shopify_variant_id)) {
-              $variantMap[$pv->option_value] = (string)$pv->shopify_variant_id;
-          }
-      }
-  }
 @endphp
 
 <div class="container">
   <div class="row g-4">
+    <!-- preview column (desktop large) -->
     <div class="col-md-6 np-col order-1 order-md-2">
       <div class="border rounded p-3">
         <div class="np-stage" id="np-stage">
@@ -40,13 +175,16 @@
       </div>
     </div>
 
+    <!-- controls column -->
     <div class="col-md-3 np-col order-2 order-md-1">
       <div class="border rounded p-3">
         <h6 class="mb-3">Customize</h6>
         <div id="np-status" class="small text-muted mb-2">Checking methods…</div>
         <div id="np-note" class="small text-muted mb-3 d-none">Personalization not available for this product.</div>
 
+        <!-- controls -->
         <div id="np-controls" class="np-hidden">
+          <!-- Number -->
           <div class="mb-3 np-field-wrap">
             <label for="np-num" class="form-label">Your Number</label>
             <input id="np-num" type="text" inputmode="numeric" maxlength="3" class="form-control" placeholder="Your number" autocomplete="off">
@@ -55,6 +193,7 @@
             <div id="np-num-err" class="text-danger small d-none">Enter 1–3 digits only.</div>
           </div>
 
+          <!-- Name -->
           <div class="mb-3 np-field-wrap">
             <label for="np-name" class="form-label">Your Name</label>
             <input id="np-name" type="text" maxlength="12" class="form-control" placeholder="Your name" autocomplete="off">
@@ -63,6 +202,7 @@
             <div id="np-name-err" class="text-danger small d-none">Enter 1–12 letters/spaces only.</div>
           </div>
 
+          <!-- Font select -->
           <div class="mb-3">
             <label class="form-label font-label">Font</label>
             <select id="np-font" class="form-select">
@@ -73,6 +213,7 @@
             </select>
           </div>
 
+          <!-- Color swatches -->
           <div class="mb-2">
             <label class="form-label d-block color-label">Text Color</label>
             <div class="d-flex gap-2 flex-wrap mb-2">
@@ -88,44 +229,21 @@
       </div>
     </div>
 
+    <!-- right product column (desktop) -->
     <div class="col-md-3 np-col order-3 order-md-3">
       <h4 class="mb-1">{{ $product->name ?? ($product->title ?? 'Product') }}</h4>
       <div class="text-muted mb-3">Vendor: {{ $product->vendor ?? '—' }} • ₹ {{ number_format((float)($displayPrice ?? ($product->min_price ?? 0)), 2) }}</div>
 
-      <form id="np-atc-form" method="post" action="{{ route('designer.addtocart') }}">
+      <form id="np-atc-form" method="post" action="#">
         @csrf
-        <input type="hidden" id="np-product-id" name="product_id" value="{{ $product->id }}">
+        <input type="hidden" id="np-product-id" value="{{ $product->id }}">
         <input type="hidden" id="np-shopify-id" value="{{ $product->shopify_product_id ?? '' }}">
         <input type="hidden" id="np-method" value="ADD TEXT">
 
-        <!-- Hidden fields for personalization -->
         <input type="hidden" name="name_text"     id="np-name-hidden">
         <input type="hidden" name="number_text"   id="np-num-hidden">
-        <input type="hidden" name="font"          id="np-font-hidden">
-        <input type="hidden" name="color"         id="np-color-hidden">
-
-        <!-- Size & quantity fields -->
-        <div class="mb-3">
-          <label class="form-label">Size</label>
-          <select id="np-size" name="size" class="form-select" required>
-            <option value="">Select Size</option>
-            {{-- If you have sizes from DB, loop here --}}
-            @foreach($productVariants ?? [] as $pv)
-              <option value="{{ $pv->option_value }}">{{ $pv->option_value }}</option>
-            @endforeach
-          </select>
-        </div>
-
-        <div class="mb-3">
-          <label class="form-label">Quantity</label>
-          <input id="np-qty" name="quantity" type="number" class="form-control" min="1" value="1" required>
-        </div>
-
-        <!-- variant_id for Shopify -->
-        <input type="hidden" name="variant_id" id="np-variant-id" value="">
-
-        <!-- preview image base64 -->
-        <input type="hidden" name="preview_data" id="np-preview-data">
+        <input type="hidden" name="selected_font" id="np-font-hidden">
+        <input type="hidden" name="text_color"    id="np-color-hidden">
 
         <button id="np-atc-btn" type="submit" class="btn btn-primary w-100" disabled aria-busy="false">Add to Cart</button>
       </form>
@@ -134,16 +252,11 @@
   </div>
 </div>
 
+{{-- inject JSON from server-side normalized layoutSlots --}}
 <script>
-  // server side data: layoutSlots is same as before
   window.layoutSlots = {!! json_encode($layoutSlots, JSON_NUMERIC_CHECK) !!};
   window.personalizationSupported = {{ !empty($layoutSlots) ? 'true' : 'false' }};
-  // variant map (size -> shopify_variant_id)
-  window.VARIANT_MAP = {!! json_encode($variantMap) !!};
 </script>
-
-<!-- html2canvas for preview capture -->
-<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 
 <script>
 (function(){
@@ -153,18 +266,16 @@
     const nameEl = $('np-name'), numEl = $('np-num'), fontEl = $('np-font'), colorEl = $('np-color');
     const pvName = $('np-prev-name'), pvNum = $('np-prev-num'), baseImg = $('np-base'), stage = $('np-stage');
     const ctrls = $('np-controls'), note = $('np-note'), status = $('np-status'), btn = $('np-atc-btn');
-    const sizeSel = $('np-size'), qtyEl = $('np-qty'), variantHidden = $('np-variant-id');
-    const NAME_RE = /^[A-Za-z ]{1,12}$/, NUM_RE = /^\d{1,3}$/;
+    const layout = (typeof window.layoutSlots === 'object' && window.layoutSlots !== null) ? window.layoutSlots : {};
 
+    const NAME_RE = /^[A-Za-z ]{1,12}$/, NUM_RE = /^\d{1,3}$/;
     function validate(){
       const okName = nameEl ? NAME_RE.test((nameEl.value||'').trim()) : true;
       const okNum = numEl ? NUM_RE.test((numEl.value||'').trim()) : true;
       if (nameEl) document.getElementById('np-name-err')?.classList.toggle('d-none', okName);
       if (numEl)  document.getElementById('np-num-err')?.classList.toggle('d-none', okNum);
       if (ctrls && !ctrls.classList.contains('np-hidden')) {
-        if (btn) btn.disabled = !(okName && okNum && sizeSel.value);
-      } else {
-        if (btn) btn.disabled = !sizeSel.value;
+        if (btn) btn.disabled = !(okName && okNum);
       }
       return okName && okNum;
     }
@@ -187,7 +298,6 @@
       return {imgW, imgH, stageW, stageH};
     }
 
-    // Place overlay (same logic as your original)
     function placeOverlay(el, slot, slotKey){
       if(!el || !slot || !stage) return;
       el.style.position = 'absolute';
@@ -212,20 +322,31 @@
 
       const text = (el.textContent || '').toString().trim() || 'TEXT';
       const chars = Math.max(1, text.length);
+
       const isMobile = window.innerWidth <= 767;
+
       const heightFactorName = 0.86;
       const heightFactorNumber = isMobile ? 0.95 : 0.9;
+
       const heightCandidate = Math.floor(areaHpx * (slotKey === 'number' ? heightFactorNumber : heightFactorName));
+
       const avgCharRatio = 0.55;
       const widthCap = Math.floor((areaWpx * 0.95) / (chars * avgCharRatio));
+
       let numericShrink = 1.0;
-      if (slotKey === 'number') numericShrink = isMobile ? 1.0 : 0.98;
+      if (slotKey === 'number') {
+        numericShrink = isMobile ? 1.0 : 0.98;
+      }
+
       let fontSize = Math.floor(Math.min(heightCandidate, widthCap) * numericShrink);
+
       const maxAllowed = Math.max(14, Math.floor(stageW * (isMobile ? 0.34 : 0.18)));
       fontSize = Math.max(8, Math.min(fontSize, maxAllowed));
+
       el.style.fontSize = fontSize + 'px';
       el.style.lineHeight = '1';
       el.style.fontWeight = '700';
+
       let attempts = 0;
       while (el.scrollWidth > el.clientWidth && fontSize > 7 && attempts < 30) {
         fontSize = Math.max(7, Math.floor(fontSize * 0.92));
@@ -237,7 +358,6 @@
     function applyLayout(){
       if (!baseImg) return;
       if (!baseImg.complete || !baseImg.naturalWidth) return;
-      const layout = (typeof window.layoutSlots === 'object' && window.layoutSlots !== null) ? window.layoutSlots : {};
       if (layout.name) placeOverlay(pvName, layout.name, 'name');
       if (layout.number) placeOverlay(pvNum, layout.number, 'number');
     }
@@ -260,11 +380,6 @@
       set('np-num-hidden',  (numEl  ? (numEl.value||'')  : '').replace(/\D/g,'').trim());
       set('np-font-hidden', fontEl ? fontEl.value : '');
       set('np-color-hidden', colorEl ? colorEl.value : '');
-      // set variant_id based on selected size
-      if (sizeSel && variantHidden) {
-        const map = window.VARIANT_MAP || {};
-        variantHidden.value = map[sizeSel.value] || '';
-      }
     }
 
     if (nameEl) nameEl.addEventListener('input', ()=>{ syncPreview(); validate(); syncHidden(); });
@@ -272,11 +387,16 @@
     if (fontEl) fontEl.addEventListener('change', ()=>{ applyFont(fontEl.value); syncPreview(); syncHidden(); });
     if (colorEl) colorEl.addEventListener('input', ()=>{ if (pvName) pvName.style.color = colorEl.value; if (pvNum) pvNum.style.color = colorEl.value; syncHidden(); });
 
-    document.querySelectorAll('.np-swatch')?.forEach(b=>{ b.addEventListener('click', ()=>{ document.querySelectorAll('.np-swatch').forEach(x=>x.classList.remove('active')); b.classList.add('active'); if (colorEl) colorEl.value = b.dataset.color; if (pvName) pvName.style.color = b.dataset.color; if (pvNum) pvNum.style.color = b.dataset.color; syncHidden(); });});
-
-    if (sizeSel) {
-      sizeSel.addEventListener('change', ()=>{ syncHidden(); validate(); });
-    }
+    document.querySelectorAll('.np-swatch')?.forEach(b=>{
+      b.addEventListener('click', ()=>{
+        document.querySelectorAll('.np-swatch').forEach(x=>x.classList.remove('active'));
+        b.classList.add('active');
+        if (colorEl) colorEl.value = b.dataset.color;
+        if (pvName) pvName.style.color = b.dataset.color;
+        if (pvNum) pvNum.style.color = b.dataset.color;
+        syncHidden();
+      });
+    });
 
     applyFont(fontEl ? fontEl.value : 'bebas');
     if (pvName && colorEl) pvName.style.color = colorEl.value;
@@ -304,8 +424,7 @@
 
     const atcForm = $('np-atc-form');
     if (atcForm) {
-      atcForm.addEventListener('submit', async function(e){
-        // validate fields
+      atcForm.addEventListener('submit', function(e){
         if (ctrls && !ctrls.classList.contains('np-hidden')) {
           if (!validate()) {
             e.preventDefault();
@@ -313,28 +432,8 @@
             return;
           }
         }
-        if (!sizeSel.value) {
-          e.preventDefault();
-          alert('Please select a Size.');
-          return;
-        }
-        // capture preview using html2canvas
-        e.preventDefault();
-        if (btn) { btn.disabled = true; btn.setAttribute('aria-busy','true'); btn.innerText = 'Preparing...'; }
+        if (btn) btn.setAttribute('aria-busy','true');
         syncHidden();
-
-        try {
-          const canvas = await html2canvas(stage, {backgroundColor: null, scale: window.devicePixelRatio || 1});
-          const dataUrl = canvas.toDataURL('image/png');
-          document.getElementById('np-preview-data').value = dataUrl;
-
-          // submit form (regular POST) after setting preview_data
-          atcForm.submit();
-        } catch(err) {
-          console.error('Preview capture failed', err);
-          alert('Failed to prepare preview; try again.');
-          if (btn) { btn.disabled = false; btn.removeAttribute('aria-busy'); btn.innerText = 'Add to Cart'; }
-        }
       });
     }
   } // init
