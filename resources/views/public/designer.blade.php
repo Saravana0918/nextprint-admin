@@ -235,43 +235,40 @@
       <div class="text-muted mb-3">Vendor: {{ $product->vendor ?? '—' }} • ₹ {{ number_format((float)($displayPrice ?? ($product->min_price ?? 0)), 2) }}</div>
 
       <form id="np-atc-form" method="post" action="{{ route('designer.addtocart') }}">
-      @csrf
-      <input type="hidden" id="np-product-id" name="product_id" value="{{ $product->id }}">
-      <input type="hidden" id="np-shopify-id" name="shopify_product_id" value="{{ $product->shopify_product_id ?? '' }}">
-      <input type="hidden" id="np-method" value="ADD TEXT">
+        @csrf
+        <input type="hidden" id="np-product-id" name="product_id" value="{{ $product->id }}">
+        <input type="hidden" id="np-shopify-id" name="shopify_product_id" value="{{ $product->shopify_product_id ?? '' }}">
+        <input type="hidden" name="variant_id" id="np-variant-id" value="">
 
-      <!-- Hidden fields for personalization (kept names matching controller expectation) -->
-      <input type="hidden" name="name_text" id="np-name-hidden">
-      <input type="hidden" name="number_text" id="np-num-hidden">
-      <input type="hidden" name="font" id="np-font-hidden">
-      <input type="hidden" name="color" id="np-color-hidden">
+        <!-- personalization hidden values -->
+        <input type="hidden" name="name_text" id="np-name-hidden">
+        <input type="hidden" name="number_text" id="np-num-hidden">
+        <input type="hidden" name="selected_font" id="np-font-hidden">
+        <input type="hidden" name="text_color" id="np-color-hidden">
+        <input type="hidden" name="preview_data" id="np-preview-hidden">
 
-      <!-- Size & quantity fields (visible) -->
-      <div class="mb-3">
-        <label class="form-label">Size</label>
-        <select id="np-size" name="size" class="form-select" required>
-          <option value="">Select Size</option>
-          <option value="S">S</option>
-          <option value="M">M</option>
-          <option value="L">L</option>
-          <option value="XL">XL</option>
-          <option value="XXL">XXL</option>
-        </select>
-      </div>
+        <!-- Size select (visible) -->
+        <div class="mb-3">
+          <label class="form-label">Size</label>
+          <select id="np-size" name="size" class="form-select" required>
+            <option value="">Select Size</option>
+            <option value="S">S</option>
+            <option value="M">M</option>
+            <option value="L">L</option>
+            <option value="XL">XL</option>
+            <option value="XXL">XXL</option>
+          </select>
+        </div>
 
-      <div class="mb-3">
-        <label class="form-label">Quantity</label>
-        <input id="np-qty" name="quantity" type="number" class="form-control" min="1" value="1" required>
-      </div>
+        <!-- Quantity -->
+        <div class="mb-3">
+          <label class="form-label">Quantity</label>
+          <input id="np-qty" name="quantity" type="number" min="1" value="1" class="form-control">
+        </div>
 
-      <!-- Hidden variant_id for the Shopify variant (we'll populate this later from variant map) -->
-      <input type="hidden" name="variant_id" id="np-variant-id" value="">
+        <button id="np-atc-btn" type="submit" class="btn btn-primary w-100" disabled>Add to Cart</button>
+      </form>
 
-      <!-- preview image base64 (captures final preview before submit) -->
-      <input type="hidden" name="preview_data" id="np-preview-data">
-
-      <button id="np-atc-btn" type="submit" class="btn btn-primary w-100" disabled aria-busy="false">Add to Cart</button>
-    </form>
 
       <div class="small-delivery text-muted mt-2">Button enables when both Name & Number are valid.</div>
     </div>

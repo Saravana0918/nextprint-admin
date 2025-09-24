@@ -21,13 +21,13 @@ class ShopifyCartController extends Controller
             'quantity'     => 'nullable|integer|min:1',
             'name_text'    => 'nullable|string|max:40',
             'number_text'  => 'nullable|string|max:6',
-            'font'         => 'nullable|string|max:100',
-            'color'        => 'nullable|string|max:20',
+            'selected_font'=> 'nullable|string|max:100',
+            'text_color'   => 'nullable|string|max:20',
             'preview_data' => 'nullable|string',
         ]);
 
         $productId = $validated['product_id'];
-        $quantity = $validated['quantity'] ?? 1;
+        $quantity = (int) ($validated['quantity'] ?? 1);
         $variantId = $validated['variant_id'] ?? null;
         $size = $validated['size'] ?? null;
         $shopifyProductId = $validated['shopify_product_id'] ?? null;
@@ -35,10 +35,11 @@ class ShopifyCartController extends Controller
         // 1) Try DB lookup if product_variants table exists
         if (empty($variantId) && Schema::hasTable('product_variants')) {
             try {
-                $pv = ProductVariant::where('product_id', $productId)
-                     ->when($size, function ($q) use ($size) {
-                         return $q->where('option_value', $size);
-                     })->first();
+                $pvQuery = ProductVariant::where('product_id', $productId);
+                if (!empty($size)) {
+                    $pvQuery->where('option_value', $size);
+                }
+                $pv = $pvQuery->first();
                 if ($pv && !empty($pv->shopify_variant_id)) {
                     $variantId = $pv->shopify_variant_id;
                 }
@@ -72,6 +73,8 @@ class ShopifyCartController extends Controller
                         if (empty($variantId) && !empty($variants)) {
                             $variantId = $variants[0]['id'];
                         }
+                    } else {
+                        Log::warning('designer: admin product fetch failed', ['status'=>$resp->status(),'body'=>$resp->body()]);
                     }
                 }
             } catch (\Throwable $e) {
@@ -90,7 +93,7 @@ class ShopifyCartController extends Controller
             try {
                 $data = preg_replace('/^data:image\/\w+;base64,/', '', $validated['preview_data']);
                 $data = str_replace(' ', '+', $data);
-                $file = 'preview_' . Str::random(8) . '.png';
+                $file = 'preview_' . Str::random(10) . '.png';
                 $dir = public_path('previews');
                 if (!is_dir($dir)) mkdir($dir, 0755, true);
                 file_put_contents($dir . '/' . $file, base64_decode($data));
@@ -100,88 +103,63 @@ class ShopifyCartController extends Controller
             }
         }
 
-        // Build line item custom attributes
-        $customAttrs = [
-            ['key' => 'Name', 'value' => $validated['name_text'] ?? ''],
-            ['key' => 'Number', 'value' => $validated['number_text'] ?? ''],
-            ['key' => 'Font', 'value' => $validated['font'] ?? ''],
-            ['key' => 'Color', 'value' => $validated['color'] ?? ''],
-            ['key' => 'PreviewUrl', 'value' => $previewUrl ?? ''],
+        // Build customization as a JSON/string to attach as a line item property
+        $customization = [
+            'name' => $validated['name_text'] ?? '',
+            'number' => $validated['number_text'] ?? '',
+            'font' => $validated['selected_font'] ?? ($validated['font'] ?? ''),
+            'color' => $validated['text_color'] ?? ($validated['color'] ?? ''),
+            'preview_url' => $previewUrl ?? '',
         ];
 
-        // ---------------- Storefront GraphQL: create checkout ----------------
+        // ---------------- ADMIN Draft Order (recommended) ----------------
         $shop = env('SHOPIFY_STORE');
-        $storefrontToken = env('SHOPIFY_STOREFRONT_TOKEN');
+        $token = env('SHOPIFY_ADMIN_API_TOKEN');
 
-        if (empty($shop) || empty($storefrontToken)) {
-            Log::error('designer: storefront token or shop missing');
-            return back()->withErrors(['shopify' => 'Storefront token or shop config missing.']);
+        if (empty($shop) || empty($token)) {
+            Log::error('designer: shopify admin credentials missing');
+            return back()->withErrors(['shopify' => 'Shopify admin config missing.']);
         }
 
-        // Convert numeric variant ID to gid format for Storefront API
-        $variantGid = 'gid://shopify/ProductVariant/' . (string)$variantId;
-
-        $mutation = <<<'GRAPHQL'
-mutation checkoutCreate($input: CheckoutCreateInput!) {
-  checkoutCreate(input: $input) {
-    checkout {
-      id
-      webUrl
-    }
-    userErrors {
-      field
-      message
-    }
-  }
-}
-GRAPHQL;
-
-        $lineItem = [
-            'variantId' => $variantGid,
-            'quantity'  => (int)$quantity,
-            // customAttributes as key/value pairs
-            'customAttributes' => array_map(function($a){
-                return ['key'=>$a['key'], 'value'=>$a['value']];
-            }, $customAttrs),
-        ];
-
-        $variables = [
-            'input' => [
-                'lineItems' => [$lineItem],
-                // optionally set shippingAddress, note, or attributes global to checkout
-            ],
+        $payload = [
+            'draft_order' => [
+                'line_items' => [[
+                    'variant_id' => (int) $variantId,
+                    'quantity'   => (int) $quantity,
+                    // Shopify draft order properties -> use properties array of name/value
+                    'properties' => [
+                        ['name' => 'Customization', 'value' => json_encode($customization)],
+                    ],
+                ]],
+                // optionally set note, shipping_address, applied_discount, use_customer_default_address...
+                'use_customer_default_address' => true
+            ]
         ];
 
         try {
-            $endpoint = "https://{$shop}/api/2024-10/graphql.json";
-            $resp = Http::withHeaders([
-                'X-Shopify-Storefront-Access-Token' => $storefrontToken,
-                'Content-Type' => 'application/json',
-            ])->post($endpoint, [
-                'query' => $mutation,
-                'variables' => $variables,
-            ]);
+            $response = Http::withHeaders([
+                'X-Shopify-Access-Token' => $token,
+                'Content-Type' => 'application/json'
+            ])->post("https://{$shop}/admin/api/2025-01/draft_orders.json", $payload);
 
-            if (!$resp->successful()) {
-                Log::error('designer: checkoutCreate_failed', ['status'=>$resp->status(), 'body'=>$resp->body()]);
-                return back()->withErrors(['shopify' => 'Failed to create checkout (storefront API).']);
+            if (!$response->successful()) {
+                Log::error('designer: draft_order_failed', ['status'=>$response->status(), 'body'=>$response->body()]);
+                return back()->withErrors(['shopify' => 'Failed to create draft order (admin API).']);
             }
 
-            $data = $resp->json();
-            $webUrl = data_get($data, 'data.checkoutCreate.checkout.webUrl');
-
-            if (empty($webUrl)) {
-                Log::error('designer: checkoutCreate_no_weburl', ['body'=>$resp->body()]);
-                return back()->withErrors(['shopify' => 'Checkout created but no webUrl returned.']);
+            $draft = $response->json('draft_order') ?? null;
+            if (empty($draft) || empty($draft['invoice_url'])) {
+                Log::error('designer: draft_no_invoice', ['body'=>$response->body()]);
+                return back()->withErrors(['shopify' => 'Draft order created but invoice URL not returned.']);
             }
 
-            // success: redirect user to checkout webUrl (Shopify checkout)
-            Log::info('designer: redirecting to checkout webUrl', ['webUrl'=>$webUrl]);
-            return redirect()->away($webUrl);
+            Log::info('designer: draft_created', ['draft_id'=>$draft['id'] ?? null, 'invoice'=>$draft['invoice_url'] ?? null]);
 
+            // Redirect the customer to Shopify's invoice/checkout page
+            return redirect()->away($draft['invoice_url']);
         } catch (\Throwable $e) {
-            Log::error('designer: checkoutCreate_exception', ['err'=>$e->getMessage()]);
-            return back()->withErrors(['shopify' => 'Checkout creation failed.']);
+            Log::error('designer: draft_order_exception', ['err'=>$e->getMessage()]);
+            return back()->withErrors(['shopify' => 'Failed to create draft order.']);
         }
     }
 }
