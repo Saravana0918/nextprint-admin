@@ -194,4 +194,22 @@ GRAPHQL;
             return back()->withErrors(['shopify' => 'Checkout creation failed.']);
         }
     }
+
+    public function uploadPreview(Request $request)
+{
+    $request->validate(['preview_data' => 'required|string']);
+    try {
+        $data = preg_replace('/^data:image\/\w+;base64,/', '', $request->input('preview_data'));
+        $data = str_replace(' ', '+', $data);
+        $file = 'preview_' . \Illuminate\Support\Str::random(8) . '.png';
+        $dir = public_path('previews');
+        if (!is_dir($dir)) mkdir($dir, 0755, true);
+        file_put_contents($dir . '/' . $file, base64_decode($data));
+        $url = url('previews/' . $file);
+        return response()->json(['url' => $url], 200);
+    } catch (\Throwable $e) {
+        \Log::error('designer: upload_preview_failed', ['err' => $e->getMessage()]);
+        return response()->json(['error' => 'Upload failed'], 500);
+    }
+}
 }
