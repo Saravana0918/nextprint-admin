@@ -20,11 +20,12 @@
     .np-overlay { position:absolute; color:#D4AF37; font-weight:700; text-transform:uppercase; letter-spacing:2px; white-space:nowrap; text-shadow:0 2px 6px rgba(0,0,0,0.35); display:flex; align-items:center; justify-content:center; pointer-events:none; }
 
     .np-swatch { width:28px; height:28px; border-radius:50%; border:1px solid #ccc; cursor:pointer; display:inline-block; }
+    .np-swatch.active { outline: 2px solid rgba(0,0,0,0.08); box-shadow: 0 2px 6px rgba(0,0,0,0.06); }
     .max-count{ display:none; }
 
     /* ---------- Desktop layout: icons + panels (panels positioned beside icons) ---------- */
     .vertical-tabs { display:flex; gap:12px; align-items:flex-start; }
-    .vt-icons { display:flex; flex-direction:column; gap:104px; flex:0 0 56px; align-items:center; padding-top:6px; }
+    .vt-icons { display:flex; flex-direction:column; gap:22px; flex:0 0 56px; align-items:center; padding-top:6px; }
     .vt-btn { display:flex; align-items:center; justify-content:center; width:56px; height:56px; border-radius:8px; border:1px solid #e6e6e6; background:#fff; cursor:pointer; }
     .vt-btn .vt-ico { font-size:18px; line-height:1; }
     .vt-btn.active { background:#f5f7fb; box-shadow:0 6px 18px rgba(10,20,40,0.04); border-color:#dbe7ff; }
@@ -34,16 +35,19 @@
     .vt-panels { flex:1 1 auto; min-width:0; position: relative; }
     .vt-panel {
       position: absolute;
-      left: 72px;                /* place to the right of icons column */
-      width: calc(100% - 72px);
+      left: 10px;                      /* place to the right of icons column */
+      width: calc(100% - 10px);        /* leave some space */
       display: none;
       opacity: 0;
       transform-origin: top;
       transition: opacity 200ms ease, transform 200ms ease;
       box-sizing: border-box;
       z-index: 20;
-      background: transparent;
-      padding: 6px 6px;
+      background: #ffffff;             /* make panel visually inside a box */
+      padding: 12px;                   /* ensure swatches stay inside */
+      border-radius: 8px;
+      border: 1px solid #eef3fb;
+      box-shadow: 0 6px 18px rgba(12,24,64,0.04);
     }
     .vt-panel.active { display: block; opacity: 1; transform: translateY(0); }
 
@@ -55,6 +59,9 @@
       min-height: 40px;
     }
 
+    /* ensure swatches block stays inside the panel and is placed nicely */
+    .vt-panel .swatches-wrap { margin-top: 8px; display:block; }
+
     /* small screens: revert to stacked flow (mobile rules unchanged) */
     @media (max-width: 767px) {
       .vertical-tabs { display:block; }
@@ -62,7 +69,8 @@
       .vt-btn { width:40px; height:40px; }
       /* On mobile, panels should behave as normal block elements (flow) */
       .vt-panels { position: static; }
-      .vt-panel { position: static; left: auto; width: 100%; display: block !important; opacity:1 !important; transform:none !important; padding: 8px 0; background: transparent; }
+      .vt-panel { position: static; left: auto; width: 100%; display: block !important; opacity:1 !important; transform:none !important; padding: 8px 0; background: transparent; border: none; box-shadow: none; }
+      .col-md-3.np-col > #np-controls { min-height: auto; padding: 12px !important; }
     }
 
     /* optional styling for the left wrapper */
@@ -135,14 +143,16 @@
             <!-- Color panel -->
             <div id="panel-color" class="vt-panel" role="region" aria-hidden="true">
               <h6>Text Color</h6>
-              <div class="d-flex gap-2 flex-wrap mb-2">
-                <button type="button" class="np-swatch" data-color="#FFFFFF" style="background:#FFFFFF"></button>
-                <button type="button" class="np-swatch" data-color="#000000" style="background:#000000"></button>
-                <button type="button" class="np-swatch" data-color="#FFD700" style="background:#FFD700"></button>
-                <button type="button" class="np-swatch" data-color="#FF0000" style="background:#FF0000"></button>
-                <button type="button" class="np-swatch" data-color="#1E90FF" style="background:#1E90FF"></button>
+              <div class="swatches-wrap">
+                <div class="d-flex gap-2 flex-wrap mb-2">
+                  <button type="button" class="np-swatch" data-color="#FFFFFF" style="background:#FFFFFF"></button>
+                  <button type="button" class="np-swatch" data-color="#000000" style="background:#000000"></button>
+                  <button type="button" class="np-swatch" data-color="#FFD700" style="background:#FFD700"></button>
+                  <button type="button" class="np-swatch" data-color="#FF0000" style="background:#FF0000"></button>
+                  <button type="button" class="np-swatch" data-color="#1E90FF" style="background:#1E90FF"></button>
+                </div>
+                <input id="np-color" type="color" class="form-control form-control-color" value="#D4AF37">
               </div>
-              <input id="np-color" type="color" class="form-control form-control-color" value="#D4AF37">
             </div>
           </div> <!-- vt-panels -->
         </div> <!-- vertical-tabs -->
@@ -227,12 +237,10 @@
       const btnRect = btn.getBoundingClientRect();
       const containerRect = panelsContainer.getBoundingClientRect();
       // calculate top offset inside panelsContainer (so top aligns with button center)
-      const top = (btnRect.top - containerRect.top) + (btnRect.height/2) - 24; // 24px adjustment for small header
-      // clamp top to be >= 0
+      const top = (btnRect.top - containerRect.top) + (btnRect.height/2) - 24;
       const topClamped = Math.max(6, Math.round(top));
       panel.style.top = topClamped + 'px';
     } else {
-      // mobile: make sure it flows
       panel.style.top = '';
     }
 
@@ -251,15 +259,12 @@
   document.addEventListener('click', (e)=>{
     if (window.innerWidth <= 767) return; // mobile ignore
     const controls = document.getElementById('np-controls');
-    if (!controls.contains(e.target)) {
-      closeAll();
-    }
+    if (!controls.contains(e.target)) closeAll();
   });
 
   // on resize: if mobile, ensure panels flow; if desktop, close all for consistent state
   window.addEventListener('resize', ()=>{
     if (window.innerWidth <= 767) {
-      // ensure panels visible (mobile)
       panels.forEach(p => { p.classList.add('active'); p.setAttribute('aria-hidden','false'); p.style.top=''; });
     } else {
       closeAll();
