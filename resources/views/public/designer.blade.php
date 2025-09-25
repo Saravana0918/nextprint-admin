@@ -18,6 +18,24 @@
 .np-overlay { position:absolute; color:#D4AF37; text-shadow: 0 2px 6px rgba(0,0,0,0.35); white-space:nowrap; pointer-events:none; font-weight:700; text-transform:uppercase; letter-spacing:2px; display:flex; align-items:center; justify-content:center; user-select:none; line-height:1; }
 .np-swatch { width:28px; height:28px; border-radius:50%; border:1px solid #ccc; cursor:pointer; display:inline-block; }
 .max-count{ display:none; }
+.vertical-tabs { display:flex; gap:12px; align-items:flex-start; }
+.vt-icons { display:flex; flex-direction:column; gap:10px; flex:0 0 56px; }
+.vt-btn { display:flex; align-items:center; justify-content:center; width:56px; height:56px; border-radius:8px; border:1px solid #e6e6e6; background:#fff; cursor:pointer; transition: all 140ms ease; }
+.vt-btn .vt-ico { font-size:18px; display:inline-block; line-height:1; }
+.vt-btn.active { background:#f5f7fb; box-shadow:0 6px 18px rgba(10,20,40,0.04); border-color:#dbe7ff; transform: translateX(0); }
+.vt-btn:focus { outline: none; box-shadow: 0 0 0 3px rgba(100,150,255,0.12); }
+
+/* panels */
+.vt-panels { flex:1 1 auto; min-width:0; }
+.vt-panel { display:none; transition: opacity 160ms ease; opacity:0; }
+.vt-panel.active { display:block; opacity:1; }
+
+/* small screens: keep icons small & stacked (we won't change mobile behavior) */
+@media (max-width: 767px) {
+  .vertical-tabs { display:block; }
+  .vt-icons { display:flex; flex-direction:row; gap:8px; margin-bottom:8px; }
+  .vt-btn { width:40px; height:40px; }
+}
 
 /* ===== MOBILE-ONLY STYLES (paste inside your <style>) ===== */
 @media (max-width: 767px) {
@@ -205,34 +223,55 @@
     </div>
 
     <div class="col-md-3 np-col order-2 order-md-1">
-      <div class="border rounded p-3">
-        <h6 class="mb-3 mobile-display">Customize</h6>
-        <div id="np-status" class="small text-muted mb-2 mobile-display">Checking methods…</div>
-        <div id="np-note" class="small text-muted mb-3 d-none">Personalization not available for this product.</div>
+  <div id="np-controls" class="border rounded p-3"> <!-- keep id np-controls so existing code finds it -->
+    <!-- Vertical icon tabs -->
+    <div class="vertical-tabs">
+      <nav class="vt-icons" role="tablist" aria-orientation="vertical">
+        <button class="vt-btn active" data-panel="panel-number" aria-controls="panel-number" title="Number" aria-selected="true">
+          <span class="vt-ico">①</span>
+        </button>
+        <button class="vt-btn" data-panel="panel-name" aria-controls="panel-name" title="Name">
+          <span class="vt-ico">②</span>
+        </button>
+        <button class="vt-btn" data-panel="panel-font" aria-controls="panel-font" title="Font">
+          <span class="vt-ico">𝙰</span>
+        </button>
+        <button class="vt-btn" data-panel="panel-color" aria-controls="panel-color" title="Color">
+          <span class="vt-ico">⚪</span>
+        </button>
+      </nav>
 
-        <div id="np-controls" class="np-hidden">
-          <div class="mb-3 np-field-wrap">
-            <div class="np-field-wrap number-input">
-              <input id="np-num" type="text" inputmode="numeric" maxlength="3"
-                    class="form-control" placeholder="Your Number" autocomplete="off">
-              <span class="max-count">MAX. 2</span>
-            </div>
-            <div id="np-num-help mobile-display" class="form-text">Digits only. 1–3 digits.</div>
+      <!-- panels container -->
+      <div class="vt-panels">
+        <!-- Number panel -->
+        <div id="panel-number" class="vt-panel active" role="tabpanel" aria-hidden="false">
+          <h6 class="mb-2">Number</h6>
+          <div class="mb-3 np-field-wrap number-input">
+            <input id="np-num" type="text" inputmode="numeric" maxlength="3"
+                  class="form-control" placeholder="Your Number" autocomplete="off">
+            <span class="max-count">MAX. 2</span>
+            <div id="np-num-help" class="form-text small text-muted">Digits only. 1–3 digits.</div>
             <div id="np-num-err" class="text-danger small d-none">Enter 1–3 digits only.</div>
           </div>
+        </div>
 
-          <div class="mb-3 np-field-wrap">
-            <div class="np-field-wrap name-input">
-              <input id="np-name" type="text" maxlength="12"
-                    class="form-control" placeholder="YOUR NAME" autocomplete="off">
-              <span class="max-count">MAX. 11</span>
-            </div>
-            <div id="np-name-help mobile-display" class="form-text">Only A–Z and spaces. 1–12 chars.</div>
+        <!-- Name panel -->
+        <div id="panel-name" class="vt-panel" role="tabpanel" aria-hidden="true">
+          <h6 class="mb-2">Name</h6>
+          <div class="mb-3 np-field-wrap name-input">
+            <input id="np-name" type="text" maxlength="12"
+                  class="form-control" placeholder="YOUR NAME" autocomplete="off">
+            <span class="max-count">MAX. 11</span>
+            <div id="np-name-help" class="form-text small text-muted">Only A–Z and spaces. 1–12 chars.</div>
             <div id="np-name-err" class="text-danger small d-none">Enter 1–12 letters/spaces only.</div>
           </div>
+        </div>
 
+        <!-- Font panel -->
+        <div id="panel-font" class="vt-panel" role="tabpanel" aria-hidden="true">
+          <h6 class="mb-2">Font</h6>
           <div class="mb-3">
-            <label class="form-label font-label color-display">Font</label>
+            <label class="form-label font-label">Font</label>
             <select id="np-font" class="form-select">
               <option value="bebas">Bebas Neue (Bold)</option>
               <option value="anton">Anton</option>
@@ -240,9 +279,12 @@
               <option value="impact">Impact</option>
             </select>
           </div>
+        </div>
 
+        <!-- Color panel -->
+        <div id="panel-color" class="vt-panel" role="tabpanel" aria-hidden="true">
+          <h6 class="mb-2">Text Color</h6>
           <div class="mb-2">
-            <label class="form-label d-block color-label color-display">Text Color</label>
             <div class="d-flex gap-2 flex-wrap mb-2">
               <button type="button" class="np-swatch" data-color="#FFFFFF" style="background:#FFFFFF"></button>
               <button type="button" class="np-swatch" data-color="#000000" style="background:#000000"></button>
@@ -255,6 +297,8 @@
         </div>
       </div>
     </div>
+  </div>
+</div>
 
     <div class="col-md-3 np-col order-3 order-md-3">
       <h4 class="mb-1 mobile-display">{{ $product->name ?? ($product->title ?? 'Product') }}</h4>
@@ -306,6 +350,39 @@
 
 {{-- core preview + UI JS (validation + preview layout) --}}
 <script>
+(function(){
+  const tabButtons = document.querySelectorAll('.vt-btn');
+  const panels = document.querySelectorAll('.vt-panel');
+
+  function activatePanel(panelId, btn){
+    tabButtons.forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    panels.forEach(p => {
+      if (p.id === panelId) {
+        p.classList.add('active');
+        p.setAttribute('aria-hidden','false');
+      } else {
+        p.classList.remove('active');
+        p.setAttribute('aria-hidden','true');
+      }
+    });
+  }
+
+  tabButtons.forEach(btn => {
+    btn.addEventListener('click', function(e){
+      const panel = this.dataset.panel;
+      activatePanel(panel, this);
+      // focus first input/select inside panel for keyboard
+      const firstInput = document.getElementById(panel)?.querySelector('input,select,textarea,button');
+      if (firstInput) firstInput.focus({preventScroll:true});
+    });
+  });
+
+  // default: ensure first active is visible
+  const first = document.querySelector('.vt-btn.active');
+  if (first) activatePanel(first.dataset.panel, first);
+})();
+
 (function(){
   const $ = id => document.getElementById(id);
 
