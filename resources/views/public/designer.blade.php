@@ -18,13 +18,82 @@
     .np-swatch { width:28px; height:28px; border-radius:50%; border:1px solid #ccc; cursor:pointer; display:inline-block; }
     .max-count{ display:none; }
 
-    @media (max-width: 767px) {
-      body { background-image: url('/images/stadium-bg.jpg'); background-size: cover; background-position: center; min-height:100vh; }
-      .np-stage { max-width:340px; margin:0 auto; background:#fff; padding:10px; border-radius:10px; }
-      .np-field-wrap input.form-control { background: transparent; border: none; border-bottom: 2px solid rgba(255,255,255,0.65); color:#fff; text-align:center; font-weight:700; text-transform:uppercase; letter-spacing:2px; font-size:18px; padding:12px 8px; border-radius:0; }
-      .form-select { background:#fff; color:#222; border-radius:8px; margin-bottom:16px; }
-      #np-atc-btn { display:block !important; width:100% !important; font-size:16px !important; padding:12px 14px !important; margin-top:10px; }
-    }
+    /* ===== MOBILE: body background + full-page dark overlay (ONLY on small screens) ===== */
+@media (max-width: 767px) {
+  /* Apply stadium background to body (covers entire viewport) */
+  body {
+    background-image: url('/images/stadium-bg.jpg'); /* change path if needed */
+    background-size: cover;
+    background-position: center center;
+    background-repeat: no-repeat;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    position: relative; /* keep stacking context predictable */
+  }
+
+  /* Fullscreen translucent overlay above the body background to darken it */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0; /* top:0; right:0; bottom:0; left:0; */
+    background: rgba(0,0,0,0.32); /* tweak opacity 0.15-0.45 as needed */
+    z-index: 5; /* low z so page UI can appear above it */
+    pointer-events: none;
+  }
+
+  /* Ensure main container content sits above the body overlay */
+  .container, .row, .np-stage, header, main, footer {
+    position: relative;
+    z-index: 10; /* above body overlay */
+  }
+
+  /* Stage specific layering: base image below its own overlay, but above body overlay */
+  .np-stage { z-index: 12; }                 /* stage above body overlay */
+  .np-stage img#np-base { z-index: 14; position: relative; display:block; width:100%; height:auto; border-radius:6px; }
+
+  /* dark translucent overlay ON TOP of the base image (so text is readable) */
+  .np-stage::after {
+    content: "";
+    position: absolute;
+    left: 0; right: 0; top: 0; bottom: 0;
+    background: rgba(0,0,0,0.22); /* overlay on the image itself */
+    z-index: 16;
+    pointer-events: none;
+    border-radius: 6px;
+  }
+
+  /* Title / mobile head and preview text must be above all overlays */
+  .np-mobile-head { position: absolute; z-index: 20; pointer-events: none; color: #fff; text-shadow: 0 2px 8px rgba(0,0,0,0.7); left: 8px; right: 8px; top: 8px; }
+  #np-prev-name, #np-prev-num { position: absolute; z-index: 22; pointer-events: none; color: #fff; text-shadow: 0 2px 8px rgba(0,0,0,0.7); }
+
+  /* Center overlays on mobile */
+  #np-prev-name, #np-prev-num {
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    width: 90% !important;
+    text-align: center !important;
+  }
+
+  /* Keep only minimal controls visible on mobile — hide elements flagged as hide-on-mobile */
+  .hide-on-mobile { display: none !important; }
+
+  /* Make inputs legible on top of tinted bg */
+  .np-field-wrap input.form-control,
+  .form-select,
+  input.form-control.form-control-color {
+    background: rgba(255,255,255,0.06);
+    border: none;
+    border-bottom: 2px solid rgba(255,255,255,0.25);
+    color: #fff;
+  }
+
+  /* Buttons and small text */
+  #np-atc-btn { display:block !important; z-index: 30; }
+  .small-delivery { color: rgba(255,255,255,0.95); z-index: 30; }
+
+  /* prevent body background from interfering with desktop (keeps change strictly mobile) */
+}
+
   </style>
 </head>
 <body class="py-4">
