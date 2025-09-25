@@ -17,17 +17,53 @@
 .np-stage img { width: 100%; height: auto; display:block; border-radius:6px; }
 .np-overlay { position:absolute; color:#D4AF37; text-shadow: 0 2px 6px rgba(0,0,0,0.35); white-space:nowrap; pointer-events:none; font-weight:700; text-transform:uppercase; letter-spacing:2px; display:flex; align-items:center; justify-content:center; user-select:none; line-height:1; }
 .np-swatch { width:28px; height:28px; border-radius:50%; border:1px solid #ccc; cursor:pointer; display:inline-block; }
+.col-md-3.np-col > #np-controls {
+  min-height: 520px;
+  display:flex;
+  align-items:flex-start;
+  padding: 18px !important;
+  box-sizing: border-box;
+}
 .max-count{ display:none; }
-.vertical-tabs { display:flex; gap:12px; align-items:flex-start; }
-.vt-icons { display:flex; flex-direction:column; gap:10px; flex:0 0 56px; }
-.vt-btn { display:flex; align-items:center; justify-content:center; width:56px; height:56px; border-radius:8px; border:1px solid #e6e6e6; background:#fff; cursor:pointer; transition: all 140ms ease; }
+.vertical-tabs { 
+  display:flex; 
+  gap:18px; 
+  align-items:flex-start; 
+  width:100%; 
+  min-height: 520px;  /* overall height */
+}
+.vt-icons {
+  flex: 0 0 68px;
+  display:flex;
+  flex-direction:column;
+  gap:18px;
+  align-items:center;
+  padding-top:8px;
+}
+.vt-btn {
+  width:68px;
+  height:68px;
+  border-radius:10px;
+  font-size:18px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
 .vt-btn .vt-ico { font-size:18px; display:inline-block; line-height:1; }
 .vt-btn.active { background:#f5f7fb; box-shadow:0 6px 18px rgba(10,20,40,0.04); border-color:#dbe7ff; transform: translateX(0); }
 .vt-btn:focus { outline: none; box-shadow: 0 0 0 3px rgba(100,150,255,0.12); }
-
+.vt-panel .np-field-wrap { margin-bottom: 16px; }
+.vt-panel .np-field-wrap input.form-control,
+.vt-panel .np-field-wrap select.form-select,
+.vt-panel .form-control-color { min-height:44px; }
 /* panels */
-.vt-panels { flex:1 1 auto; min-width:0; }
-.vt-panel { display:none; transition: opacity 160ms ease; opacity:0; }
+.vt-panels {
+  flex:1 1 auto;
+  padding-left:10px;
+  min-height: 440px;  /* inside panel height */
+}
+.vt-panel { padding: 10px 8px; }
+.vt-panel h6 { margin-bottom:12px; font-size:15px; font-weight:600; }
 .vt-panel.active { display:block; opacity:1; }
 
 /* small screens: keep icons small & stacked (we won't change mobile behavior) */
