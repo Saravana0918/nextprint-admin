@@ -18,13 +18,40 @@
     .np-swatch { width:28px; height:28px; border-radius:50%; border:1px solid #ccc; cursor:pointer; display:inline-block; }
     .max-count{ display:none; }
 
-    @media (max-width: 767px) {
-      body { background-image: url('/images/stadium-bg.jpg'); background-size: cover; background-position: center; min-height:100vh; }
-      .np-stage { max-width:340px; margin:0 auto; background:#fff; padding:10px; border-radius:10px; }
-      .np-field-wrap input.form-control { background: transparent; border: none; border-bottom: 2px solid rgba(255,255,255,0.65); color:#fff; text-align:center; font-weight:700; text-transform:uppercase; letter-spacing:2px; font-size:18px; padding:12px 8px; border-radius:0; }
-      .form-select { background:#fff; color:#222; border-radius:8px; margin-bottom:16px; }
-      #np-atc-btn { display:block !important; width:100% !important; font-size:16px !important; padding:12px 14px !important; margin-top:10px; }
-    }
+    /* --- body stadium overlay (mobile only) --- */
+body {
+  /* keep your existing background rule or repeat it */
+  background-image: url('/images/stadium-bg.jpg');
+  background-size: cover;
+  background-position: center;
+  min-height: 100vh;
+
+  /* ensure stacking context for the pseudo element */
+  position: relative;
+  z-index: 0;
+}
+
+/* overlay on top of body background but below page UI */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0; /* top:0; right:0; bottom:0; left:0; */
+  background: rgba(0,0,0,0.32); /* tweak opacity 0.22 - 0.40 as needed */
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* lift the page UI above the body overlay */
+.container, .row, .np-stage, header, main, footer {
+  position: relative;
+  z-index: 2;
+}
+
+/* keep stage image + overlays above everything */
+.np-stage { z-index: 3; }
+.np-stage img#np-base { z-index: 4; position: relative; }
+#np-prev-name, #np-prev-num, .np-mobile-head { z-index: 5; pointer-events: none; }
+
   </style>
 </head>
 <body class="py-4">
