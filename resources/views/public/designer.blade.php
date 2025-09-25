@@ -7,76 +7,72 @@
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Oswald:wght@400;600&display=swap" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
-    .np-hidden { display: none !important; }
-    .font-bebas{font-family:'Bebas Neue', Impact, 'Arial Black', sans-serif;}
-    .font-anton{font-family:'Anton', Impact, 'Arial Black', sans-serif;}
-    .font-oswald{font-family:'Oswald', Arial, sans-serif;}
-    .font-impact{font-family:Impact, 'Arial Black', sans-serif;}
-    .np-stage { position: relative; width: 100%; max-width: 534px; margin: 0 auto; min-height: 220px; overflow: visible; background: #fff; border-radius:8px; padding:8px; }
-    .np-stage img { width: 100%; height: auto; display:block; border-radius:6px; }
-    .np-overlay { position:absolute; color:#D4AF37; text-shadow: 0 2px 6px rgba(0,0,0,0.35); white-space:nowrap; pointer-events:none; font-weight:700; text-transform:uppercase; letter-spacing:2px; display:flex; align-items:center; justify-content:center; user-select:none; line-height:1; }
-    .np-swatch { width:28px; height:28px; border-radius:50%; border:1px solid #ccc; cursor:pointer; display:inline-block; }
-    .max-count{ display:none; }
+    /* base (desktop-safe) */
+.np-hidden { display: none !important; }
+.font-bebas{font-family:'Bebas Neue', Impact, 'Arial Black', sans-serif;}
+.font-anton{font-family:'Anton', Impact, 'Arial Black', sans-serif;}
+.font-oswald{font-family:'Oswald', Arial, sans-serif;}
+.font-impact{font-family:Impact, 'Arial Black', sans-serif;}
+.np-stage { position: relative; width: 100%; max-width: 534px; margin: 0 auto; min-height: 220px; overflow: visible; background: #fff; border-radius:8px; padding:8px; }
+.np-stage img { width: 100%; height: auto; display:block; border-radius:6px; }
+.np-overlay { position:absolute; color:#D4AF37; text-shadow: 0 2px 6px rgba(0,0,0,0.35); white-space:nowrap; pointer-events:none; font-weight:700; text-transform:uppercase; letter-spacing:2px; display:flex; align-items:center; justify-content:center; user-select:none; line-height:1; }
+.np-swatch { width:28px; height:28px; border-radius:50%; border:1px solid #ccc; cursor:pointer; display:inline-block; }
+.max-count{ display:none; }
+
+/* === MOBILE ONLY === */
 @media (max-width: 767px) {
-    /* --- body stadium overlay (mobile only) --- */
-body {
-  /* keep your existing background rule or repeat it */
-  background-image: url('/images/stadium-bg.jpg');
-  background-size: cover;
-  background-position: center;
-  min-height: 100vh;
-
-  /* ensure stacking context for the pseudo element */
-  position: relative;
-  z-index: 0;
-}
-
-/* overlay on top of body background but below page UI */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0; /* top:0; right:0; bottom:0; left:0; */
-  background: rgba(0,0,0,0.32); /* tweak opacity 0.22 - 0.40 as needed */
-  z-index: 1;
-  pointer-events: none;
-}
- .np-field-wrap.number-input {
-    position: relative;
-    text-align: center;
-    margin: 20px 0;
+  /* Body stadium background + full-screen tint (below UI) */
+  body {
+    background-image: url('/images/stadium-bg.jpg'); /* update path if needed */
+    background-size: cover;
+    background-position: center center;
+    background-repeat: no-repeat;
+    min-height: 100vh;
+    position: relative; /* stacking context for pseudo */
+  }
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.32); /* tweak 0.22 - 0.36 if too dark/light */
+    z-index: 5;
+    pointer-events: none;
   }
 
-  .np-field-wrap.number-input input.form-control {
-    background: transparent;
+  /* ensure page UI sits above body tint */
+  .container, .row, .np-stage, header, main, footer { position: relative; z-index: 10; }
+
+  /* NP stage frame (visible border around tshirt) */
+  .np-stage { z-index: 12; background: transparent; padding: 8px; box-sizing: border-box; position: relative; }
+  .np-stage .np-image-frame { position: relative; background: rgba(255,255,255,0.02); border-radius:10px; padding:10px; border:3px solid rgba(255,255,255,0.12); box-shadow:0 6px 20px rgba(0,0,0,0.45); overflow:hidden; }
+  .np-stage img#np-base { display:block; width:100%; height:auto; border-radius:6px; position: relative; z-index: 14; background-color:#f6f6f6; }
+  .np-stage .np-image-frame::after { content:""; position:absolute; inset:0; background: rgba(0,0,0,0.06); z-index:15; pointer-events:none; border-radius:8px; }
+
+  /* mobile title overlay (ensure visible) */
+  .np-mobile-head { display:block !important; z-index:22; position:absolute; top:10px; left:12px; right:12px; color:#fff; pointer-events:none; text-shadow:0 3px 8px rgba(0,0,0,0.7); }
+
+  /* center overlays by default */
+  #np-prev-name, #np-prev-num { z-index:24; position:absolute; left:50% !important; transform:translateX(-50%) !important; width:90% !important; text-align:center !important; color:#fff; text-shadow:0 3px 8px rgba(0,0,0,0.7); pointer-events:none; }
+
+  /* hide desktop-only controls (apply .hide-on-mobile to those blocks) */
+  .hide-on-mobile { display:none !important; }
+
+  /* inputs readability base */
+  .np-field-wrap input.form-control, .form-select, input.form-control.form-control-color {
+    background: rgba(255,255,255,0.03);
     border: none;
-    border-bottom: 2px solid #fff; /* underline */
-    border-radius: 0;
+    border-bottom: 2px solid rgba(255,255,255,0.26);
     color: #fff;
-    font-size: 28px;   /* big number */
-    font-weight: 700;
-    text-align: center;
-    width: 100%;
-    letter-spacing: 2px;
-    padding: 6px 0;
+    font-weight:700;
   }
+  .np-field-wrap .form-text, .small-delivery { color: rgba(255,255,255,0.9); }
 
-  .np-field-wrap.number-input input.form-control::placeholder {
-    color: rgba(255,255,255,0.5);
-    font-weight: 400;
-  }
+  /* Add-to-cart visible */
+  #np-atc-btn { display:block !important; z-index:30; width:100% !important; }
 
-  /* MAX.2 right side */
-  .np-field-wrap.number-input .max-count {
-    display: block;
-    position: absolute;
-    right: 0;
-    bottom: -18px;
-    font-size: 12px;
-    font-weight: 600;
-    color: #fff;
-    opacity: 0.8;
-  }
+  /* ---------- Name & Number input styling (centered, underline + MAX tag) ---------- */
 
+  /* wrapper classes: .np-field-wrap.name-input and .np-field-wrap.number-input should wrap the inputs */
   .np-field-wrap.name-input,
   .np-field-wrap.number-input {
     position: relative;
@@ -88,10 +84,9 @@ body::before {
   .np-field-wrap.number-input input.form-control {
     background: transparent;
     border: none;
-    border-bottom: 2px solid #fff; /* underline only */
+    border-bottom: 2px solid #fff;
     border-radius: 0;
     color: #fff;
-    font-size: 22px;   /* Name slightly smaller */
     font-weight: 700;
     text-align: center;
     width: 100%;
@@ -100,9 +95,9 @@ body::before {
     text-transform: uppercase;
   }
 
-  .np-field-wrap.number-input input.form-control {
-    font-size: 28px; /* bigger for numbers */
-  }
+  /* Name slightly smaller than number */
+  .np-field-wrap.name-input input.form-control { font-size: 22px; }
+  .np-field-wrap.number-input input.form-control { font-size: 28px; }
 
   .np-field-wrap.name-input input.form-control::placeholder,
   .np-field-wrap.number-input input.form-control::placeholder {
@@ -110,38 +105,28 @@ body::before {
     font-weight: 400;
   }
 
-  /* MAX text (right side) */
+  /* MAX label positioned to the right under the input */
   .np-field-wrap.name-input .max-count,
   .np-field-wrap.number-input .max-count {
-    display: block;
+    display:block;
     position: absolute;
     right: 0;
     bottom: -18px;
     font-size: 12px;
-    font-weight: 600;
-    color: #fff;
-    opacity: 0.85;
+    font-weight:600;
+    color:#fff;
+    opacity:0.85;
   }
 
-.mobile-display{
-  display: none;
+  /* Mobile large overlay appearance (apply mobile-style class to overlays via JS) */
+  #np-prev-name.mobile-style { top:18px !important; font-weight:800 !important; font-size: clamp(18px,5.6vw,34px) !important; letter-spacing:1.5px !important; }
+  #np-prev-num.mobile-style  { top:52% !important; transform: translate(-50%,-50%) !important; font-weight:900 !important; font-size: clamp(28px,8.4vw,56px) !important; }
+
+  /* utility */
+  .mobile-display { display:none; } /* if you want specific blocks only for mobile, override to block when needed */
+  .color-display { color:#fff; }
 }
 
-.color-display{
-  color: #fff;
-}
-
-/* lift the page UI above the body overlay */
-.container, .row, .np-stage, header, main, footer {
-  position: relative;
-  z-index: 2;
-}
-
-/* keep stage image + overlays above everything */
-.np-stage { z-index: 3; }
-.np-stage img#np-base { z-index: 4; position: relative; }
-#np-prev-name, #np-prev-num, .np-mobile-head { z-index: 5; pointer-events: none; }
-}
   </style>
 </head>
 <body class="py-4">
