@@ -200,6 +200,31 @@
   .mobile-display { display: none; } /* your elements with mobile-display will show */
   .color-display  { color: #fff; }
 }
+/* MOBILE OVERRIDE - force original full controls on small screens */
+@media (max-width: 767px) {
+
+  /* hide the vertical icon bar on mobile (we want full stacked controls instead) */
+  .vt-icons, .vt-btn { display: none !important; }
+
+  /* show all panels stacked (so Number, Name, Font, Color panels render in order) */
+  .vt-panels { display:block !important; }
+  .vt-panel { display:none !important; opacity:0 !important; }
+  .vt-panel.active { display:block !important; opacity:1 !important; }
+
+  /* adjust padding so the inputs look like your original mobile inputs */
+  .vt-panel .np-field-wrap input.form-control,
+  .vt-panel .np-field-wrap select.form-select,
+  .vt-panel .form-control-color { width: 100%; }
+
+  /* restore the small help text color/visibility (matches your mobile block) */
+  .vt-panel .form-text { color: rgba(255,255,255,0.9); display: none; } /* keep same as original */
+
+  /* ensure the panels take full width of the left column on mobile */
+  .col-md-3.np-col { width: 100% !important; max-width: 100% !important; flex: 0 0 100% !important; }
+
+  /* small tweak: if show/hide logic relies on #np-controls (present) keep it visible */
+   #np-controls { display:block !important; }
+}
 
 
   </style>
