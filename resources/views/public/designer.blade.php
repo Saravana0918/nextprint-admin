@@ -344,7 +344,7 @@
         <input type="hidden" name="preview_data" id="np-preview-hidden">
 
         <div class="mb-3">
-          <label class="form-label">Size</label>
+          <label class="form-label color-display">Size</label>
           <select id="np-size" name="size" class="form-select" required>
             <option value="">Select Size</option>
             <option value="S">S</option>
@@ -356,7 +356,7 @@
         </div>
 
         <div class="mb-3">
-          <label class="form-label">Quantity</label>
+          <label class="form-label color-display">Quantity</label>
           <input id="np-qty" name="quantity" type="number" min="1" value="1" class="form-control">
         </div>
 
@@ -373,83 +373,126 @@
 
 <script>
 /* ---------- Tabs: toggle and align panel next to clicked icon (desktop only) ---------- */
+<script>
 (function(){
-  const buttons = document.querySelectorAll('.vt-btn');
-  const panels = document.querySelectorAll('.vt-panel');
+  const buttons = Array.from(document.querySelectorAll('.vt-btn'));
+  const panels  = Array.from(document.querySelectorAll('.vt-panel'));
   const panelsContainer = document.querySelector('.vt-panels');
 
+  // helper: close all
   function closeAll() {
     buttons.forEach(b => b.classList.remove('active'));
     panels.forEach(p => {
       p.classList.remove('active');
       p.setAttribute('aria-hidden','true');
-      p.style.top = ''; // reset
+      p.style.top = '';
+      // ensure desktop-only absolute positioning hidden
+      if (window.innerWidth > 767) {
+        p.style.display = 'none';
+        p.style.opacity = '0';
+      } else {
+        // on mobile ensure normal flow
+        p.style.display = '';
+        p.style.opacity = '';
+      }
     });
   }
 
+  // open given panel for a button
   function openPanelForButton(btn) {
     const panelId = btn.dataset.panel;
     const panel = document.getElementById(panelId);
     if (!panel) return;
-    // If already open -> close all
+
+    // if already open -> close
     if (panel.classList.contains('active')) {
       closeAll();
       return;
     }
+
     closeAll();
-    // mark active
     btn.classList.add('active');
+
+    // mark active
     panel.classList.add('active');
     panel.setAttribute('aria-hidden','false');
 
-    // On desktop only: compute top offset so panel aligns with button vertically
     if (window.innerWidth > 767) {
-      // get button offsetTop relative to panelsContainer
-      const btnRect = btn.getBoundingClientRect();
-      const containerRect = panelsContainer.getBoundingClientRect();
-      // calculate top offset inside panelsContainer (so top aligns with button center)
-      const top = (btnRect.top - containerRect.top) + (btnRect.height/2) - 24;
-      const topClamped = Math.max(6, Math.round(top));
-      panel.style.top = topClamped + 'px';
+      // Desktop: show as floating panel placed next to icons
+      panel.style.display = 'block';
+      panel.style.opacity = '1';
+
+      // compute top so it aligns with the button vertically (centered)
+      try {
+        const btnRect = btn.getBoundingClientRect();
+        const containerRect = panelsContainer.getBoundingClientRect();
+        // top relative to panelsContainer
+        const top = (btnRect.top - containerRect.top) + (btnRect.height/2) - (panel.offsetHeight/2);
+        const topClamped = Math.max(6, Math.round(top));
+        panel.style.top = topClamped + 'px';
+      } catch (err) {
+        // fallback
+        panel.style.top = '8px';
+      }
     } else {
+      // Mobile: panels are part of flow; ensure displayed normally
+      panel.style.display = '';
+      panel.style.opacity = '';
       panel.style.top = '';
     }
 
-    // focus first focusable element
+    // focus first input for accessibility
     setTimeout(()=> {
       const focusable = panel.querySelector('input,select,button,textarea');
       if (focusable) focusable.focus({preventScroll:true});
-    }, 200);
+    }, 160);
   }
 
+  // Wire up click handlers
   buttons.forEach(btn=>{
-    btn.addEventListener('click', ()=> openPanelForButton(btn));
+    btn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      openPanelForButton(btn);
+    });
   });
 
-  // close panels when clicking outside the controls area (desktop)
+  // click outside => close (desktop only)
   document.addEventListener('click', (e)=>{
     if (window.innerWidth <= 767) return; // mobile ignore
     const controls = document.getElementById('np-controls');
     if (!controls.contains(e.target)) closeAll();
   });
 
-  // on resize: if mobile, ensure panels flow; if desktop, close all for consistent state
-  window.addEventListener('resize', ()=>{
-    if (window.innerWidth <= 767) {
-      panels.forEach(p => { p.classList.add('active'); p.setAttribute('aria-hidden','false'); p.style.top=''; });
-    } else {
-      closeAll();
-    }
-  });
+  // on resize: if mobile -> ensure panels are in flow; if desktop -> close all floating panels
+  let resizeTimer = null;
+  function onResize() {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(()=>{
+      if (window.innerWidth <= 767) {
+        // mobile: ensure all panels visible in flow so user can scroll them
+        panels.forEach(p => {
+          p.style.display = '';
+          p.style.opacity = '';
+          p.style.top = '';
+        });
+      } else {
+        // desktop: hide floating panels to keep clean initial state
+        closeAll();
+      }
+    }, 120);
+  }
+  window.addEventListener('resize', onResize);
 
-  // initial: mobile -> show all, desktop -> closed
+  // initial state: close on desktop, show on mobile
   if (window.innerWidth <= 767) {
-    panels.forEach(p => { p.classList.add('active'); p.setAttribute('aria-hidden','false'); p.style.top=''; });
+    panels.forEach(p => { p.classList.add('active'); p.setAttribute('aria-hidden','false'); p.style.top=''; p.style.display=''; p.style.opacity=''; });
   } else {
     closeAll();
   }
+
 })();
 </script>
+
 
 {{-- core preview + UI JS (validation + preview layout) --}}
 <script>
