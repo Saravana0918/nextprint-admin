@@ -40,7 +40,43 @@ body::before {
   z-index: 1;
   pointer-events: none;
 }
+ .np-field-wrap.number-input {
+    position: relative;
+    text-align: center;
+    margin: 20px 0;
+  }
 
+  .np-field-wrap.number-input input.form-control {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid #fff; /* underline */
+    border-radius: 0;
+    color: #fff;
+    font-size: 28px;   /* big number */
+    font-weight: 700;
+    text-align: center;
+    width: 100%;
+    letter-spacing: 2px;
+    padding: 6px 0;
+  }
+
+  .np-field-wrap.number-input input.form-control::placeholder {
+    color: rgba(255,255,255,0.5);
+    font-weight: 400;
+  }
+
+  /* MAX.2 right side */
+  .np-field-wrap.number-input .max-count {
+    display: block;
+    position: absolute;
+    right: 0;
+    bottom: -18px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #fff;
+    opacity: 0.8;
+  }
+  
 .mobile-display{
   display: none;
 }
@@ -79,14 +115,16 @@ body::before {
     <div class="col-md-3 np-col order-2 order-md-1">
       <div class="border rounded p-3">
         <h6 class="mb-3 mobile-display">Customize</h6>
-        <div id="np-status" class="small text-muted mb-2">Checking methods…</div>
+        <div id="np-status" class="small text-muted mb-2 mobile-display">Checking methods…</div>
         <div id="np-note" class="small text-muted mb-3 d-none">Personalization not available for this product.</div>
 
         <div id="np-controls" class="np-hidden">
           <div class="mb-3 np-field-wrap">
-            <label for="np-num" class="form-label">Your Number</label>
-            <input id="np-num" type="text" inputmode="numeric" maxlength="3" class="form-control" placeholder="Your number" autocomplete="off">
-            <span class="max-count">MAX. 2</span>
+            <div class="np-field-wrap number-input">
+              <input id="np-num" type="text" inputmode="numeric" maxlength="3"
+                    class="form-control" placeholder="11" autocomplete="off">
+              <span class="max-count">MAX. 2</span>
+            </div>
             <div id="np-num-help" class="form-text">Digits only. 1–3 digits.</div>
             <div id="np-num-err" class="text-danger small d-none">Enter 1–3 digits only.</div>
           </div>
