@@ -20,80 +20,118 @@
 
     /* ===== MOBILE: body background + full-page dark overlay (ONLY on small screens) ===== */
 @media (max-width: 767px) {
-  /* Apply stadium background to body (covers entire viewport) */
+
+  /* 1) body background (stadium) - full viewport */
   body {
-    background-image: url('/images/stadium-bg.jpg'); /* change path if needed */
+    background-image: url('/images/stadium-bg.jpg'); /* path check: change if needed */
     background-size: cover;
     background-position: center center;
     background-repeat: no-repeat;
+    min-height: 100vh;
+    position: relative; /* create stacking context */
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    position: relative; /* keep stacking context predictable */
   }
 
-  /* Fullscreen translucent overlay above the body background to darken it */
+  /* 2) body-level translucent tint ABOVE the stadium image but BELOW page content */
   body::before {
     content: "";
     position: fixed;
-    inset: 0; /* top:0; right:0; bottom:0; left:0; */
-    background: rgba(0,0,0,0.32); /* tweak opacity 0.15-0.45 as needed */
-    z-index: 5; /* low z so page UI can appear above it */
+    inset: 0;                       /* top:0; right:0; bottom:0; left:0; */
+    background: rgba(0,0,0,0.34);   /* tweak 0.15 - 0.45 for lighter/darker */
+    z-index: 5;                     /* low z so page UI can be above it */
     pointer-events: none;
   }
 
-  /* Ensure main container content sits above the body overlay */
+  /* 3) ensure main site content is above that tint */
+  /* increase z-index only for the containers that hold UI so they appear above body tint */
   .container, .row, .np-stage, header, main, footer {
     position: relative;
-    z-index: 10; /* above body overlay */
+    z-index: 10;
   }
 
-  /* Stage specific layering: base image below its own overlay, but above body overlay */
-  .np-stage { z-index: 12; }                 /* stage above body overlay */
-  .np-stage img#np-base { z-index: 14; position: relative; display:block; width:100%; height:auto; border-radius:6px; }
+  /* 4) np-stage layering: image sits above body tint.
+        Add an optional LIGHT image-level overlay (if you want image darker) */
+  .np-stage {
+    position: relative;  /* keep this */
+    z-index: 12;         /* sits above body::before */
+    overflow: visible;
+  }
+  .np-stage img#np-base {
+    display:block;
+    width:100%;
+    height:auto;
+    position: relative;
+    z-index: 14;         /* base image on top of stage background */
+    border-radius: 6px;
+  }
 
-  /* dark translucent overlay ON TOP of the base image (so text is readable) */
+  /* optional image-level overlay (keeps text readable over image).
+     IMPORTANT: this overlay must be BELOW text overlays */
   .np-stage::after {
     content: "";
     position: absolute;
-    left: 0; right: 0; top: 0; bottom: 0;
-    background: rgba(0,0,0,0.22); /* overlay on the image itself */
-    z-index: 16;
+    inset: 0;
+    background: rgba(0,0,0,0.18); /* small darkening on the image itself */
+    z-index: 15;                  /* must be lower than text overlays */
     pointer-events: none;
     border-radius: 6px;
   }
 
-  /* Title / mobile head and preview text must be above all overlays */
-  .np-mobile-head { position: absolute; z-index: 20; pointer-events: none; color: #fff; text-shadow: 0 2px 8px rgba(0,0,0,0.7); left: 8px; right: 8px; top: 8px; }
-  #np-prev-name, #np-prev-num { position: absolute; z-index: 22; pointer-events: none; color: #fff; text-shadow: 0 2px 8px rgba(0,0,0,0.7); }
+  /* 5) Make sure previews / text overlays (name/number/title) are ABOVE all overlays */
+  .np-mobile-head {               /* mobile title shown above image */
+    position: absolute;
+    top: 10px;
+    left: 8px;
+    right: 8px;
+    z-index: 20;                  /* above image and overlays */
+    color: #ffffff;
+    text-shadow: 0 3px 8px rgba(0,0,0,0.7);
+    pointer-events: none;
+  }
 
-  /* Center overlays on mobile */
   #np-prev-name, #np-prev-num {
+    position: absolute;
+    z-index: 22;                  /* above .np-stage::after and body::before */
+    pointer-events: none;
+    color: #fff;                  /* ensure white */
+    text-shadow: 0 3px 8px rgba(0,0,0,0.7);
     left: 50% !important;
     transform: translateX(-50%) !important;
     width: 90% !important;
     text-align: center !important;
   }
 
-  /* Keep only minimal controls visible on mobile — hide elements flagged as hide-on-mobile */
+  /* 6) Controls: hide heavy desktop-only controls via class .hide-on-mobile */
   .hide-on-mobile { display: none !important; }
 
-  /* Make inputs legible on top of tinted bg */
+  /* 7) Make input fields readable (light border, white text) */
   .np-field-wrap input.form-control,
   .form-select,
   input.form-control.form-control-color {
-    background: rgba(255,255,255,0.06);
+    background: rgba(255,255,255,0.03); /* faint background */
     border: none;
-    border-bottom: 2px solid rgba(255,255,255,0.25);
-    color: #fff;
+    border-bottom: 2px solid rgba(255,255,255,0.28);
+    color: #ffffff;
+    font-weight: 700;
+    box-shadow: none;
   }
 
-  /* Buttons and small text */
-  #np-atc-btn { display:block !important; z-index: 30; }
-  .small-delivery { color: rgba(255,255,255,0.95); z-index: 30; }
+  /* small helper texts more visible */
+  .np-field-wrap .form-text,
+  .small-delivery {
+    color: rgba(255,255,255,0.9);
+  }
 
-  /* prevent body background from interfering with desktop (keeps change strictly mobile) */
+  /* 8) Add to Cart big & visible */
+  #np-atc-btn {
+    display: block !important;
+    z-index: 30;
+    width: 100% !important;
+  }
+
+  /* 9) Prevent the body tint from affecting desktop (explicit) - unchanged due to media query */
 }
-
   </style>
 </head>
 <body class="py-4">
