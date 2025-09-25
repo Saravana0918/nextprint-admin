@@ -1,4 +1,4 @@
- <!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -6,200 +6,68 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Oswald:wght@400;600&display=swap" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
   <style>
-    /* base (desktop-safe) */
-.np-hidden { display: none !important; }
-.font-bebas{font-family:'Bebas Neue', Impact, 'Arial Black', sans-serif;}
-.font-anton{font-family:'Anton', Impact, 'Arial Black', sans-serif;}
-.font-oswald{font-family:'Oswald', Arial, sans-serif;}
-.font-impact{font-family:Impact, 'Arial Black', sans-serif;}
-.np-stage { position: relative; width: 100%; max-width: 534px; margin: 0 auto; min-height: 220px; overflow: visible; background: #fff; border-radius:8px; padding:8px; }
-.np-stage img { width: 100%; height: auto; display:block; border-radius:6px; }
-.np-overlay { position:absolute; color:#D4AF37; text-shadow: 0 2px 6px rgba(0,0,0,0.35); white-space:nowrap; pointer-events:none; font-weight:700; text-transform:uppercase; letter-spacing:2px; display:flex; align-items:center; justify-content:center; user-select:none; line-height:1; }
-.np-swatch { width:28px; height:28px; border-radius:50%; border:1px solid #ccc; cursor:pointer; display:inline-block; }
-.max-count{ display:none; }
-.vertical-tabs { display:flex; gap:12px; align-items:flex-start; }
-.vt-icons { display:flex; flex-direction:column; gap:10px; flex:0 0 56px; }
-.vt-btn { display:flex; align-items:center; justify-content:center; width:56px; height:56px; border-radius:8px; border:1px solid #e6e6e6; background:#fff; cursor:pointer; transition: all 140ms ease; }
-.vt-btn .vt-ico { font-size:18px; display:inline-block; line-height:1; }
-.vt-btn.active { background:#f5f7fb; box-shadow:0 6px 18px rgba(10,20,40,0.04); border-color:#dbe7ff; transform: translateX(0); }
-.vt-btn:focus { outline: none; box-shadow: 0 0 0 3px rgba(100,150,255,0.12); }
+    /* base fonts */
+    .font-bebas{font-family:'Bebas Neue', Impact, 'Arial Black', sans-serif;}
+    .font-anton{font-family:'Anton', Impact, 'Arial Black', sans-serif;}
+    .font-oswald{font-family:'Oswald', Arial, sans-serif;}
+    .font-impact{font-family:Impact, 'Arial Black', sans-serif;}
 
-/* panels */
-.vt-panels { flex:1 1 auto; min-width:0; }
-.vt-panel { display:none; transition: opacity 160ms ease; opacity:0; }
-.vt-panel.active { display:block; opacity:1; }
+    /* preview stage */
+    .np-stage { position: relative; width: 100%; max-width: 534px; margin: 0 auto; background:#fff; border-radius:8px; padding:8px; min-height: 320px; }
+    .np-stage img { width:100%; height:auto; border-radius:6px; display:block; }
+    .np-overlay { position:absolute; color:#D4AF37; font-weight:700; text-transform:uppercase; letter-spacing:2px; white-space:nowrap; text-shadow:0 2px 6px rgba(0,0,0,0.35); display:flex; align-items:center; justify-content:center; pointer-events:none; }
 
-/* small screens: keep icons small & stacked (we won't change mobile behavior) */
-@media (max-width: 767px) {
-  .vertical-tabs { display:block; }
-  .vt-icons { display:flex; flex-direction:row; gap:8px; margin-bottom:8px; }
-  .vt-btn { width:40px; height:40px; }
-}
+    .np-swatch { width:28px; height:28px; border-radius:50%; border:1px solid #ccc; cursor:pointer; display:inline-block; }
+    .max-count{ display:none; }
 
-/* ===== MOBILE-ONLY STYLES (paste inside your <style>) ===== */
-@media (max-width: 767px) {
+    /* ---------- Desktop layout: icons + panels (panels positioned beside icons) ---------- */
+    .vertical-tabs { display:flex; gap:12px; align-items:flex-start; }
+    .vt-icons { display:flex; flex-direction:column; gap:104px; flex:0 0 56px; align-items:center; padding-top:6px; }
+    .vt-btn { display:flex; align-items:center; justify-content:center; width:56px; height:56px; border-radius:8px; border:1px solid #e6e6e6; background:#fff; cursor:pointer; }
+    .vt-btn .vt-ico { font-size:18px; line-height:1; }
+    .vt-btn.active { background:#f5f7fb; box-shadow:0 6px 18px rgba(10,20,40,0.04); border-color:#dbe7ff; }
+    .vt-btn:focus { outline: none; box-shadow: 0 0 0 3px rgba(100,150,255,0.12); }
 
-  /* 1) body stadium background + full-screen tint (below UI) */
-  body {
-    background-image: url('/images/stadium-bg.jpg'); /* change path if needed */
-    background-size: cover;
-    background-position: center center;
-    background-repeat: no-repeat;
-    min-height: 100vh;
-    position: relative;
-  }
-  body::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.35); /* tweak 0.22-0.36 */
-    z-index: 5;
-    pointer-events: none;
-  }
+    /* panels container is relative; panels absolute (desktop only) */
+    .vt-panels { flex:1 1 auto; min-width:0; position: relative; }
+    .vt-panel {
+      position: absolute;
+      left: 72px;                /* place to the right of icons column */
+      width: calc(100% - 72px);
+      display: none;
+      opacity: 0;
+      transform-origin: top;
+      transition: opacity 200ms ease, transform 200ms ease;
+      box-sizing: border-box;
+      z-index: 20;
+      background: transparent;
+      padding: 6px 6px;
+    }
+    .vt-panel.active { display: block; opacity: 1; transform: translateY(0); }
 
-  /* ensure UI sits above body tint */
-  .container, .row, .np-stage, header, main, footer {
-    position: relative;
-    z-index: 10;
-  }
+    .vt-panel h6 { margin: 0 0 6px 0; font-size:14px; font-weight:600; }
+    .vt-panel .form-text { margin-top: 4px; color: #6c757d; font-size: 12px; }
 
-  /* 2) np-stage & image frame (visible pale border around t-shirt) */
-  .np-stage {
-    padding: 12px;
-    background: transparent;
-    box-sizing: border-box;
-    border-radius: 10px;
-    z-index: 12;
-    position: relative;
-  }
-  /* style the base image to look like framed box */
-  .np-stage img#np-base {
-    display:block;
-    width:100%;
-    height:auto;
-    border-radius:8px;
-    background-color:#f6f6f6;
-    box-shadow: 0 6px 18px rgba(0,0,0,0.35);
-    border: 3px solid rgba(255,255,255,0.12);
-    position: relative;
-    z-index: 14;
-  }
-  /* subtle overlay inside frame to keep overlays readable */
-  .np-stage::after {
-    content: "";
-    position: absolute;
-    left: 12px; right: 12px; top: 12px; bottom: 12px;
-    border-radius: 8px;
-    background: rgba(0,0,0,0.06);
-    z-index: 15;
-    pointer-events: none;
-  }
+    /* make input heights comfortable */
+    .vt-panel input.form-control, .vt-panel select.form-select, .vt-panel .form-control-color {
+      min-height: 40px;
+    }
 
-  /* 3) mobile-only small header shown over image */
-  .np-mobile-head {
-    display: block !important;
-    position: absolute;
-    top: 8px;
-    left: 14px;
-    right: 14px;
-    z-index: 22;
-    color: #fff;
-    text-shadow: 0 3px 8px rgba(0,0,0,0.7);
-    font-weight: 700;
-    font-size: 13px;
-    text-transform: uppercase;
-    pointer-events: none;
-  }
+    /* small screens: revert to stacked flow (mobile rules unchanged) */
+    @media (max-width: 767px) {
+      .vertical-tabs { display:block; }
+      .vt-icons { display:flex; flex-direction:row; gap:8px; margin-bottom:8px; }
+      .vt-btn { width:40px; height:40px; }
+      /* On mobile, panels should behave as normal block elements (flow) */
+      .vt-panels { position: static; }
+      .vt-panel { position: static; left: auto; width: 100%; display: block !important; opacity:1 !important; transform:none !important; padding: 8px 0; background: transparent; }
+    }
 
-  /* 4) overlays (name & number) default centered */
-  #np-prev-name, #np-prev-num {
-    z-index: 24;
-    position: absolute;
-    left: 50% !important;
-    transform: translateX(-50%) !important;
-    width: 90% !important;
-    text-align: center !important;
-    color: #fff;
-    text-shadow: 0 3px 8px rgba(0,0,0,0.7);
-    pointer-events: none;
-  }
+    /* optional styling for the left wrapper */
+    .col-md-3.np-col > #np-controls { padding: 16px !important; box-sizing: border-box; min-height: 360px; }
 
-  /* 5) INPUTS: name & number styles (underline only, centered, MAX tag on right) */
-  .np-field-wrap.name-input,
-  .np-field-wrap.number-input {
-    position: relative;
-    text-align: center;
-    margin: 18px 0;
-  }
-
-  .np-field-wrap.name-input input.form-control,
-  .np-field-wrap.number-input input.form-control {
-    background: transparent;
-    border: none;
-    border-bottom: 2px solid #fff;
-    border-radius: 0;
-    color: #fff;
-    text-align: center;
-    width: 100%;
-    letter-spacing: 2px;
-    padding: 6px 0;
-    font-weight: 700;
-    text-transform: uppercase;
-    box-shadow: none;
-  }
-
-  /* font-size: number larger than name */
-  .np-field-wrap.number-input input.form-control { font-size: 20px; line-height:1; }
-  .np-field-wrap.name-input   input.form-control { font-size: 20px; line-height:1; }
-
-  /* placeholder color */
-  .np-field-wrap.name-input input.form-control::placeholder,
-  .np-field-wrap.number-input input.form-control::placeholder {
-    color: rgba(255,255,255,0.45);
-    font-weight: 400;
-  }
-
-  /* MAX label (right below input, aligned right) */
-  .np-field-wrap.name-input .max-count,
-  .np-field-wrap.number-input .max-count {
-    display: block;
-    position: absolute;
-    right: 6px;
-    bottom: -18px;
-    font-size: 12px;
-    font-weight: 600;
-    color: #fff;
-    opacity: 0.9;
-  }
-
-  /* 6) keep helper text legible */
-  .np-field-wrap .form-text, .small-delivery { color: rgba(255,255,255,0.9); display : none}
-
-  /* 7) hide desktop-only bits with this class */
-  .hide-on-mobile { display: none !important; }
-
-  /* 8) make Add to Cart visible */
-  #np-atc-btn { display:block !important; z-index: 30; width:100% !important; }
-
-  /* 9) mobile large overlay styles (apply via JS .mobile-style) */
-  #np-prev-name.mobile-style {
-    top: 18px !important;
-    font-weight: 800 !important;
-    font-size: clamp(18px, 5.6vw, 34px) !important;
-    letter-spacing: 1.5px !important;
-  }
-  #np-prev-num.mobile-style {
-    top: 52% !important;
-    transform: translate(-50%,-50%) !important;
-    font-weight: 900 !important;
-    font-size: clamp(28px, 8.4vw, 56px) !important;
-  }
-
-  /* small utility */
-  .mobile-display { display: none; } /* your elements with mobile-display will show */
-  .color-display  { color: #fff; }
-}
   </style>
 </head>
 <body class="py-4">
@@ -209,107 +77,85 @@
 
 <div class="container">
   <div class="row g-4">
+    <!-- center preview -->
     <div class="col-md-6 np-col order-1 order-md-2">
       <div class="border rounded p-3">
         <div class="np-stage" id="np-stage">
           <img id="np-base" crossorigin="anonymous" src="{{ $img }}" alt="Preview"
-            onerror="this.onerror=null;this.src='{{ asset('images/placeholder.png') }}'">
-          <div id="np-prev-name" class="np-overlay np-name font-bebas" aria-hidden="true"></div>
-          <div id="np-prev-num"  class="np-overlay np-num  font-bebas" aria-hidden="true"></div>
+               onerror="this.onerror=null;this.src='{{ asset('images/placeholder.png') }}'">
+          <div id="np-prev-name" class="np-overlay font-bebas" aria-hidden="true"></div>
+          <div id="np-prev-num"  class="np-overlay font-bebas" aria-hidden="true"></div>
         </div>
       </div>
     </div>
 
+    <!-- left controls (icons + panels) -->
     <div class="col-md-3 np-col order-2 order-md-1">
-  <div id="np-controls" class="border rounded p-3"> <!-- keep id np-controls so existing code finds it -->
-    <!-- Vertical icon tabs -->
-    <div class="vertical-tabs">
-      <nav class="vt-icons" role="tablist" aria-orientation="vertical">
-        <button class="vt-btn active" data-panel="panel-number" aria-controls="panel-number" title="Number" aria-selected="true">
-          <span class="vt-ico">①</span>
-        </button>
-        <button class="vt-btn" data-panel="panel-name" aria-controls="panel-name" title="Name">
-          <span class="vt-ico">②</span>
-        </button>
-        <button class="vt-btn" data-panel="panel-font" aria-controls="panel-font" title="Font">
-          <span class="vt-ico">𝙰</span>
-        </button>
-        <button class="vt-btn" data-panel="panel-color" aria-controls="panel-color" title="Color">
-          <span class="vt-ico">⚪</span>
-        </button>
-      </nav>
+      <div id="np-controls" class="border rounded p-3">
+        <div class="vertical-tabs">
+          <nav class="vt-icons" aria-hidden="false" role="tablist" aria-orientation="vertical">
+            <button class="vt-btn" data-panel="panel-number" aria-controls="panel-number" title="Number"><span class="vt-ico">①</span></button>
+            <button class="vt-btn" data-panel="panel-name" aria-controls="panel-name" title="Name"><span class="vt-ico">②</span></button>
+            <button class="vt-btn" data-panel="panel-font" aria-controls="panel-font" title="Font"><span class="vt-ico">𝙰</span></button>
+            <button class="vt-btn" data-panel="panel-color" aria-controls="panel-color" title="Color"><span class="vt-ico">⚪</span></button>
+          </nav>
 
-      <!-- panels container -->
-      <div class="vt-panels">
-        <!-- Number panel -->
-        <div id="panel-number" class="vt-panel active" role="tabpanel" aria-hidden="false">
-          <h6 class="mb-2 color-display">Number</h6>
-          <div class="mb-3 np-field-wrap number-input">
-            <input id="np-num" type="text" inputmode="numeric" maxlength="3"
-                  class="form-control" placeholder="Your Number" autocomplete="off">
-            <span class="max-count">MAX. 2</span>
-            <div id="np-num-help" class="form-text small text-muted">Digits only. 1–3 digits.</div>
-            <div id="np-num-err" class="text-danger small d-none">Enter 1–3 digits only.</div>
-          </div>
-        </div>
-
-        <!-- Name panel -->
-        <div id="panel-name" class="vt-panel" role="tabpanel" aria-hidden="true">
-          <h6 class="mb-2 color-display">Name</h6>
-          <div class="mb-3 np-field-wrap name-input">
-            <input id="np-name" type="text" maxlength="12"
-                  class="form-control" placeholder="YOUR NAME" autocomplete="off">
-            <span class="max-count">MAX. 11</span>
-            <div id="np-name-help" class="form-text small text-muted">Only A–Z and spaces. 1–12 chars.</div>
-            <div id="np-name-err" class="text-danger small d-none">Enter 1–12 letters/spaces only.</div>
-          </div>
-        </div>
-
-        <!-- Font panel -->
-        <div id="panel-font" class="vt-panel" role="tabpanel" aria-hidden="true">
-          <h6 class="mb-2 color-display">Font</h6>
-          <div class="mb-3">
-            <label class="form-label font-label">Font</label>
-            <select id="np-font" class="form-select">
-              <option value="bebas">Bebas Neue (Bold)</option>
-              <option value="anton">Anton</option>
-              <option value="oswald">Oswald</option>
-              <option value="impact">Impact</option>
-            </select>
-          </div>
-        </div>
-
-        <!-- Color panel -->
-        <div id="panel-color" class="vt-panel" role="tabpanel" aria-hidden="true">
-          <h6 class="mb-2 color-display">Text Color</h6>
-          <div class="mb-2">
-            <div class="d-flex gap-2 flex-wrap mb-2">
-              <button type="button" class="np-swatch" data-color="#FFFFFF" style="background:#FFFFFF"></button>
-              <button type="button" class="np-swatch" data-color="#000000" style="background:#000000"></button>
-              <button type="button" class="np-swatch" data-color="#FFD700" style="background:#FFD700"></button>
-              <button type="button" class="np-swatch" data-color="#FF0000" style="background:#FF0000"></button>
-              <button type="button" class="np-swatch" data-color="#1E90FF" style="background:#1E90FF"></button>
+          <div class="vt-panels" aria-live="polite">
+            <!-- Number panel -->
+            <div id="panel-number" class="vt-panel" role="region" aria-hidden="true">
+              <h6>Number</h6>
+              <div>
+                <input id="np-num" type="text" maxlength="3" inputmode="numeric" class="form-control" placeholder="Your Number">
+                <div class="form-text small">Digits only. 1–3 digits.</div>
+              </div>
             </div>
-            <input id="np-color" type="color" class="form-control form-control-color mt-2" value="#D4AF37" title="Pick color">
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
 
+            <!-- Name panel -->
+            <div id="panel-name" class="vt-panel" role="region" aria-hidden="true">
+              <h6>Name</h6>
+              <div>
+                <input id="np-name" type="text" maxlength="12" class="form-control" placeholder="YOUR NAME">
+                <div class="form-text small">Only A–Z and spaces. 1–12 chars.</div>
+              </div>
+            </div>
 
+            <!-- Font panel -->
+            <div id="panel-font" class="vt-panel" role="region" aria-hidden="true">
+              <h6>Font</h6>
+              <div>
+                <select id="np-font" class="form-select">
+                  <option value="bebas">Bebas Neue</option>
+                  <option value="anton">Anton</option>
+                  <option value="oswald">Oswald</option>
+                  <option value="impact">Impact</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Color panel -->
+            <div id="panel-color" class="vt-panel" role="region" aria-hidden="true">
+              <h6>Text Color</h6>
+              <div class="d-flex gap-2 flex-wrap mb-2">
+                <button type="button" class="np-swatch" data-color="#FFFFFF" style="background:#FFFFFF"></button>
+                <button type="button" class="np-swatch" data-color="#000000" style="background:#000000"></button>
+                <button type="button" class="np-swatch" data-color="#FFD700" style="background:#FFD700"></button>
+                <button type="button" class="np-swatch" data-color="#FF0000" style="background:#FF0000"></button>
+                <button type="button" class="np-swatch" data-color="#1E90FF" style="background:#1E90FF"></button>
+              </div>
+              <input id="np-color" type="color" class="form-control form-control-color" value="#D4AF37">
+            </div>
+          </div> <!-- vt-panels -->
+        </div> <!-- vertical-tabs -->
+      </div> <!-- np-controls -->
+    </div> <!-- left col -->
+
+    <!-- right purchase column -->
     <div class="col-md-3 np-col order-3 order-md-3">
       <h4 class="mb-1 mobile-display">{{ $product->name ?? ($product->title ?? 'Product') }}</h4>
       <div class="text-muted mb-3 mobile-display">Vendor: {{ $product->vendor ?? '—' }} • ₹ {{ number_format((float)($displayPrice ?? ($product->min_price ?? 0)), 2) }}</div>
 
       <form id="np-atc-form" method="post" action="{{ route('designer.addtocart') }}">
         @csrf
-        <input type="hidden" id="np-product-id" name="product_id" value="{{ $product->id }}">
-        <input type="hidden" id="np-shopify-id" name="shopify_product_id" value="{{ $product->shopify_product_id ?? '' }}">
-        <input type="hidden" name="variant_id" id="np-variant-id" value="">
-
-        <!-- personalization hidden values (names match controller) -->
         <input type="hidden" name="name_text" id="np-name-hidden">
         <input type="hidden" name="number_text" id="np-num-hidden">
         <input type="hidden" name="font" id="np-font-hidden">
@@ -317,7 +163,7 @@
         <input type="hidden" name="preview_data" id="np-preview-hidden">
 
         <div class="mb-3">
-          <label class="form-label color-display">Size</label>
+          <label class="form-label">Size</label>
           <select id="np-size" name="size" class="form-select" required>
             <option value="">Select Size</option>
             <option value="S">S</option>
@@ -329,7 +175,7 @@
         </div>
 
         <div class="mb-3">
-          <label class="form-label color-display">Quantity</label>
+          <label class="form-label">Quantity</label>
           <input id="np-qty" name="quantity" type="number" min="1" value="1" class="form-control">
         </div>
 
@@ -342,44 +188,93 @@
 </div>
 
 {{-- server-provided layoutSlots --}}
-<script>
-  window.layoutSlots = {!! json_encode($layoutSlots, JSON_NUMERIC_CHECK) !!};
-  window.personalizationSupported = {{ !empty($layoutSlots) ? 'true' : 'false' }};
-</script>
-<script>
-(function(){
-  const tabButtons = document.querySelectorAll('.vt-btn');
-  const panels = document.querySelectorAll('.vt-panel');
+<script> window.layoutSlots = {!! json_encode($layoutSlots, JSON_NUMERIC_CHECK) !!}; window.personalizationSupported = {{ !empty($layoutSlots) ? 'true' : 'false' }}; </script>
 
-  function activatePanel(panelId, btn){
-    tabButtons.forEach(b => b.classList.remove('active'));
-    if (btn) btn.classList.add('active');
+<script>
+/* ---------- Tabs: toggle and align panel next to clicked icon (desktop only) ---------- */
+(function(){
+  const buttons = document.querySelectorAll('.vt-btn');
+  const panels = document.querySelectorAll('.vt-panel');
+  const panelsContainer = document.querySelector('.vt-panels');
+
+  function closeAll() {
+    buttons.forEach(b => b.classList.remove('active'));
     panels.forEach(p => {
-      if (p.id === panelId) {
-        p.classList.add('active');
-        p.setAttribute('aria-hidden','false');
-      } else {
-        p.classList.remove('active');
-        p.setAttribute('aria-hidden','true');
-      }
+      p.classList.remove('active');
+      p.setAttribute('aria-hidden','true');
+      p.style.top = ''; // reset
     });
   }
 
-  tabButtons.forEach(btn => {
-    btn.addEventListener('click', function(e){
-      const panel = this.dataset.panel;
-      activatePanel(panel, this);
-      // focus first input/select inside panel for keyboard
-      const firstInput = document.getElementById(panel)?.querySelector('input,select,textarea,button');
-      if (firstInput) firstInput.focus({preventScroll:true});
-    });
+  function openPanelForButton(btn) {
+    const panelId = btn.dataset.panel;
+    const panel = document.getElementById(panelId);
+    if (!panel) return;
+    // If already open -> close all
+    if (panel.classList.contains('active')) {
+      closeAll();
+      return;
+    }
+    closeAll();
+    // mark active
+    btn.classList.add('active');
+    panel.classList.add('active');
+    panel.setAttribute('aria-hidden','false');
+
+    // On desktop only: compute top offset so panel aligns with button vertically
+    if (window.innerWidth > 767) {
+      // get button offsetTop relative to panelsContainer
+      const btnRect = btn.getBoundingClientRect();
+      const containerRect = panelsContainer.getBoundingClientRect();
+      // calculate top offset inside panelsContainer (so top aligns with button center)
+      const top = (btnRect.top - containerRect.top) + (btnRect.height/2) - 24; // 24px adjustment for small header
+      // clamp top to be >= 0
+      const topClamped = Math.max(6, Math.round(top));
+      panel.style.top = topClamped + 'px';
+    } else {
+      // mobile: make sure it flows
+      panel.style.top = '';
+    }
+
+    // focus first focusable element
+    setTimeout(()=> {
+      const focusable = panel.querySelector('input,select,button,textarea');
+      if (focusable) focusable.focus({preventScroll:true});
+    }, 200);
+  }
+
+  buttons.forEach(btn=>{
+    btn.addEventListener('click', ()=> openPanelForButton(btn));
   });
 
-  // default: ensure first active is visible
-  const first = document.querySelector('.vt-btn.active');
-  if (first) activatePanel(first.dataset.panel, first);
+  // close panels when clicking outside the controls area (desktop)
+  document.addEventListener('click', (e)=>{
+    if (window.innerWidth <= 767) return; // mobile ignore
+    const controls = document.getElementById('np-controls');
+    if (!controls.contains(e.target)) {
+      closeAll();
+    }
+  });
+
+  // on resize: if mobile, ensure panels flow; if desktop, close all for consistent state
+  window.addEventListener('resize', ()=>{
+    if (window.innerWidth <= 767) {
+      // ensure panels visible (mobile)
+      panels.forEach(p => { p.classList.add('active'); p.setAttribute('aria-hidden','false'); p.style.top=''; });
+    } else {
+      closeAll();
+    }
+  });
+
+  // initial: mobile -> show all, desktop -> closed
+  if (window.innerWidth <= 767) {
+    panels.forEach(p => { p.classList.add('active'); p.setAttribute('aria-hidden','false'); p.style.top=''; });
+  } else {
+    closeAll();
+  }
 })();
-  </script>
+</script>
+
 {{-- core preview + UI JS (validation + preview layout) --}}
 <script>
 (function(){
@@ -392,6 +287,7 @@
     const layout = (typeof window.layoutSlots === 'object' && window.layoutSlots !== null) ? window.layoutSlots : {};
 
     const NAME_RE = /^[A-Za-z ]{1,12}$/, NUM_RE = /^\d{1,3}$/;
+
     function validate(){
       const okName = nameEl ? NAME_RE.test((nameEl.value||'').trim()) : true;
       const okNum = numEl ? NUM_RE.test((numEl.value||'').trim()) : true;
@@ -529,13 +425,13 @@
     // show/hide controls based on personalizationSupported flag
     if (typeof window.personalizationSupported !== 'undefined' && ctrls) {
       if (window.personalizationSupported) {
-        status.textContent = 'Personalization supported.';
-        note.classList.add('d-none');
+        status && (status.textContent = 'Personalization supported.');
+        note && note.classList?.add('d-none');
         ctrls.classList.remove('np-hidden');
         if (btn) btn.disabled = true;
       } else {
-        status.textContent = 'Personalization not available.';
-        note.classList.remove('d-none');
+        status && (status.textContent = 'Personalization not available.');
+        note && note.classList?.remove('d-none');
         ctrls.classList.add('np-hidden');
         if (btn) btn.disabled = false;
       }
