@@ -65,7 +65,7 @@
     /* small screens: revert to stacked flow (mobile rules unchanged) */
     @media (max-width: 767px) {
       .vertical-tabs { display:block; }
-      .vt-icons { display:flex; flex-direction:row; gap:8px; margin-bottom:8px; }
+      .vt-icons { display:flex; flex-direction:row; gap:8px; margin-bottom:8px; display:none;}
       .vt-btn { width:40px; height:40px; }
       /* On mobile, panels should behave as normal block elements (flow) */
       .vt-panels { position: static; }
@@ -270,7 +270,7 @@
 
                       <!-- Name panel -->
             <div id="panel-name" class="vt-panel" role="region" aria-hidden="true">
-              <h6>Name</h6>
+              <h6 class="hide-on-mobile">Name</h6>
               <div>
                 <div class="np-field-wrap name-input">
                   <input id="np-name" type="text" maxlength="12"
@@ -284,7 +284,7 @@
           <div class="vt-panels" aria-live="polite">
             <!-- Number panel -->
             <div id="panel-number" class="vt-panel" role="region" aria-hidden="true">
-              <h6>Number</h6>
+              <h6 class="hide-on-mobile">Number</h6>
               <div>
                 <!-- wrapper kept simple so mobile mover JS can pick and move this exact input node -->
                 <div class="np-field-wrap number-input">
@@ -300,7 +300,7 @@
 
             <!-- Font panel -->
             <div id="panel-font" class="vt-panel" role="region" aria-hidden="true">
-              <h6>Font</h6>
+              <h6 class="hide-on-mobile">Font</h6>
               <div>
                 <select id="np-font" class="form-select">
                   <option value="bebas">Bebas Neue</option>
@@ -313,7 +313,7 @@
 
             <!-- Color panel -->
             <div id="panel-color" class="vt-panel" role="region" aria-hidden="true">
-              <h6>Text Color</h6>
+              <h6 class="hide-on-mobile">Text Color</h6>
               <div class="swatches-wrap">
                 <div class="d-flex gap-2 flex-wrap mb-2">
                   <button type="button" class="np-swatch" data-color="#FFFFFF" style="background:#FFFFFF"></button>
