@@ -6,9 +6,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Oswald:wght@400;600&display=swap" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-
   <style>
-    /* ---------- default styles (desktop & mobile base) ---------- */
     .np-hidden { display: none !important; }
     .font-bebas{font-family:'Bebas Neue', Impact, 'Arial Black', sans-serif;}
     .font-anton{font-family:'Anton', Impact, 'Arial Black', sans-serif;}
@@ -20,7 +18,6 @@
     .np-swatch { width:28px; height:28px; border-radius:50%; border:1px solid #ccc; cursor:pointer; display:inline-block; }
     .max-count{ display:none; }
 
-    /* Keep current mobile field styles you already had (keeps form look) */
     @media (max-width: 767px) {
       body { background-image: url('/images/stadium-bg.jpg'); background-size: cover; background-position: center; min-height:100vh; }
       .np-stage { max-width:340px; margin:0 auto; background:#fff; padding:10px; border-radius:10px; }
@@ -28,124 +25,6 @@
       .form-select { background:#fff; color:#222; border-radius:8px; margin-bottom:16px; }
       #np-atc-btn { display:block !important; width:100% !important; font-size:16px !important; padding:12px 14px !important; margin-top:10px; }
     }
-
-    /* =========================
-       MOBILE-ONLY: stadium body bg tint + image frame + overlays (STRICTLY mobile)
-       Desktop will NOT be changed because of media query
-       ========================= */
-    @media (max-width: 767px) {
-
-      /* 1) body stadium background (full viewport) */
-      body {
-        background-image: url('/images/stadium-bg.jpg'); /* change if your path is different */
-        background-size: cover;
-        background-position: center center;
-        background-repeat: no-repeat;
-        min-height: 100vh;
-        position: relative;
-      }
-
-      /* 2) body-level translucent tint ABOVE stadium but BELOW UI */
-      body::before {
-        content: "";
-        position: fixed;
-        inset: 0;
-        background: rgba(0,0,0,0.30); /* tweak 0.22 - 0.36 per contrast */
-        z-index: 5;
-        pointer-events: none;
-      }
-
-      /* 3) lift main content above the body tint */
-      .container, .row, .np-stage, header, main, footer {
-        position: relative;
-        z-index: 10;
-      }
-
-      /* 4) np-stage tweaks and image-frame for visible border box */
-      .np-stage {
-        background: transparent;
-        padding: 8px;
-        box-sizing: border-box;
-        z-index: 12;
-        position: relative;
-      }
-      .np-stage .np-image-frame {
-        position: relative;
-        background: rgba(255,255,255,0.02);
-        border-radius: 10px;
-        padding: 10px;
-        border: 3px solid rgba(255,255,255,0.12);
-        box-shadow: 0 6px 20px rgba(0,0,0,0.45);
-        overflow: hidden;
-      }
-
-      /* t-shirt image */
-      .np-stage img#np-base {
-        display:block;
-        width:100%;
-        height:auto;
-        border-radius: 6px;
-        position: relative;
-        z-index: 14;
-        background-color: #f6f6f6;
-      }
-
-      /* slight image-level overlay (very subtle) */
-      .np-stage .np-image-frame::after {
-        content: "";
-        position: absolute;
-        inset: 0;
-        background: rgba(0,0,0,0.06);
-        z-index: 15;
-        pointer-events: none;
-        border-radius: 8px;
-      }
-
-      /* 5) ensure text overlays are above everything */
-      .np-mobile-head {
-        z-index: 22;
-        position:absolute;
-        top:10px; left:12px; right:12px;
-        color:#fff;
-        pointer-events:none;
-        text-shadow:0 3px 8px rgba(0,0,0,0.7);
-        display:block;
-      }
-      #np-prev-name, #np-prev-num {
-        z-index: 24;
-        position: absolute;
-        left: 50% !important;
-        transform: translateX(-50%) !important;
-        width: 90% !important;
-        text-align: center !important;
-        color: #fff;
-        text-shadow: 0 3px 8px rgba(0,0,0,0.7);
-        pointer-events: none;
-      }
-
-      /* 6) hide heavy desktop-only controls by using class */
-      .hide-on-mobile { display: none !important; }
-
-      /* 7) readability for inputs */
-      .np-field-wrap input.form-control,
-      .form-select,
-      input.form-control.form-control-color {
-        background: rgba(255,255,255,0.03);
-        border: none;
-        border-bottom: 2px solid rgba(255,255,255,0.26);
-        color: #fff;
-        font-weight: 700;
-      }
-
-      .np-field-wrap .form-text,
-      .small-delivery { color: rgba(255,255,255,0.9); }
-
-      /* 8) ensure add-to-cart visible */
-      #np-atc-btn { display:block !important; z-index: 30; width:100% !important; }
-    }
-
-    /* ---------- end mobile-only styles ---------- */
-
   </style>
 </head>
 <body class="py-4">
@@ -158,20 +37,8 @@
     <div class="col-md-6 np-col order-1 order-md-2">
       <div class="border rounded p-3">
         <div class="np-stage" id="np-stage">
-
-          <!-- IMAGE FRAME (visible border box on mobile) -->
-          <div class="np-image-frame">
-            <img id="np-base" crossorigin="anonymous" src="{{ $img }}" alt="Preview"
-              onerror="this.onerror=null;this.src='{{ asset('images/placeholder.png') }}'">
-          </div>
-
-          <!-- Mobile-only title overlay (visible on mobile via CSS) -->
-          <div class="np-mobile-head d-none">
-            <div class="np-mobile-title">{{ $product->name ?? ($product->title ?? 'Product') }}</div>
-            <div class="np-mobile-vendor">Vendor: {{ $product->vendor ?? '—' }}</div>
-          </div>
-
-          <!-- text overlays -->
+          <img id="np-base" crossorigin="anonymous" src="{{ $img }}" alt="Preview"
+            onerror="this.onerror=null;this.src='{{ asset('images/placeholder.png') }}'">
           <div id="np-prev-name" class="np-overlay np-name font-bebas" aria-hidden="true"></div>
           <div id="np-prev-num"  class="np-overlay np-num  font-bebas" aria-hidden="true"></div>
         </div>
@@ -184,7 +51,7 @@
         <div id="np-status" class="small text-muted mb-2">Checking methods…</div>
         <div id="np-note" class="small text-muted mb-3 d-none">Personalization not available for this product.</div>
 
-        <div id="np-controls" class="">
+        <div id="np-controls" class="np-hidden">
           <div class="mb-3 np-field-wrap">
             <label for="np-num" class="form-label">Your Number</label>
             <input id="np-num" type="text" inputmode="numeric" maxlength="3" class="form-control" placeholder="Your number" autocomplete="off">
@@ -201,8 +68,7 @@
             <div id="np-name-err" class="text-danger small d-none">Enter 1–12 letters/spaces only.</div>
           </div>
 
-          <!-- Font selector: hide on mobile (class added) -->
-          <div class="mb-3 hide-on-mobile">
+          <div class="mb-3">
             <label class="form-label font-label">Font</label>
             <select id="np-font" class="form-select">
               <option value="bebas">Bebas Neue (Bold)</option>
@@ -214,7 +80,7 @@
 
           <div class="mb-2">
             <label class="form-label d-block color-label">Text Color</label>
-            <div class="d-flex gap-2 flex-wrap mb-2 hide-on-mobile">
+            <div class="d-flex gap-2 flex-wrap mb-2">
               <button type="button" class="np-swatch" data-color="#FFFFFF" style="background:#FFFFFF"></button>
               <button type="button" class="np-swatch" data-color="#000000" style="background:#000000"></button>
               <button type="button" class="np-swatch" data-color="#FFD700" style="background:#FFD700"></button>
@@ -345,7 +211,7 @@
 
       const isMobile = window.innerWidth <= 767;
       const heightFactorName = 0.86;
-      const heightFactorNumber = isMobile ? 1.0 : 0.9;
+      const heightFactorNumber = isMobile ? 0.95 : 0.9;
       const heightCandidate = Math.floor(areaHpx * (slotKey === 'number' ? heightFactorNumber : heightFactorName));
 
       const avgCharRatio = 0.55;
