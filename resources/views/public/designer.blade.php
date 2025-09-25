@@ -2,269 +2,246 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>NextPrint - Product Customizer</title>
+  <title>{{ $product->name ?? ($product->title ?? 'Product') }} – NextPrint</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <!-- fonts (desktop) -->
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Oswald:wght@400;600&display=swap" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 
   <style>
-    /* ---------- Base fonts ---------- */
+    /* base fonts */
     .font-bebas{font-family:'Bebas Neue', Impact, 'Arial Black', sans-serif;}
     .font-anton{font-family:'Anton', Impact, 'Arial Black', sans-serif;}
     .font-oswald{font-family:'Oswald', Arial, sans-serif;}
     .font-impact{font-family:Impact, 'Arial Black', sans-serif;}
 
-    /* ---------- Preview stage ---------- */
+    /* preview stage */
     .np-stage { position: relative; width: 100%; max-width: 534px; margin: 0 auto; background:#fff; border-radius:8px; padding:8px; min-height: 320px; }
     .np-stage img { width:100%; height:auto; border-radius:6px; display:block; }
     .np-overlay { position:absolute; color:#D4AF37; font-weight:700; text-transform:uppercase; letter-spacing:2px; white-space:nowrap; text-shadow:0 2px 6px rgba(0,0,0,0.35); display:flex; align-items:center; justify-content:center; pointer-events:none; }
 
-    /* swatches + active */
     .np-swatch { width:28px; height:28px; border-radius:50%; border:1px solid #ccc; cursor:pointer; display:inline-block; }
     .np-swatch.active { outline: 2px solid rgba(0,0,0,0.08); box-shadow: 0 2px 6px rgba(0,0,0,0.06); }
+    .max-count{ display:none; }
 
-    /* ---------- Desktop layout: icons + panels ---------- */
+    /* ---------- Desktop layout: icons + panels (panels positioned beside icons) ---------- */
     .vertical-tabs { display:flex; gap:12px; align-items:flex-start; }
     .vt-icons { display:flex; flex-direction:column; gap:102px; flex:0 0 56px; align-items:center; padding-top:6px; }
     .vt-btn { display:flex; align-items:center; justify-content:center; width:56px; height:56px; border-radius:8px; border:1px solid #e6e6e6; background:#fff; cursor:pointer; }
     .vt-btn .vt-ico { font-size:18px; line-height:1; }
     .vt-btn.active { background:#f5f7fb; box-shadow:0 6px 18px rgba(10,20,40,0.04); border-color:#dbe7ff; }
+    .vt-btn:focus { outline: none; box-shadow: 0 0 0 3px rgba(100,150,255,0.12); }
 
+    /* panels container is relative; panels absolute (desktop only) */
     .vt-panels { flex:1 1 auto; min-width:0; position: relative; }
     .vt-panel {
       position: absolute;
-      left: 10px;
-      width: calc(100% - 10px);
+      left: 10px;                      /* place to the right of icons column */
+      width: calc(100% - 10px);        /* leave some space */
       display: none;
       opacity: 0;
       transform-origin: top;
       transition: opacity 200ms ease, transform 200ms ease;
       box-sizing: border-box;
       z-index: 20;
-      background: #ffffff;
-      padding: 12px;
+      background: #ffffff;             /* make panel visually inside a box */
+      padding: 12px;                   /* ensure swatches stay inside */
       border-radius: 8px;
       border: 1px solid #eef3fb;
       box-shadow: 0 6px 18px rgba(12,24,64,0.04);
     }
     .vt-panel.active { display: block; opacity: 1; transform: translateY(0); }
+
     .vt-panel h6 { margin: 0 0 6px 0; font-size:14px; font-weight:600; }
     .vt-panel .form-text { margin-top: 4px; color: #6c757d; font-size: 12px; }
 
+    /* make input heights comfortable */
     .vt-panel input.form-control, .vt-panel select.form-select, .vt-panel .form-control-color {
       min-height: 40px;
     }
 
+    /* ensure swatches block stays inside the panel and is placed nicely */
     .vt-panel .swatches-wrap { margin-top: 8px; display:block; }
 
-    /* small utility */
-    .max-count{ display:none; }
-    .hide-on-mobile { display: none !important; }
-
-    /* make input heights comfortable in general */
-    input.form-control, select.form-select { border-radius: 6px; }
-
-    /* ---------- Mobile styles (<=767) ---------- */
+    /* small screens: revert to stacked flow (mobile rules unchanged) */
     @media (max-width: 767px) {
       .vertical-tabs { display:block; }
       .vt-icons { display:flex; flex-direction:row; gap:8px; margin-bottom:8px; }
       .vt-btn { width:40px; height:40px; }
-
-      /* revert panels to flow */
+      /* On mobile, panels should behave as normal block elements (flow) */
       .vt-panels { position: static; }
       .vt-panel { position: static; left: auto; width: 100%; display: block !important; opacity:1 !important; transform:none !important; padding: 8px 0; background: transparent; border: none; box-shadow: none; }
-
-      /* ---------- body stadium background + tint ---------- */
-      body {
-        background-image: url('/images/stadium-bg.jpg');
-        background-size: cover;
-        background-position: center center;
-        background-repeat: no-repeat;
-        min-height: 100vh;
-        position: relative;
-      }
-      body::before {
-        content: "";
-        position: fixed;
-        inset: 0;
-        background: rgba(0,0,0,0.35);
-        z-index: 5;
-        pointer-events: none;
-      }
-
-      /* Ensure UI above tint */
-      .container, .row, .np-stage, header, main, footer { position: relative; z-index: 10; }
-
-      /* np-stage tweaks for mobile */
-      .np-stage {
-        padding: 12px;
-        background: transparent;
-        box-sizing: border-box;
-        border-radius: 10px;
-        z-index: 12;
-        position: relative;
-      }
-      .np-stage img#np-base {
-        display:block;
-        width:100%;
-        height:auto;
-        border-radius:8px;
-        background-color:#f6f6f6;
-        box-shadow: 0 6px 18px rgba(0,0,0,0.35);
-        border: 3px solid rgba(255,255,255,0.12);
-        position: relative;
-        z-index: 14;
-      }
-      .np-stage::after {
-        content: "";
-        position: absolute;
-        left: 12px; right: 12px; top: 12px; bottom: 12px;
-        border-radius: 8px;
-        background: rgba(0,0,0,0.06);
-        z-index: 15;
-        pointer-events: none;
-      }
-
-      /* small mobile header */
-      .np-mobile-head {
-        display: block !important;
-        position: absolute;
-        top: 8px;
-        left: 14px;
-        right: 14px;
-        z-index: 22;
-        color: #fff;
-        text-shadow: 0 3px 8px rgba(0,0,0,0.7);
-        font-weight: 700;
-        font-size: 13px;
-        text-transform: uppercase;
-        pointer-events: none;
-      }
-
-      /* overlays (name & number) default centered */
-      #np-prev-name, #np-prev-num {
-        z-index: 24;
-        position: absolute;
-        left: 50% !important;
-        transform: translateX(-50%) !important;
-        width: 90% !important;
-        text-align: center !important;
-        color: #fff;
-        text-shadow: 0 3px 8px rgba(0,0,0,0.7);
-        pointer-events: none;
-      }
-
-      /* original inputs removed or hidden; we'll move them into the preview using JS */
-      .np-field-wrap.name-input,
-      .np-field-wrap.number-input {
-        position: relative;
-        text-align: center;
-        margin: 18px 0;
-      }
-
-      .np-field-wrap.name-input input.form-control,
-      .np-field-wrap.number-input input.form-control {
-        background: transparent;
-        border: none;
-        border-bottom: 2px solid #fff;
-        border-radius: 0;
-        color: #fff;
-        text-align: center;
-        width: 100%;
-        letter-spacing: 2px;
-        padding: 6px 0;
-        font-weight: 700;
-        text-transform: uppercase;
-        box-shadow: none;
-      }
-
-      .np-field-wrap.number-input input.form-control { font-size: 20px; line-height:1; }
-      .np-field-wrap.name-input   input.form-control { font-size: 20px; line-height:1; }
-
-      .np-field-wrap.name-input input.form-control::placeholder,
-      .np-field-wrap.number-input input.form-control::placeholder {
-        color: rgba(255,255,255,0.45);
-        font-weight: 400;
-      }
-
-      .np-field-wrap.name-input .max-count,
-      .np-field-wrap.number-input .max-count {
-        display: block;
-        position: absolute;
-        right: 6px;
-        bottom: -18px;
-        font-size: 12px;
-        font-weight: 600;
-        color: #fff;
-        opacity: 0.95;
-      }
-
-      .np-field-wrap .form-text, .small-delivery { color: rgba(255,255,255,0.9); display : none}
-
-      .hide-on-mobile { display: none !important; }
-
-      /* make Add to Cart visible and above overlays */
-      #np-atc-btn { display:block !important; z-index: 35; width:100% !important; position: relative; }
-
-      /* mobile large overlay styles (applied by JS via class) */
-      #np-prev-name.mobile-style {
-        top: 18px !important;
-        font-weight: 800 !important;
-        font-size: clamp(18px, 5.6vw, 34px) !important;
-        letter-spacing: 1.5px !important;
-      }
-      #np-prev-num.mobile-style {
-        top: 52% !important;
-        transform: translate(-50%,-50%) !important;
-        font-weight: 900 !important;
-        font-size: clamp(28px, 8.4vw, 56px) !important;
-      }
-
-      /* Small utility: elements only for mobile */
-      .mobile-display { display: none; }
-      .color-display  { color: #fff; }
-
-      /* ---------- New mobile overlay input container ---------- */
-      .np-mobile-inputs {
-        position: absolute;
-        left: 50%;
-        transform: translateX(-50%);
-        width: 92%;
-        top: 8px;             /* adjust if you want it lower/higher */
-        z-index: 30;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        align-items: center;
-        pointer-events: auto;
-        -webkit-backdrop-filter: blur(2px);
-      }
-      .np-mobile-inputs .np-field-wrap { position: relative; width: 100%; }
-      .np-mobile-inputs .np-field-wrap.name-input input.form-control {
-        font-size: clamp(16px, 4.5vw, 30px);
-        font-weight: 800;
-        padding: 6px 10px;
-        border-bottom: 2px solid rgba(255,255,255,0.95);
-      }
-      .np-mobile-inputs .np-field-wrap.number-input input.form-control {
-        font-size: clamp(22px, 7.5vw, 56px);
-        font-weight: 900;
-        padding: 6px 10px;
-        border-bottom: 2px solid rgba(255,255,255,0.95);
-      }
-      .np-mobile-inputs .max-count { display:block; position:absolute; right:10px; bottom:-18px; font-size:12px; font-weight:700; color:#fff; }
-      .np-mobile-inputs .np-swatch { width:36px; height:36px; }
-      /* hide the original controls area on mobile (we still keep it in DOM) */
-      #np-controls.np-hidden-on-mobile { display: none !important; }
+      .col-md-3.np-col > #np-controls { min-height: auto; padding: 12px !important; }
     }
+    @media (max-width: 767px) {
+
+  /* 1) body stadium background + full-screen tint (below UI) */
+  body {
+    background-image: url('/images/stadium-bg.jpg'); /* change path if needed */
+    background-size: cover;
+    background-position: center center;
+    background-repeat: no-repeat;
+    min-height: 100vh;
+    position: relative;
+  }
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.35); /* tweak 0.22-0.36 */
+    z-index: 5;
+    pointer-events: none;
+  }
+
+  /* ensure UI sits above body tint */
+  .container, .row, .np-stage, header, main, footer {
+    position: relative;
+    z-index: 10;
+  }
+
+  /* 2) np-stage & image frame (visible pale border around t-shirt) */
+  .np-stage {
+    padding: 12px;
+    background: transparent;
+    box-sizing: border-box;
+    border-radius: 10px;
+    z-index: 12;
+    position: relative;
+  }
+  /* style the base image to look like framed box */
+  .np-stage img#np-base {
+    display:block;
+    width:100%;
+    height:auto;
+    border-radius:8px;
+    background-color:#f6f6f6;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+    border: 3px solid rgba(255,255,255,0.12);
+    position: relative;
+    z-index: 14;
+  }
+  /* subtle overlay inside frame to keep overlays readable */
+  .np-stage::after {
+    content: "";
+    position: absolute;
+    left: 12px; right: 12px; top: 12px; bottom: 12px;
+    border-radius: 8px;
+    background: rgba(0,0,0,0.06);
+    z-index: 15;
+    pointer-events: none;
+  }
+
+  /* 3) mobile-only small header shown over image */
+  .np-mobile-head {
+    display: block !important;
+    position: absolute;
+    top: 8px;
+    left: 14px;
+    right: 14px;
+    z-index: 22;
+    color: #fff;
+    text-shadow: 0 3px 8px rgba(0,0,0,0.7);
+    font-weight: 700;
+    font-size: 13px;
+    text-transform: uppercase;
+    pointer-events: none;
+  }
+
+  /* 4) overlays (name & number) default centered */
+  #np-prev-name, #np-prev-num {
+    z-index: 24;
+    position: absolute;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    width: 90% !important;
+    text-align: center !important;
+    color: #fff;
+    text-shadow: 0 3px 8px rgba(0,0,0,0.7);
+    pointer-events: none;
+  }
+
+  /* 5) INPUTS: name & number styles (underline only, centered, MAX tag on right) */
+  .np-field-wrap.name-input,
+  .np-field-wrap.number-input {
+    position: relative;
+    text-align: center;
+    margin: 18px 0;
+  }
+
+  .np-field-wrap.name-input input.form-control,
+  .np-field-wrap.number-input input.form-control {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid #fff;
+    border-radius: 0;
+    color: #fff;
+    text-align: center;
+    width: 100%;
+    letter-spacing: 2px;
+    padding: 6px 0;
+    font-weight: 700;
+    text-transform: uppercase;
+    box-shadow: none;
+  }
+
+  /* font-size: number larger than name */
+  .np-field-wrap.number-input input.form-control { font-size: 20px; line-height:1; }
+  .np-field-wrap.name-input   input.form-control { font-size: 20px; line-height:1; }
+
+  /* placeholder color */
+  .np-field-wrap.name-input input.form-control::placeholder,
+  .np-field-wrap.number-input input.form-control::placeholder {
+    color: rgba(255,255,255,0.45);
+    font-weight: 400;
+  }
+
+  /* MAX label (right below input, aligned right) */
+  .np-field-wrap.name-input .max-count,
+  .np-field-wrap.number-input .max-count {
+    display: block;
+    position: absolute;
+    right: 6px;
+    bottom: -18px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #fff;
+    opacity: 0.9;
+  }
+
+  /* 6) keep helper text legible */
+  .np-field-wrap .form-text, .small-delivery { color: rgba(255,255,255,0.9); display : none}
+
+  /* 7) hide desktop-only bits with this class */
+  .hide-on-mobile { display: none !important; }
+
+  /* 8) make Add to Cart visible */
+  #np-atc-btn { display:block !important; z-index: 30; width:100% !important; }
+
+  /* 9) mobile large overlay styles (apply via JS .mobile-style) */
+  #np-prev-name.mobile-style {
+    top: 18px !important;
+    font-weight: 800 !important;
+    font-size: clamp(18px, 5.6vw, 34px) !important;
+    letter-spacing: 1.5px !important;
+  }
+  #np-prev-num.mobile-style {
+    top: 52% !important;
+    transform: translate(-50%,-50%) !important;
+    font-weight: 900 !important;
+    font-size: clamp(28px, 8.4vw, 56px) !important;
+  }
+
+  /* small utility */
+  .mobile-display { display: none; } /* your elements with mobile-display will show */
+  .color-display  { color: #fff; }
+}
+
+
+    /* optional styling for the left wrapper */
+    .col-md-3.np-col > #np-controls { padding: 16px !important; box-sizing: border-box; min-height: 360px; }
+
   </style>
 </head>
 <body class="py-4">
-<!--
-  In Blade you can replace $product and other server-side variables as before.
-  For test/save purposes, these are left in-place as template placeholders.
--->
 @php
   $img = $product->image_url ?? ($product->preview_src ?? asset('images/placeholder.png'));
 @endphp
@@ -279,7 +256,6 @@
                onerror="this.onerror=null;this.src='{{ asset('images/placeholder.png') }}'">
           <div id="np-prev-name" class="np-overlay font-bebas" aria-hidden="true"></div>
           <div id="np-prev-num"  class="np-overlay font-bebas" aria-hidden="true"></div>
-          <!-- mobile inputs container will be created by JS when needed -->
         </div>
       </div>
     </div>
@@ -387,8 +363,8 @@
 {{-- server-provided layoutSlots --}}
 <script> window.layoutSlots = {!! json_encode($layoutSlots, JSON_NUMERIC_CHECK) !!}; window.personalizationSupported = {{ !empty($layoutSlots) ? 'true' : 'false' }}; </script>
 
-<!-- Tabs JS (unchanged) -->
 <script>
+/* ---------- Tabs: toggle and align panel next to clicked icon (desktop only) ---------- */
 (function(){
   const buttons = document.querySelectorAll('.vt-btn');
   const panels = document.querySelectorAll('.vt-panel');
@@ -399,7 +375,7 @@
     panels.forEach(p => {
       p.classList.remove('active');
       p.setAttribute('aria-hidden','true');
-      p.style.top = '';
+      p.style.top = ''; // reset
     });
   }
 
@@ -407,18 +383,23 @@
     const panelId = btn.dataset.panel;
     const panel = document.getElementById(panelId);
     if (!panel) return;
+    // If already open -> close all
     if (panel.classList.contains('active')) {
       closeAll();
       return;
     }
     closeAll();
+    // mark active
     btn.classList.add('active');
     panel.classList.add('active');
     panel.setAttribute('aria-hidden','false');
 
+    // On desktop only: compute top offset so panel aligns with button vertically
     if (window.innerWidth > 767) {
+      // get button offsetTop relative to panelsContainer
       const btnRect = btn.getBoundingClientRect();
       const containerRect = panelsContainer.getBoundingClientRect();
+      // calculate top offset inside panelsContainer (so top aligns with button center)
       const top = (btnRect.top - containerRect.top) + (btnRect.height/2) - 24;
       const topClamped = Math.max(6, Math.round(top));
       panel.style.top = topClamped + 'px';
@@ -426,23 +407,43 @@
       panel.style.top = '';
     }
 
+    // focus first focusable element
     setTimeout(()=> {
       const focusable = panel.querySelector('input,select,button,textarea');
       if (focusable) focusable.focus({preventScroll:true});
     }, 200);
   }
 
-  buttons.forEach(btn=>{ btn.addEventListener('click', ()=> openPanelForButton(btn)); });
+  buttons.forEach(btn=>{
+    btn.addEventListener('click', ()=> openPanelForButton(btn));
+  });
 
-  document.addEventListener('click', (e)=>{ if (window.innerWidth <= 767) return; const controls = document.getElementById('np-controls'); if (!controls.contains(e.target)) closeAll(); });
+  // close panels when clicking outside the controls area (desktop)
+  document.addEventListener('click', (e)=>{
+    if (window.innerWidth <= 767) return; // mobile ignore
+    const controls = document.getElementById('np-controls');
+    if (!controls.contains(e.target)) closeAll();
+  });
 
-  window.addEventListener('resize', ()=>{ if (window.innerWidth <= 767) { panels.forEach(p => { p.classList.add('active'); p.setAttribute('aria-hidden','false'); p.style.top=''; }); } else { closeAll(); } });
+  // on resize: if mobile, ensure panels flow; if desktop, close all for consistent state
+  window.addEventListener('resize', ()=>{
+    if (window.innerWidth <= 767) {
+      panels.forEach(p => { p.classList.add('active'); p.setAttribute('aria-hidden','false'); p.style.top=''; });
+    } else {
+      closeAll();
+    }
+  });
 
-  if (window.innerWidth <= 767) { panels.forEach(p => { p.classList.add('active'); p.setAttribute('aria-hidden','false'); p.style.top=''; }); } else { closeAll(); }
+  // initial: mobile -> show all, desktop -> closed
+  if (window.innerWidth <= 767) {
+    panels.forEach(p => { p.classList.add('active'); p.setAttribute('aria-hidden','false'); p.style.top=''; });
+  } else {
+    closeAll();
+  }
 })();
 </script>
 
-<!-- Core preview + validation + layout JS (unchanged behavior) -->
+{{-- core preview + UI JS (validation + preview layout) --}}
 <script>
 (function(){
   const $ = id => document.getElementById(id);
@@ -450,13 +451,16 @@
   function init(){
     const nameEl = $('np-name'), numEl = $('np-num'), fontEl = $('np-font'), colorEl = $('np-color');
     const pvName = $('np-prev-name'), pvNum = $('np-prev-num'), baseImg = $('np-base'), stage = $('np-stage');
-    const ctrls = $('np-controls'), btn = $('np-atc-btn');
+    const ctrls = $('np-controls'), note = $('np-note'), status = $('np-status'), btn = $('np-atc-btn');
+    const layout = (typeof window.layoutSlots === 'object' && window.layoutSlots !== null) ? window.layoutSlots : {};
 
     const NAME_RE = /^[A-Za-z ]{1,12}$/, NUM_RE = /^\d{1,3}$/;
 
     function validate(){
       const okName = nameEl ? NAME_RE.test((nameEl.value||'').trim()) : true;
       const okNum = numEl ? NUM_RE.test((numEl.value||'').trim()) : true;
+      if (nameEl) document.getElementById('np-name-err')?.classList.toggle('d-none', okName);
+      if (numEl)  document.getElementById('np-num-err')?.classList.toggle('d-none', okNum);
       if (ctrls && !ctrls.classList.contains('np-hidden')) {
         if (btn) btn.disabled = !(okName && okNum && document.getElementById('np-size')?.value);
       } else {
@@ -586,11 +590,16 @@
     setTimeout(applyLayout, 200);
     setTimeout(applyLayout, 800);
 
+    // show/hide controls based on personalizationSupported flag
     if (typeof window.personalizationSupported !== 'undefined' && ctrls) {
       if (window.personalizationSupported) {
+        status && (status.textContent = 'Personalization supported.');
+        note && note.classList?.add('d-none');
         ctrls.classList.remove('np-hidden');
         if (btn) btn.disabled = true;
       } else {
+        status && (status.textContent = 'Personalization not available.');
+        note && note.classList?.remove('d-none');
         ctrls.classList.add('np-hidden');
         if (btn) btn.disabled = false;
       }
@@ -599,15 +608,6 @@
     // wire up size change to revalidate
     document.getElementById('np-size')?.addEventListener('change', validate);
     document.getElementById('np-qty')?.addEventListener('input', validate);
-
-    // layoutSlots fallback (simple defaults) if not provided server-side
-    window.layoutSlots = window.layoutSlots || {
-      name: { left_pct:50, top_pct:12, width_pct:80, height_pct:18, rotation:0 },
-      number: { left_pct:50, top_pct:55, width_pct:60, height_pct:26, rotation:0 }
-    };
-    window.personalizationSupported = (typeof window.personalizationSupported !== 'undefined') ? window.personalizationSupported : true;
-    // expose layout for applyLayout
-    layout = window.layoutSlots;
   } // init
 
   if (document.readyState === 'loading') {
@@ -618,7 +618,7 @@
 })();
 </script>
 
-<!-- html2canvas + submit handler (unchanged) -->
+{{-- html2canvas + single submit handler --}}
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script>
 (function(){
@@ -637,6 +637,7 @@
 
   if (atcForm) {
     atcForm.addEventListener('submit', async function(evt){
+      // validate size
       const size = document.getElementById('np-size')?.value || '';
       if (!size) {
         evt.preventDefault();
@@ -644,6 +645,7 @@
         return;
       }
 
+      // if personalization visible, validate name & number with same rules
       const controlsHidden = document.getElementById('np-controls')?.classList.contains('np-hidden');
       if (!controlsHidden) {
         const NAME_RE = /^[A-Za-z ]{1,12}$/, NUM_RE = /^\d{1,3}$/;
@@ -667,6 +669,7 @@
         const dataUrl = canvas.toDataURL('image/png');
         document.getElementById('np-preview-hidden').value = dataUrl;
 
+        // submit native POST to Laravel
         atcForm.submit();
       } catch (err) {
         console.error('Preview capture failed', err);
@@ -678,122 +681,5 @@
 })();
 </script>
 
-<!-- NEW: Mobile DOM mover (moves inputs into preview on mobile and back on desktop) -->
-<script>
-(function(){
-  const MOBILE_BREAK = 767;
-  const stage = document.getElementById('np-stage');
-  const controls = document.getElementById('np-controls');
-
-  function findNamePanel(){ return document.getElementById('panel-name'); }
-  function findNumberPanel(){ return document.getElementById('panel-number'); }
-
-  function ensureMobileContainer(){
-    let m = stage.querySelector('.np-mobile-inputs');
-    if (!m) {
-      m = document.createElement('div');
-      m.className = 'np-mobile-inputs';
-      stage.appendChild(m);
-    }
-    return m;
-  }
-
-  function enableMobileMode(){
-    const mobileContainer = ensureMobileContainer();
-    const namePanel = findNamePanel();
-    const numberPanel = findNumberPanel();
-    if (!namePanel || !numberPanel) return;
-
-    // if already moved, skip
-    if (mobileContainer.querySelector('#np-name')) return;
-
-    // Move number input
-    const numberInput = numberPanel.querySelector('#np-num');
-    if (numberInput) {
-      const numberWrap = document.createElement('div');
-      numberWrap.className = 'np-field-wrap number-input';
-      numberWrap.appendChild(numberInput); // moves node
-      const maxNum = document.createElement('span');
-      maxNum.className = 'max-count';
-      maxNum.textContent = 'MAX. 3'; // corresponds to maxlength=3
-      numberWrap.appendChild(maxNum);
-      mobileContainer.appendChild(numberWrap);
-    }
-
-    // Move name input
-    const nameInput = namePanel.querySelector('#np-name');
-    if (nameInput) {
-      const nameWrap = document.createElement('div');
-      nameWrap.className = 'np-field-wrap name-input';
-      nameWrap.appendChild(nameInput); // moves node
-      const maxName = document.createElement('span');
-      maxName.className = 'max-count';
-      maxName.textContent = 'MAX. 12'; // corresponds to maxlength=12
-      nameWrap.appendChild(maxName);
-      // put name on top
-      mobileContainer.insertBefore(nameWrap, mobileContainer.firstChild);
-    }
-
-    // hide original controls visually on mobile
-    if (controls) controls.classList.add('np-hidden-on-mobile');
-
-    // add mobile style to overlays so they reflow for mobile
-    document.getElementById('np-prev-name')?.classList.add('mobile-style');
-    document.getElementById('np-prev-num')?.classList.add('mobile-style');
-
-    // ensure focusable and not pointer-blocked
-    mobileContainer.querySelectorAll('input,select,button').forEach(el => el.setAttribute('tabindex','0'));
-  }
-
-  function disableMobileMode(){
-    const mobileContainer = stage.querySelector('.np-mobile-inputs');
-    const namePanel = findNamePanel();
-    const numberPanel = findNumberPanel();
-
-    if (mobileContainer) {
-      const nameWrap = mobileContainer.querySelector('.name-input');
-      const numWrap  = mobileContainer.querySelector('.number-input');
-
-      if (nameWrap) {
-        const nameInput = nameWrap.querySelector('#np-name');
-        if (nameInput && namePanel) {
-          const target = namePanel.querySelector('div') || namePanel;
-          target.insertBefore(nameInput, target.firstChild || null);
-        }
-        nameWrap.remove();
-      }
-
-      if (numWrap) {
-        const numInput = numWrap.querySelector('#np-num');
-        if (numInput && numberPanel) {
-          const target = numberPanel.querySelector('div') || numberPanel;
-          target.insertBefore(numInput, target.firstChild || null);
-        }
-        numWrap.remove();
-      }
-
-      // remove container
-      mobileContainer.remove();
-    }
-
-    if (controls) controls.classList.remove('np-hidden-on-mobile');
-
-    document.getElementById('np-prev-name')?.classList.remove('mobile-style');
-    document.getElementById('np-prev-num')?.classList.remove('mobile-style');
-  }
-
-  function checkMode(){
-    if (window.innerWidth <= MOBILE_BREAK) {
-      if (!stage.querySelector('.np-mobile-inputs')) enableMobileMode();
-    } else {
-      if (stage.querySelector('.np-mobile-inputs')) disableMobileMode();
-    }
-  }
-
-  window.addEventListener('resize', checkMode);
-  document.addEventListener('DOMContentLoaded', checkMode);
-  setTimeout(checkMode, 120);
-})();
-</script>
 </body>
 </html>
