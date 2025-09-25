@@ -35,7 +35,7 @@
     content: "";
     position: fixed;
     inset: 0;
-    background: rgba(0,0,0,0.30); /* tweak 0.22-0.36 */
+    background: rgba(0,0,0,0.35); /* tweak 0.22-0.36 */
     z-index: 5;
     pointer-events: none;
   }
@@ -132,7 +132,7 @@
   }
 
   /* font-size: number larger than name */
-  .np-field-wrap.number-input input.form-control { font-size: 28px; line-height:1; }
+  .np-field-wrap.number-input input.form-control { font-size: 20px; line-height:1; }
   .np-field-wrap.name-input   input.form-control { font-size: 20px; line-height:1; }
 
   /* placeholder color */
