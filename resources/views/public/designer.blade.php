@@ -76,9 +76,59 @@ body::before {
     color: #fff;
     opacity: 0.8;
   }
-  
+
+  .np-field-wrap.name-input,
+  .np-field-wrap.number-input {
+    position: relative;
+    text-align: center;
+    margin: 20px 0;
+  }
+
+  .np-field-wrap.name-input input.form-control,
+  .np-field-wrap.number-input input.form-control {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid #fff; /* underline only */
+    border-radius: 0;
+    color: #fff;
+    font-size: 22px;   /* Name slightly smaller */
+    font-weight: 700;
+    text-align: center;
+    width: 100%;
+    letter-spacing: 2px;
+    padding: 6px 0;
+    text-transform: uppercase;
+  }
+
+  .np-field-wrap.number-input input.form-control {
+    font-size: 28px; /* bigger for numbers */
+  }
+
+  .np-field-wrap.name-input input.form-control::placeholder,
+  .np-field-wrap.number-input input.form-control::placeholder {
+    color: rgba(255,255,255,0.5);
+    font-weight: 400;
+  }
+
+  /* MAX text (right side) */
+  .np-field-wrap.name-input .max-count,
+  .np-field-wrap.number-input .max-count {
+    display: block;
+    position: absolute;
+    right: 0;
+    bottom: -18px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #fff;
+    opacity: 0.85;
+  }
+
 .mobile-display{
   display: none;
+}
+
+.color-display{
+  color: #fff;
 }
 
 /* lift the page UI above the body overlay */
@@ -122,23 +172,25 @@ body::before {
           <div class="mb-3 np-field-wrap">
             <div class="np-field-wrap number-input">
               <input id="np-num" type="text" inputmode="numeric" maxlength="3"
-                    class="form-control" placeholder="11" autocomplete="off">
+                    class="form-control" placeholder="Your Number" autocomplete="off">
               <span class="max-count">MAX. 2</span>
             </div>
-            <div id="np-num-help" class="form-text">Digits only. 1–3 digits.</div>
+            <div id="np-num-help mobile-display" class="form-text">Digits only. 1–3 digits.</div>
             <div id="np-num-err" class="text-danger small d-none">Enter 1–3 digits only.</div>
           </div>
 
           <div class="mb-3 np-field-wrap">
-            <label for="np-name" class="form-label">Your Name</label>
-            <input id="np-name" type="text" maxlength="12" class="form-control" placeholder="Your name" autocomplete="off">
-            <span class="max-count">MAX. 11</span>
-            <div id="np-name-help" class="form-text">Only A–Z and spaces. 1–12 chars.</div>
+            <div class="np-field-wrap name-input">
+              <input id="np-name" type="text" maxlength="12"
+                    class="form-control" placeholder="YOUR NAME" autocomplete="off">
+              <span class="max-count">MAX. 11</span>
+            </div>
+            <div id="np-name-help mobile-display" class="form-text">Only A–Z and spaces. 1–12 chars.</div>
             <div id="np-name-err" class="text-danger small d-none">Enter 1–12 letters/spaces only.</div>
           </div>
 
           <div class="mb-3">
-            <label class="form-label font-label">Font</label>
+            <label class="form-label font-label color-display">Font</label>
             <select id="np-font" class="form-select">
               <option value="bebas">Bebas Neue (Bold)</option>
               <option value="anton">Anton</option>
@@ -148,7 +200,7 @@ body::before {
           </div>
 
           <div class="mb-2">
-            <label class="form-label d-block color-label">Text Color</label>
+            <label class="form-label d-block color-label color-display">Text Color</label>
             <div class="d-flex gap-2 flex-wrap mb-2">
               <button type="button" class="np-swatch" data-color="#FFFFFF" style="background:#FFFFFF"></button>
               <button type="button" class="np-swatch" data-color="#000000" style="background:#000000"></button>
@@ -180,7 +232,7 @@ body::before {
         <input type="hidden" name="preview_data" id="np-preview-hidden">
 
         <div class="mb-3">
-          <label class="form-label">Size</label>
+          <label class="form-label color-display">Size</label>
           <select id="np-size" name="size" class="form-select" required>
             <option value="">Select Size</option>
             <option value="S">S</option>
@@ -192,7 +244,7 @@ body::before {
         </div>
 
         <div class="mb-3">
-          <label class="form-label">Quantity</label>
+          <label class="form-label color-display">Quantity</label>
           <input id="np-qty" name="quantity" type="number" min="1" value="1" class="form-control">
         </div>
 
