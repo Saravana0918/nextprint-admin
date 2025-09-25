@@ -41,6 +41,10 @@ body::before {
   pointer-events: none;
 }
 
+.mobile-display{
+  display: none;
+}
+
 /* lift the page UI above the body overlay */
 .container, .row, .np-stage, header, main, footer {
   position: relative;
@@ -74,7 +78,7 @@ body::before {
 
     <div class="col-md-3 np-col order-2 order-md-1">
       <div class="border rounded p-3">
-        <h6 class="mb-3">Customize</h6>
+        <h6 class="mb-3 mobile-display">Customize</h6>
         <div id="np-status" class="small text-muted mb-2">Checking methods…</div>
         <div id="np-note" class="small text-muted mb-3 d-none">Personalization not available for this product.</div>
 
