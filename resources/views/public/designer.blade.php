@@ -156,7 +156,7 @@
   }
 
   /* 6) keep helper text legible */
-  .np-field-wrap .form-text, .small-delivery { color: rgba(255,255,255,0.9); }
+  .np-field-wrap .form-text, .small-delivery { color: rgba(255,255,255,0.9); display : none}
 
   /* 7) hide desktop-only bits with this class */
   .hide-on-mobile { display: none !important; }
@@ -179,7 +179,7 @@
   }
 
   /* small utility */
-  .mobile-display { display: inline-block; } /* your elements with mobile-display will show */
+  .mobile-display { display: none; } /* your elements with mobile-display will show */
   .color-display  { color: #fff; }
 }
 
@@ -257,8 +257,8 @@
     </div>
 
     <div class="col-md-3 np-col order-3 order-md-3">
-      <h4 class="mb-1">{{ $product->name ?? ($product->title ?? 'Product') }}</h4>
-      <div class="text-muted mb-3">Vendor: {{ $product->vendor ?? '—' }} • ₹ {{ number_format((float)($displayPrice ?? ($product->min_price ?? 0)), 2) }}</div>
+      <h4 class="mb-1 mobile-display">{{ $product->name ?? ($product->title ?? 'Product') }}</h4>
+      <div class="text-muted mb-3 mobile-display">Vendor: {{ $product->vendor ?? '—' }} • ₹ {{ number_format((float)($displayPrice ?? ($product->min_price ?? 0)), 2) }}</div>
 
       <form id="np-atc-form" method="post" action="{{ route('designer.addtocart') }}">
         @csrf
