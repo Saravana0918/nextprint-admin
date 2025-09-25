@@ -18,71 +18,13 @@
     .np-swatch { width:28px; height:28px; border-radius:50%; border:1px solid #ccc; cursor:pointer; display:inline-block; }
     .max-count{ display:none; }
 
-    /* MOBILE-SPECIFIC STADIUM BACKGROUND */
     @media (max-width: 767px) {
       body { background-image: url('/images/stadium-bg.jpg'); background-size: cover; background-position: center; min-height:100vh; }
-
-      /* shrink the main stage on mobile so it still shows properly */
-      .np-stage { max-width:340px; margin:12px auto; background:#fff; padding:10px; border-radius:10px; }
-
-      /* the panel that contains controls (which shows over stadium bg on mobile) */
-      .np-mobile-bg {
-        position: relative; /* parent for mobile overlays */
-        background: transparent; /* let stadium background show through */
-        padding: 12px;
-        border-radius: 8px;
-      }
-
-      /* Mobile-only overlay that sits on top of the mobile controls area (i.e., on stadium BG) */
-      .np-mobile-overlay {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        position: absolute;
-        left: 0;
-        right: 0;
-        pointer-events: none;
-        z-index: 40;
-      }
-
-      /* specific positions — tweak top% to move overlays vertically over stadium area */
-      #np-mobile-prev-name { top: 10%; }
-      #np-mobile-prev-num  { top: 28%; }
-
-      /* overlay appearance on mobile: bigger, uppercase, centered */
-      .np-mobile-overlay .np-overlay {
-        width: 100%;
-        text-align: center;
-        padding: 0 8px;
-      }
-
-      .np-field-wrap input.form-control {
-        background: transparent;
-        border: none;
-        border-bottom: 2px solid rgba(255,255,255,0.65);
-        color:#fff;
-        text-align:center;
-        font-weight:700;
-        text-transform:uppercase;
-        letter-spacing:2px;
-        font-size:18px;
-        padding:12px 8px;
-        border-radius:0;
-      }
+      .np-stage { max-width:340px; margin:0 auto; background:#fff; padding:10px; border-radius:10px; }
+      .np-field-wrap input.form-control { background: transparent; border: none; border-bottom: 2px solid rgba(255,255,255,0.65); color:#fff; text-align:center; font-weight:700; text-transform:uppercase; letter-spacing:2px; font-size:18px; padding:12px 8px; border-radius:0; }
       .form-select { background:#fff; color:#222; border-radius:8px; margin-bottom:16px; }
       #np-atc-btn { display:block !important; width:100% !important; font-size:16px !important; padding:12px 14px !important; margin-top:10px; }
-
-      /* hide desktop overlays inside stage on mobile to avoid duplicate */
-      #np-prev-name, #np-prev-num { display: none !important; }
     }
-
-    /* desktop keeps original look */
-    @media (min-width: 768px) {
-      /* ensure mobile overlays are hidden on desktop */
-      #np-mobile-prev-name, #np-mobile-prev-num { display: none !important; }
-    }
-
   </style>
 </head>
 <body class="py-4">
@@ -104,16 +46,10 @@
     </div>
 
     <div class="col-md-3 np-col order-2 order-md-1">
-      <div class="border rounded p-3 np-mobile-bg">
+      <div class="border rounded p-3">
         <h6 class="mb-3">Customize</h6>
         <div id="np-status" class="small text-muted mb-2">Checking methods…</div>
         <div id="np-note" class="small text-muted mb-3 d-none">Personalization not available for this product.</div>
-
-        <!-- MOBILE OVERLAYS: visible only on mobile, positioned relative to .np-mobile-bg -->
-        <div class="np-mobile-overlay" aria-hidden="true">
-          <div id="np-mobile-prev-name" class="np-overlay font-bebas" aria-hidden="true"></div>
-          <div id="np-mobile-prev-num"  class="np-overlay font-bebas" aria-hidden="true"></div>
-        </div>
 
         <div id="np-controls" class="np-hidden">
           <div class="mb-3 np-field-wrap">
@@ -166,6 +102,8 @@
         <input type="hidden" id="np-product-id" name="product_id" value="{{ $product->id }}">
         <input type="hidden" id="np-shopify-id" name="shopify_product_id" value="{{ $product->shopify_product_id ?? '' }}">
         <input type="hidden" name="variant_id" id="np-variant-id" value="">
+
+        <!-- personalization hidden values (names match controller) -->
         <input type="hidden" name="name_text" id="np-name-hidden">
         <input type="hidden" name="number_text" id="np-num-hidden">
         <input type="hidden" name="font" id="np-font-hidden">
@@ -197,11 +135,13 @@
   </div>
 </div>
 
+{{-- server-provided layoutSlots --}}
 <script>
   window.layoutSlots = {!! json_encode($layoutSlots, JSON_NUMERIC_CHECK) !!};
   window.personalizationSupported = {{ !empty($layoutSlots) ? 'true' : 'false' }};
 </script>
 
+{{-- core preview + UI JS (validation + preview layout) --}}
 <script>
 (function(){
   const $ = id => document.getElementById(id);
@@ -209,7 +149,6 @@
   function init(){
     const nameEl = $('np-name'), numEl = $('np-num'), fontEl = $('np-font'), colorEl = $('np-color');
     const pvName = $('np-prev-name'), pvNum = $('np-prev-num'), baseImg = $('np-base'), stage = $('np-stage');
-    const mobilePvName = $('np-mobile-prev-name'), mobilePvNum = $('np-mobile-prev-num');
     const ctrls = $('np-controls'), note = $('np-note'), status = $('np-status'), btn = $('np-atc-btn');
     const layout = (typeof window.layoutSlots === 'object' && window.layoutSlots !== null) ? window.layoutSlots : {};
 
@@ -227,15 +166,14 @@
       return okName && okNum;
     }
 
-    function applyFontToElements(val, elements){
+    function applyFont(val){
       const classes = ['font-bebas','font-anton','font-oswald','font-impact'];
-      elements.forEach(el=>{
-        if(!el) return;
-        el.classList.remove(...classes);
-      });
+      if (pvName) pvName.classList.remove(...classes);
+      if (pvNum) pvNum.classList.remove(...classes);
       const map = {bebas:'font-bebas', anton:'font-anton', oswald:'font-oswald', impact:'font-impact'};
       const c = map[val] || 'font-bebas';
-      elements.forEach(el=> el && el.classList.add(c));
+      if (pvName) pvName.classList.add(c);
+      if (pvNum) pvNum.classList.add(c);
     }
 
     function computeStageSize(){
@@ -313,37 +251,6 @@
         const numTxt = (numEl.value||'').replace(/\D/g,'');
         pvNum.textContent = numTxt || 'YOUR NUMBER';
       }
-
-      // MOBILE overlays: show name/num over the stadium-bg area (only used on mobile)
-      const isMobile = window.innerWidth <= 767;
-      if (isMobile) {
-        if (mobilePvName) {
-          const txt = (nameEl && nameEl.value) ? nameEl.value.toUpperCase() : '';
-          mobilePvName.textContent = txt || 'YOUR NAME';
-        }
-        if (mobilePvNum) {
-          const n = (numEl && numEl.value) ? numEl.value.replace(/\D/g,'') : '';
-          mobilePvNum.textContent = n || 'YOUR NUMBER';
-        }
-        // apply sizing for mobile overlays (approximate: full width containers)
-        if (mobilePvName) {
-          // mobile overlay sizing: base on parent width
-          const parent = mobilePvName.parentElement;
-          const parentW = parent ? parent.clientWidth : window.innerWidth;
-          const baseFont = Math.max(12, Math.floor(parentW * 0.06));
-          mobilePvName.style.fontSize = baseFont + 'px';
-          mobilePvName.style.lineHeight = '1';
-        }
-        if (mobilePvNum) {
-          const parent = mobilePvNum.parentElement;
-          const parentW = parent ? parent.clientWidth : window.innerWidth;
-          const baseFont = Math.max(18, Math.floor(parentW * 0.08));
-          mobilePvNum.style.fontSize = baseFont + 'px';
-          mobilePvNum.style.lineHeight = '1';
-          mobilePvNum.style.fontWeight = '900';
-        }
-      }
-
       applyLayout();
     }
 
@@ -356,17 +263,8 @@
 
     if (nameEl) nameEl.addEventListener('input', ()=>{ syncPreview(); validate(); syncHidden(); });
     if (numEl)  numEl.addEventListener('input', e=>{ e.target.value = e.target.value.replace(/\D/g,'').slice(0,3); syncPreview(); validate(); syncHidden(); });
-    if (fontEl) fontEl.addEventListener('change', ()=>{ 
-      applyFontToElements(fontEl.value, [pvName, pvNum, mobilePvName, mobilePvNum]); 
-      syncPreview(); syncHidden(); 
-    });
-    if (colorEl) colorEl.addEventListener('input', ()=>{ 
-      if (pvName) pvName.style.color = colorEl.value; 
-      if (pvNum) pvNum.style.color = colorEl.value; 
-      if (mobilePvName) mobilePvName.style.color = colorEl.value;
-      if (mobilePvNum) mobilePvNum.style.color = colorEl.value;
-      syncHidden(); 
-    });
+    if (fontEl) fontEl.addEventListener('change', ()=>{ applyFont(fontEl.value); syncPreview(); syncHidden(); });
+    if (colorEl) colorEl.addEventListener('input', ()=>{ if (pvName) pvName.style.color = colorEl.value; if (pvNum) pvNum.style.color = colorEl.value; syncHidden(); });
 
     document.querySelectorAll('.np-swatch')?.forEach(b=>{
       b.addEventListener('click', ()=>{
@@ -375,21 +273,17 @@
         if (colorEl) colorEl.value = b.dataset.color;
         if (pvName) pvName.style.color = b.dataset.color;
         if (pvNum) pvNum.style.color = b.dataset.color;
-        if (mobilePvName) mobilePvName.style.color = b.dataset.color;
-        if (mobilePvNum) mobilePvNum.style.color = b.dataset.color;
         syncHidden();
       });
     });
 
-    applyFontToElements(fontEl ? fontEl.value : 'bebas', [pvName, pvNum, mobilePvName, mobilePvNum]);
+    applyFont(fontEl ? fontEl.value : 'bebas');
     if (pvName && colorEl) pvName.style.color = colorEl.value;
     if (pvNum && colorEl) pvNum.style.color = colorEl.value;
-    if (mobilePvName && colorEl) mobilePvName.style.color = colorEl.value;
-    if (mobilePvNum && colorEl) mobilePvNum.style.color = colorEl.value;
     syncPreview(); syncHidden();
 
     if (baseImg) baseImg.addEventListener('load', applyLayout);
-    window.addEventListener('resize', function(){ applyLayout(); syncPreview(); });
+    window.addEventListener('resize', applyLayout);
     setTimeout(applyLayout, 200);
     setTimeout(applyLayout, 800);
 
@@ -421,6 +315,7 @@
 })();
 </script>
 
+{{-- html2canvas + single submit handler --}}
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script>
 (function(){
