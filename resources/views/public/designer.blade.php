@@ -34,7 +34,7 @@
     /* panels container is relative; panels absolute (desktop only) */
     .vt-panels { flex:1 1 auto; min-width:0; position: relative; }
     .vt-panel {
-      position: absolute;
+      position: relative;
       left: 10px;                      /* place to the right of icons column */
       width: calc(100% - 10px);        /* leave some space */
       display: none;
