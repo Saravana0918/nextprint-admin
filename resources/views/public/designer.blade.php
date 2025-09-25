@@ -7,6 +7,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Oswald:wght@400;600&display=swap" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
+    /* -------------------------
+       Base styles (desktop + mobile baseline)
+       ------------------------- */
     .np-hidden { display: none !important; }
     .font-bebas{font-family:'Bebas Neue', Impact, 'Arial Black', sans-serif;}
     .font-anton{font-family:'Anton', Impact, 'Arial Black', sans-serif;}
@@ -18,39 +21,149 @@
     .np-swatch { width:28px; height:28px; border-radius:50%; border:1px solid #ccc; cursor:pointer; display:inline-block; }
     .max-count{ display:none; }
 
-    /* --- body stadium overlay (mobile only) --- */
-body {
-  /* keep your existing background rule or repeat it */
-  background-image: url('/images/stadium-bg.jpg');
-  background-size: cover;
-  background-position: center;
-  min-height: 100vh;
+    /* ---------- existing mobile-friendly input tweaks (kept) ---------- */
+    @media (max-width: 767px) {
+      .np-stage { max-width:340px; margin:0 auto; background:#fff; padding:10px; border-radius:10px; }
+      .np-field-wrap input.form-control { background: transparent; border: none; border-bottom: 2px solid rgba(255,255,255,0.65); color:#fff; text-align:center; font-weight:700; text-transform:uppercase; letter-spacing:2px; font-size:18px; padding:12px 8px; border-radius:0; }
+      .form-select { background:#fff; color:#222; border-radius:8px; margin-bottom:16px; }
+      #np-atc-btn { display:block !important; width:100% !important; font-size:16px !important; padding:12px 14px !important; margin-top:10px; }
+    }
 
-  /* ensure stacking context for the pseudo element */
-  position: relative;
-  z-index: 0;
-}
+    /* =========================
+       MOBILE-ONLY: Body stadium bg + body overlay + image frame + mobile overlay styles
+       Desktop will NOT be affected (media query)
+       ========================= */
+    @media (max-width: 767px) {
 
-/* overlay on top of body background but below page UI */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0; /* top:0; right:0; bottom:0; left:0; */
-  background: rgba(0,0,0,0.32); /* tweak opacity 0.22 - 0.40 as needed */
-  z-index: 1;
-  pointer-events: none;
-}
+      /* Body stadium background (full viewport) */
+      body {
+        background-image: url('/images/stadium-bg.jpg'); /* change path if required */
+        background-size: cover;
+        background-position: center center;
+        background-repeat: no-repeat;
+        min-height: 100vh;
+        position: relative; /* stacking context */
+      }
 
-/* lift the page UI above the body overlay */
-.container, .row, .np-stage, header, main, footer {
-  position: relative;
-  z-index: 2;
-}
+      /* Body-level translucent tint ABOVE stadium but BELOW UI */
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.30); /* tweak 0.22 - 0.36 for contrast */
+        z-index: 5;
+        pointer-events: none;
+      }
 
-/* keep stage image + overlays above everything */
-.np-stage { z-index: 3; }
-.np-stage img#np-base { z-index: 4; position: relative; }
-#np-prev-name, #np-prev-num, .np-mobile-head { z-index: 5; pointer-events: none; }
+      /* Ensure main content is above body tint */
+      .container, .row, .np-stage, header, main, footer {
+        position: relative;
+        z-index: 10;
+      }
+
+      /* NP stage: provide visible border box/frame for the t-shirt image */
+      .np-stage {
+        background: transparent;
+        padding: 8px;
+        box-sizing: border-box;
+        z-index: 12;
+        position: relative;
+      }
+      .np-stage .np-image-frame {
+        position: relative;
+        background: rgba(255,255,255,0.02);
+        border-radius: 10px;
+        padding: 10px;
+        border: 3px solid rgba(255,255,255,0.12);
+        box-shadow: 0 6px 20px rgba(0,0,0,0.45);
+        overflow: hidden;
+      }
+
+      /* t-shirt image inside the frame */
+      .np-stage img#np-base {
+        display:block;
+        width:100%;
+        height:auto;
+        border-radius: 6px;
+        position: relative;
+        z-index: 14;
+        background-color: #f6f6f6;
+      }
+
+      /* very subtle image-level overlay (keeps text readable) */
+      .np-stage .np-image-frame::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: rgba(0,0,0,0.06);
+        z-index: 15;
+        pointer-events: none;
+        border-radius: 8px;
+      }
+
+      /* ensure mobile title & overlays sit above overlays */
+      .np-mobile-head {
+        z-index: 22;
+        position:absolute;
+        top:10px; left:12px; right:12px;
+        color:#fff;
+        pointer-events:none;
+        text-shadow:0 3px 8px rgba(0,0,0,0.7);
+        display:block;
+      }
+
+      /* default overlay placement for mobile (centered) */
+      #np-prev-name, #np-prev-num {
+        z-index: 24;
+        position: absolute;
+        left: 50% !important;
+        transform: translateX(-50%) !important;
+        width: 90% !important;
+        text-align: center !important;
+        color: #fff;
+        text-shadow: 0 3px 8px rgba(0,0,0,0.7);
+        pointer-events: none;
+      }
+
+      /* hide heavy desktop-only controls by using class hide-on-mobile */
+      .hide-on-mobile { display: none !important; }
+
+      /* readability for inputs over tinted bg */
+      .np-field-wrap input.form-control,
+      .form-select,
+      input.form-control.form-control-color {
+        background: rgba(255,255,255,0.03);
+        border: none;
+        border-bottom: 2px solid rgba(255,255,255,0.26);
+        color: #fff;
+        font-weight: 700;
+      }
+      .np-field-wrap .form-text, .small-delivery { color: rgba(255,255,255,0.9); }
+
+      /* ensure add-to-cart visible */
+      #np-atc-btn { display:block !important; z-index: 30; width:100% !important; }
+
+      /* ------------------------
+         MOBILE: big overlay style (like your second screenshot)
+         These apply when JS adds .mobile-style class to overlays (helper below)
+         ------------------------ */
+      #np-prev-name.mobile-style {
+        top: 18px !important;
+        font-weight: 800 !important;
+        font-size: clamp(18px, 5.6vw, 34px) !important;
+        letter-spacing: 1.5px !important;
+      }
+      #np-prev-num.mobile-style {
+        top: 52% !important;
+        transform: translate(-50%,-50%) !important;
+        font-weight: 900 !important;
+        font-size: clamp(28px, 8.4vw, 56px) !important;
+        letter-spacing: 1px !important;
+      }
+
+      /* quick safety: hide helper small labels that might overlap */
+      .max-count { display:none !important; }
+    } /* end mobile-only block */
 
   </style>
 </head>
@@ -64,8 +177,20 @@ body::before {
     <div class="col-md-6 np-col order-1 order-md-2">
       <div class="border rounded p-3">
         <div class="np-stage" id="np-stage">
-          <img id="np-base" crossorigin="anonymous" src="{{ $img }}" alt="Preview"
-            onerror="this.onerror=null;this.src='{{ asset('images/placeholder.png') }}'">
+
+          <!-- IMAGE FRAME (visible border box on mobile) -->
+          <div class="np-image-frame">
+            <img id="np-base" crossorigin="anonymous" src="{{ $img }}" alt="Preview"
+              onerror="this.onerror=null;this.src='{{ asset('images/placeholder.png') }}'">
+          </div>
+
+          <!-- Mobile-only title overlay (visible on mobile via CSS) -->
+          <div class="np-mobile-head d-none">
+            <div class="np-mobile-title">{{ $product->name ?? ($product->title ?? 'Product') }}</div>
+            <div class="np-mobile-vendor">Vendor: {{ $product->vendor ?? '—' }}</div>
+          </div>
+
+          <!-- text overlays -->
           <div id="np-prev-name" class="np-overlay np-name font-bebas" aria-hidden="true"></div>
           <div id="np-prev-num"  class="np-overlay np-num  font-bebas" aria-hidden="true"></div>
         </div>
@@ -78,7 +203,7 @@ body::before {
         <div id="np-status" class="small text-muted mb-2">Checking methods…</div>
         <div id="np-note" class="small text-muted mb-3 d-none">Personalization not available for this product.</div>
 
-        <div id="np-controls" class="np-hidden">
+        <div id="np-controls" class="">
           <div class="mb-3 np-field-wrap">
             <label for="np-num" class="form-label">Your Number</label>
             <input id="np-num" type="text" inputmode="numeric" maxlength="3" class="form-control" placeholder="Your number" autocomplete="off">
@@ -95,7 +220,7 @@ body::before {
             <div id="np-name-err" class="text-danger small d-none">Enter 1–12 letters/spaces only.</div>
           </div>
 
-          <div class="mb-3">
+          <div class="mb-3 hide-on-mobile">
             <label class="form-label font-label">Font</label>
             <select id="np-font" class="form-select">
               <option value="bebas">Bebas Neue (Bold)</option>
@@ -107,7 +232,7 @@ body::before {
 
           <div class="mb-2">
             <label class="form-label d-block color-label">Text Color</label>
-            <div class="d-flex gap-2 flex-wrap mb-2">
+            <div class="d-flex gap-2 flex-wrap mb-2 hide-on-mobile">
               <button type="button" class="np-swatch" data-color="#FFFFFF" style="background:#FFFFFF"></button>
               <button type="button" class="np-swatch" data-color="#000000" style="background:#000000"></button>
               <button type="button" class="np-swatch" data-color="#FFD700" style="background:#FFD700"></button>
@@ -339,6 +464,28 @@ body::before {
   } else {
     init();
   }
+})();
+
+/* Mobile preview mode helper: add .mobile-style to overlays when mobile detected */
+(function mobilePreviewModeInit(){
+  function applyMobileStyleFlag(){
+    const isMobile = window.innerWidth <= 767;
+    if (isMobile) {
+      document.body.classList.add('mobile-preview-mode');
+      document.getElementById('np-prev-name')?.classList.add('mobile-style');
+      document.getElementById('np-prev-num')?.classList.add('mobile-style');
+      // show mobile title overlay if present
+      document.querySelector('.np-mobile-head')?.classList.remove('d-none');
+    } else {
+      document.body.classList.remove('mobile-preview-mode');
+      document.getElementById('np-prev-name')?.classList.remove('mobile-style');
+      document.getElementById('np-prev-num')?.classList.remove('mobile-style');
+      document.querySelector('.np-mobile-head')?.classList.add('d-none');
+    }
+  }
+  window.addEventListener('resize', applyMobileStyleFlag);
+  window.addEventListener('orientationchange', applyMobileStyleFlag);
+  applyMobileStyleFlag();
 })();
 </script>
 
