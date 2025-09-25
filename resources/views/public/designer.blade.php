@@ -13,10 +13,11 @@
 .font-anton{font-family:'Anton', Impact, 'Arial Black', sans-serif;}
 .font-oswald{font-family:'Oswald', Arial, sans-serif;}
 .font-impact{font-family:Impact, 'Arial Black', sans-serif;}
-.np-stage { position: relative; width: 100%; max-width: 534px; margin: 0 auto; min-height: 220px; overflow: visible; background: #fff; border-radius:8px; padding:8px; }
-.np-stage img { width: 100%; height: auto; display:block; border-radius:6px; }
-.np-overlay { position:absolute; color:#D4AF37; text-shadow: 0 2px 6px rgba(0,0,0,0.35); white-space:nowrap; pointer-events:none; font-weight:700; text-transform:uppercase; letter-spacing:2px; display:flex; align-items:center; justify-content:center; user-select:none; line-height:1; }
+.np-stage { position: relative; width: 100%; max-width: 534px; margin: 0 auto; background:#fff; border-radius:8px; padding:8px; }
+.np-stage img { width:100%; height:auto; border-radius:6px; }
+.np-overlay { position:absolute; color:#D4AF37; font-weight:700; text-transform:uppercase; letter-spacing:2px; white-space:nowrap; text-shadow:0 2px 6px rgba(0,0,0,0.35); }
 .np-swatch { width:28px; height:28px; border-radius:50%; border:1px solid #ccc; cursor:pointer; display:inline-block; }
+.max-count{ display:none; }
 .col-md-3.np-col > #np-controls {
   min-height: 520px;
   display:flex;
@@ -24,54 +25,29 @@
   padding: 18px !important;
   box-sizing: border-box;
 }
-.max-count{ display:none; }
-.vertical-tabs { 
-  display:flex; 
-  gap:18px; 
-  align-items:flex-start; 
-  width:100%; 
-  min-height: 520px;  /* overall height */
-}
-.vt-icons {
-  flex: 0 0 68px;
-  display:flex;
-  flex-direction:column;
-  gap:18px;
-  align-items:center;
-  padding-top:8px;
-}
-.vt-btn {
-  width:68px;
-  height:68px;
-  border-radius:10px;
-  font-size:18px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-}
+.vertical-tabs { display:flex; gap:18px; align-items:flex-start; }
+.vt-icons { flex:0 0 64px; display:flex; flex-direction:column; gap:16px; align-items:center; }
+.vt-btn { width:64px; height:64px; border-radius:8px; border:1px solid #ddd; background:#fff; display:flex; align-items:center; justify-content:center; cursor:pointer; }
 .vt-btn .vt-ico { font-size:18px; display:inline-block; line-height:1; }
-.vt-btn.active { background:#f5f7fb; box-shadow:0 6px 18px rgba(10,20,40,0.04); border-color:#dbe7ff; transform: translateX(0); }
+.vt-btn.active { background:#f0f4ff; border-color:#aac6ff; }
 .vt-btn:focus { outline: none; box-shadow: 0 0 0 3px rgba(100,150,255,0.12); }
 .vt-panel .np-field-wrap { margin-bottom: 16px; }
 .vt-panel .np-field-wrap input.form-control,
 .vt-panel .np-field-wrap select.form-select,
 .vt-panel .form-control-color { min-height:44px; }
 /* panels */
-.vt-panels {
-  flex:1 1 auto;
-  padding-left:10px;
-  min-height: 440px;  /* inside panel height */
-}
-.vt-panel { padding: 10px 8px; }
+ .vt-panels { flex:1 1 auto; padding-left:10px; }
+.vt-panel { display:none; opacity:0; transition:all 0.3s ease; }
 .vt-panel h6 { margin-bottom:12px; font-size:15px; font-weight:600; }
-.vt-panel.active { display:block; opacity:1; }
+ .vt-panel.active { display:block; opacity:1; }
 
 /* small screens: keep icons small & stacked (we won't change mobile behavior) */
-@media (max-width: 767px) {
-  .vertical-tabs { display:block; }
-  .vt-icons { display:flex; flex-direction:row; gap:8px; margin-bottom:8px; }
-  .vt-btn { width:40px; height:40px; }
-}
+@media (max-width:767px){
+      .vertical-tabs{display:block;}
+      .vt-icons{flex-direction:row;gap:8px;margin-bottom:8px;}
+      .vt-btn{width:40px;height:40px;}
+      .vt-panel{display:block!important;opacity:1!important;}
+    }
 
 /* ===== MOBILE-ONLY STYLES (paste inside your <style>) ===== */
 @media (max-width: 767px) {
@@ -247,133 +223,96 @@
 
 <div class="container">
   <div class="row g-4">
-    <div class="col-md-6 np-col order-1 order-md-2">
+
+    <!-- Preview -->
+    <div class="col-md-6 order-1 order-md-2">
       <div class="border rounded p-3">
         <div class="np-stage" id="np-stage">
-          <img id="np-base" crossorigin="anonymous" src="{{ $img }}" alt="Preview"
-            onerror="this.onerror=null;this.src='{{ asset('images/placeholder.png') }}'">
-          <div id="np-prev-name" class="np-overlay np-name font-bebas" aria-hidden="true"></div>
-          <div id="np-prev-num"  class="np-overlay np-num  font-bebas" aria-hidden="true"></div>
+          <img id="np-base" src="{{ $img }}" alt="Preview" crossorigin="anonymous" 
+               onerror="this.onerror=null;this.src='{{ asset('images/placeholder.png') }}'">
+          <div id="np-prev-name" class="np-overlay font-bebas"></div>
+          <div id="np-prev-num" class="np-overlay font-bebas"></div>
         </div>
       </div>
     </div>
 
-    <div class="col-md-3 np-col order-2 order-md-1">
-  <div id="np-controls" class="border rounded p-3"> <!-- keep id np-controls so existing code finds it -->
-    <!-- Vertical icon tabs -->
-    <div class="vertical-tabs">
-      <nav class="vt-icons" role="tablist" aria-orientation="vertical">
-        <button class="vt-btn active" data-panel="panel-number" aria-controls="panel-number" title="Number" aria-selected="true">
-          <span class="vt-ico">①</span>
-        </button>
-        <button class="vt-btn" data-panel="panel-name" aria-controls="panel-name" title="Name">
-          <span class="vt-ico">②</span>
-        </button>
-        <button class="vt-btn" data-panel="panel-font" aria-controls="panel-font" title="Font">
-          <span class="vt-ico">𝙰</span>
-        </button>
-        <button class="vt-btn" data-panel="panel-color" aria-controls="panel-color" title="Color">
-          <span class="vt-ico">⚪</span>
-        </button>
-      </nav>
+   <div class="col-md-3 order-2 order-md-1">
+      <div id="np-controls" class="border rounded p-3">
+        <div class="vertical-tabs">
+          <nav class="vt-icons">
+            <button class="vt-btn" data-panel="panel-number"><span>①</span></button>
+            <button class="vt-btn" data-panel="panel-name"><span>②</span></button>
+            <button class="vt-btn" data-panel="panel-font"><span>𝙰</span></button>
+            <button class="vt-btn" data-panel="panel-color"><span>⚪</span></button>
+          </nav>
 
-      <!-- panels container -->
-      <div class="vt-panels">
-        <!-- Number panel -->
-        <div id="panel-number" class="vt-panel active" role="tabpanel" aria-hidden="false">
-          <h6 class="mb-2 color-display">Number</h6>
-          <div class="mb-3 np-field-wrap number-input">
-            <input id="np-num" type="text" inputmode="numeric" maxlength="3"
-                  class="form-control" placeholder="Your Number" autocomplete="off">
-            <span class="max-count">MAX. 2</span>
-            <div id="np-num-help" class="form-text small text-muted">Digits only. 1–3 digits.</div>
-            <div id="np-num-err" class="text-danger small d-none">Enter 1–3 digits only.</div>
-          </div>
-        </div>
-
-        <!-- Name panel -->
-        <div id="panel-name" class="vt-panel" role="tabpanel" aria-hidden="true">
-          <h6 class="mb-2 color-display">Name</h6>
-          <div class="mb-3 np-field-wrap name-input">
-            <input id="np-name" type="text" maxlength="12"
-                  class="form-control" placeholder="YOUR NAME" autocomplete="off">
-            <span class="max-count">MAX. 11</span>
-            <div id="np-name-help" class="form-text small text-muted">Only A–Z and spaces. 1–12 chars.</div>
-            <div id="np-name-err" class="text-danger small d-none">Enter 1–12 letters/spaces only.</div>
-          </div>
-        </div>
-
-        <!-- Font panel -->
-        <div id="panel-font" class="vt-panel" role="tabpanel" aria-hidden="true">
-          <h6 class="mb-2 color-display">Font</h6>
-          <div class="mb-3">
-            <label class="form-label font-label">Font</label>
-            <select id="np-font" class="form-select">
-              <option value="bebas">Bebas Neue (Bold)</option>
-              <option value="anton">Anton</option>
-              <option value="oswald">Oswald</option>
-              <option value="impact">Impact</option>
-            </select>
-          </div>
-        </div>
-
-        <!-- Color panel -->
-        <div id="panel-color" class="vt-panel" role="tabpanel" aria-hidden="true">
-          <h6 class="mb-2 color-display">Text Color</h6>
-          <div class="mb-2">
-            <div class="d-flex gap-2 flex-wrap mb-2">
-              <button type="button" class="np-swatch" data-color="#FFFFFF" style="background:#FFFFFF"></button>
-              <button type="button" class="np-swatch" data-color="#000000" style="background:#000000"></button>
-              <button type="button" class="np-swatch" data-color="#FFD700" style="background:#FFD700"></button>
-              <button type="button" class="np-swatch" data-color="#FF0000" style="background:#FF0000"></button>
-              <button type="button" class="np-swatch" data-color="#1E90FF" style="background:#1E90FF"></button>
+          <div class="vt-panels">
+            <!-- Number -->
+            <div id="panel-number" class="vt-panel">
+              <h6>Number</h6>
+              <input id="np-num" type="text" maxlength="3" class="form-control mb-2" placeholder="Your Number">
+              <div class="form-text small">Digits only. 1–3 digits.</div>
             </div>
-            <input id="np-color" type="color" class="form-control form-control-color mt-2" value="#D4AF37" title="Pick color">
+
+            <!-- Name -->
+            <div id="panel-name" class="vt-panel">
+              <h6>Name</h6>
+              <input id="np-name" type="text" maxlength="12" class="form-control mb-2" placeholder="YOUR NAME">
+              <div class="form-text small">Only A–Z and spaces. 1–12 chars.</div>
+            </div>
+
+            <!-- Font -->
+            <div id="panel-font" class="vt-panel">
+              <h6>Font</h6>
+              <select id="np-font" class="form-select">
+                <option value="bebas">Bebas Neue</option>
+                <option value="anton">Anton</option>
+                <option value="oswald">Oswald</option>
+                <option value="impact">Impact</option>
+              </select>
+            </div>
+
+            <!-- Color -->
+            <div id="panel-color" class="vt-panel">
+              <h6>Text Color</h6>
+              <div class="d-flex gap-2 flex-wrap mb-2">
+                <button type="button" class="np-swatch" data-color="#FFFFFF" style="background:#FFF"></button>
+                <button type="button" class="np-swatch" data-color="#000000" style="background:#000"></button>
+                <button type="button" class="np-swatch" data-color="#FFD700" style="background:#FFD700"></button>
+                <button type="button" class="np-swatch" data-color="#FF0000" style="background:#F00"></button>
+                <button type="button" class="np-swatch" data-color="#1E90FF" style="background:#1E90FF"></button>
+              </div>
+              <input id="np-color" type="color" class="form-control form-control-color" value="#D4AF37">
+            </div>
           </div>
         </div>
       </div>
     </div>
-  </div>
-</div>
 
-    <div class="col-md-3 np-col order-3 order-md-3">
-      <h4 class="mb-1 mobile-display">{{ $product->name ?? ($product->title ?? 'Product') }}</h4>
-      <div class="text-muted mb-3 mobile-display">Vendor: {{ $product->vendor ?? '—' }} • ₹ {{ number_format((float)($displayPrice ?? ($product->min_price ?? 0)), 2) }}</div>
 
+     <div class="col-md-3 order-3">
       <form id="np-atc-form" method="post" action="{{ route('designer.addtocart') }}">
         @csrf
-        <input type="hidden" id="np-product-id" name="product_id" value="{{ $product->id }}">
-        <input type="hidden" id="np-shopify-id" name="shopify_product_id" value="{{ $product->shopify_product_id ?? '' }}">
-        <input type="hidden" name="variant_id" id="np-variant-id" value="">
-
-        <!-- personalization hidden values (names match controller) -->
         <input type="hidden" name="name_text" id="np-name-hidden">
         <input type="hidden" name="number_text" id="np-num-hidden">
         <input type="hidden" name="font" id="np-font-hidden">
         <input type="hidden" name="color" id="np-color-hidden">
-        <input type="hidden" name="preview_data" id="np-preview-hidden">
 
         <div class="mb-3">
-          <label class="form-label color-display">Size</label>
+          <label>Size</label>
           <select id="np-size" name="size" class="form-select" required>
             <option value="">Select Size</option>
-            <option value="S">S</option>
-            <option value="M">M</option>
-            <option value="L">L</option>
-            <option value="XL">XL</option>
-            <option value="XXL">XXL</option>
+            <option>S</option><option>M</option><option>L</option><option>XL</option><option>XXL</option>
           </select>
         </div>
 
         <div class="mb-3">
-          <label class="form-label color-display">Quantity</label>
-          <input id="np-qty" name="quantity" type="number" min="1" value="1" class="form-control">
+          <label>Quantity</label>
+          <input id="np-qty" type="number" min="1" value="1" class="form-control">
         </div>
 
         <button id="np-atc-btn" type="submit" class="btn btn-primary w-100" disabled>Add to Cart</button>
       </form>
-
-      <div class="small-delivery text-muted mt-2">Button enables when both Name & Number are valid.</div>
     </div>
   </div>
 </div>
@@ -384,41 +323,57 @@
   window.personalizationSupported = {{ !empty($layoutSlots) ? 'true' : 'false' }};
 </script>
 
-{{-- core preview + UI JS (validation + preview layout) --}}
 <script>
+/* --- Tabs logic --- */
 (function(){
-  const tabButtons = document.querySelectorAll('.vt-btn');
+  const btns = document.querySelectorAll('.vt-btn');
   const panels = document.querySelectorAll('.vt-panel');
-
-  function activatePanel(panelId, btn){
-    tabButtons.forEach(b => b.classList.remove('active'));
-    if (btn) btn.classList.add('active');
-    panels.forEach(p => {
-      if (p.id === panelId) {
-        p.classList.add('active');
-        p.setAttribute('aria-hidden','false');
+  function closeAll(){ btns.forEach(b=>b.classList.remove('active')); panels.forEach(p=>p.classList.remove('active')); }
+  btns.forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const panelId = btn.dataset.panel;
+      if(document.getElementById(panelId).classList.contains('active')){
+        closeAll();
       } else {
-        p.classList.remove('active');
-        p.setAttribute('aria-hidden','true');
+        closeAll();
+        btn.classList.add('active');
+        document.getElementById(panelId).classList.add('active');
       }
     });
-  }
-
-  tabButtons.forEach(btn => {
-    btn.addEventListener('click', function(e){
-      const panel = this.dataset.panel;
-      activatePanel(panel, this);
-      // focus first input/select inside panel for keyboard
-      const firstInput = document.getElementById(panel)?.querySelector('input,select,textarea,button');
-      if (firstInput) firstInput.focus({preventScroll:true});
-    });
   });
-
-  // default: ensure first active is visible
-  const first = document.querySelector('.vt-btn.active');
-  if (first) activatePanel(first.dataset.panel, first);
 })();
 
+/* --- Preview binding --- */
+(function(){
+  const nameEl=document.getElementById('np-name'),
+        numEl=document.getElementById('np-num'),
+        fontEl=document.getElementById('np-font'),
+        colorEl=document.getElementById('np-color'),
+        pvName=document.getElementById('np-prev-name'),
+        pvNum=document.getElementById('np-prev-num'),
+        btn=document.getElementById('np-atc-btn');
+
+  function sync(){
+    pvName.textContent=(nameEl.value||'YOUR NAME').toUpperCase();
+    pvNum.textContent=(numEl.value||'YOUR NUMBER');
+    document.getElementById('np-name-hidden').value=nameEl.value;
+    document.getElementById('np-num-hidden').value=numEl.value;
+    document.getElementById('np-font-hidden').value=fontEl.value;
+    document.getElementById('np-color-hidden').value=colorEl.value;
+    pvName.style.color=colorEl.value;
+    pvNum.style.color=colorEl.value;
+    btn.disabled=!(nameEl.value && numEl.value && document.getElementById('np-size').value);
+  }
+
+  nameEl.addEventListener('input',sync);
+  numEl.addEventListener('input',e=>{e.target.value=e.target.value.replace(/\D/g,'').slice(0,3);sync();});
+  fontEl.addEventListener('change',()=>{pvName.className='np-overlay font-'+fontEl.value;pvNum.className='np-overlay font-'+fontEl.value;sync();});
+  colorEl.addEventListener('input',sync);
+  document.querySelectorAll('.np-swatch').forEach(s=>s.addEventListener('click',()=>{colorEl.value=s.dataset.color;sync();}));
+})();
+</script>
+{{-- core preview + UI JS (validation + preview layout) --}}
+<script>
 (function(){
   const $ = id => document.getElementById(id);
 
