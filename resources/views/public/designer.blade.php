@@ -372,39 +372,32 @@
 <script> window.layoutSlots = {!! json_encode($layoutSlots, JSON_NUMERIC_CHECK) !!}; window.personalizationSupported = {{ !empty($layoutSlots) ? 'true' : 'false' }}; </script>
 
 <script>
-/* ---------- Tabs: toggle and align panel next to clicked icon (desktop only) ---------- */
-<script>
-(function(){
+document.addEventListener('DOMContentLoaded', function() {
   const buttons = Array.from(document.querySelectorAll('.vt-btn'));
   const panels  = Array.from(document.querySelectorAll('.vt-panel'));
   const panelsContainer = document.querySelector('.vt-panels');
 
-  // helper: close all
   function closeAll() {
     buttons.forEach(b => b.classList.remove('active'));
     panels.forEach(p => {
       p.classList.remove('active');
       p.setAttribute('aria-hidden','true');
       p.style.top = '';
-      // ensure desktop-only absolute positioning hidden
       if (window.innerWidth > 767) {
         p.style.display = 'none';
         p.style.opacity = '0';
       } else {
-        // on mobile ensure normal flow
         p.style.display = '';
         p.style.opacity = '';
       }
     });
   }
 
-  // open given panel for a button
   function openPanelForButton(btn) {
     const panelId = btn.dataset.panel;
     const panel = document.getElementById(panelId);
     if (!panel) return;
 
-    // if already open -> close
     if (panel.classList.contains('active')) {
       closeAll();
       return;
@@ -413,84 +406,75 @@
     closeAll();
     btn.classList.add('active');
 
-    // mark active
     panel.classList.add('active');
     panel.setAttribute('aria-hidden','false');
 
     if (window.innerWidth > 767) {
-      // Desktop: show as floating panel placed next to icons
       panel.style.display = 'block';
       panel.style.opacity = '1';
 
-      // compute top so it aligns with the button vertically (centered)
       try {
         const btnRect = btn.getBoundingClientRect();
         const containerRect = panelsContainer.getBoundingClientRect();
-        // top relative to panelsContainer
         const top = (btnRect.top - containerRect.top) + (btnRect.height/2) - (panel.offsetHeight/2);
         const topClamped = Math.max(6, Math.round(top));
         panel.style.top = topClamped + 'px';
       } catch (err) {
-        // fallback
         panel.style.top = '8px';
       }
     } else {
-      // Mobile: panels are part of flow; ensure displayed normally
       panel.style.display = '';
       panel.style.opacity = '';
       panel.style.top = '';
     }
 
-    // focus first input for accessibility
     setTimeout(()=> {
       const focusable = panel.querySelector('input,select,button,textarea');
       if (focusable) focusable.focus({preventScroll:true});
     }, 160);
   }
 
-  // Wire up click handlers
+  // add click listeners
   buttons.forEach(btn=>{
     btn.addEventListener('click', (e)=>{
+      e.preventDefault();
       e.stopPropagation();
       openPanelForButton(btn);
     });
   });
 
-  // click outside => close (desktop only)
+  // click outside closes on desktop
   document.addEventListener('click', (e)=>{
-    if (window.innerWidth <= 767) return; // mobile ignore
+    if (window.innerWidth <= 767) return;
     const controls = document.getElementById('np-controls');
     if (!controls.contains(e.target)) closeAll();
   });
 
-  // on resize: if mobile -> ensure panels are in flow; if desktop -> close all floating panels
+  // resize handling
   let resizeTimer = null;
   function onResize() {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(()=>{
       if (window.innerWidth <= 767) {
-        // mobile: ensure all panels visible in flow so user can scroll them
         panels.forEach(p => {
           p.style.display = '';
           p.style.opacity = '';
           p.style.top = '';
         });
       } else {
-        // desktop: hide floating panels to keep clean initial state
         closeAll();
       }
     }, 120);
   }
   window.addEventListener('resize', onResize);
 
-  // initial state: close on desktop, show on mobile
+  // initial state
   if (window.innerWidth <= 767) {
     panels.forEach(p => { p.classList.add('active'); p.setAttribute('aria-hidden','false'); p.style.top=''; p.style.display=''; p.style.opacity=''; });
   } else {
     closeAll();
   }
-
-})();
+});
 </script>
 
 
