@@ -200,8 +200,6 @@
   .mobile-display { display: none; } /* your elements with mobile-display will show */
   .color-display  { color: #fff; }
 }
-
-
   </style>
 </head>
 <body class="py-4">
@@ -245,7 +243,7 @@
       <div class="vt-panels">
         <!-- Number panel -->
         <div id="panel-number" class="vt-panel active" role="tabpanel" aria-hidden="false">
-          <h6 class="mb-2">Number</h6>
+          <h6 class="mb-2 color-display">Number</h6>
           <div class="mb-3 np-field-wrap number-input">
             <input id="np-num" type="text" inputmode="numeric" maxlength="3"
                   class="form-control" placeholder="Your Number" autocomplete="off">
@@ -257,7 +255,7 @@
 
         <!-- Name panel -->
         <div id="panel-name" class="vt-panel" role="tabpanel" aria-hidden="true">
-          <h6 class="mb-2">Name</h6>
+          <h6 class="mb-2 color-display">Name</h6>
           <div class="mb-3 np-field-wrap name-input">
             <input id="np-name" type="text" maxlength="12"
                   class="form-control" placeholder="YOUR NAME" autocomplete="off">
@@ -269,7 +267,7 @@
 
         <!-- Font panel -->
         <div id="panel-font" class="vt-panel" role="tabpanel" aria-hidden="true">
-          <h6 class="mb-2">Font</h6>
+          <h6 class="mb-2 color-display">Font</h6>
           <div class="mb-3">
             <label class="form-label font-label">Font</label>
             <select id="np-font" class="form-select">
@@ -283,7 +281,7 @@
 
         <!-- Color panel -->
         <div id="panel-color" class="vt-panel" role="tabpanel" aria-hidden="true">
-          <h6 class="mb-2">Text Color</h6>
+          <h6 class="mb-2 color-display">Text Color</h6>
           <div class="mb-2">
             <div class="d-flex gap-2 flex-wrap mb-2">
               <button type="button" class="np-swatch" data-color="#FFFFFF" style="background:#FFFFFF"></button>
