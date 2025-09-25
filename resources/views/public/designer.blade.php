@@ -25,7 +25,7 @@
 
     /* ---------- Desktop layout: icons + panels (panels positioned beside icons) ---------- */
     .vertical-tabs { display:flex; gap:12px; align-items:flex-start; }
-    .vt-icons { display:flex; flex-direction:column; gap:22px; flex:0 0 56px; align-items:center; padding-top:6px; }
+    .vt-icons { display:flex; flex-direction:column; gap:102px; flex:0 0 56px; align-items:center; padding-top:6px; }
     .vt-btn { display:flex; align-items:center; justify-content:center; width:56px; height:56px; border-radius:8px; border:1px solid #e6e6e6; background:#fff; cursor:pointer; }
     .vt-btn .vt-ico { font-size:18px; line-height:1; }
     .vt-btn.active { background:#f5f7fb; box-shadow:0 6px 18px rgba(10,20,40,0.04); border-color:#dbe7ff; }
@@ -102,8 +102,8 @@
       <div id="np-controls" class="border rounded p-3">
         <div class="vertical-tabs">
           <nav class="vt-icons" aria-hidden="false" role="tablist" aria-orientation="vertical">
+            <button class="vt-btn active" data-panel="panel-name" aria-controls="panel-name" title="Name"><span class="vt-ico">②</span></button>
             <button class="vt-btn" data-panel="panel-number" aria-controls="panel-number" title="Number"><span class="vt-ico">①</span></button>
-            <button class="vt-btn" data-panel="panel-name" aria-controls="panel-name" title="Name"><span class="vt-ico">②</span></button>
             <button class="vt-btn" data-panel="panel-font" aria-controls="panel-font" title="Font"><span class="vt-ico">𝙰</span></button>
             <button class="vt-btn" data-panel="panel-color" aria-controls="panel-color" title="Color"><span class="vt-ico">⚪</span></button>
           </nav>
