@@ -172,20 +172,16 @@
     background: transparent;
     border: none;
     border-bottom: 2px solid #fff;
-    border-radius: 0;
     color: #fff;
     text-align: center;
-    width: 100%;
-    letter-spacing: 2px;
-    padding: 6px 0;
-    font-weight: 700;
     text-transform: uppercase;
+    font-weight: 800;
     box-shadow: none;
   }
 
   /* font-size: number larger than name */
-  .np-field-wrap.number-input input.form-control { font-size: 20px; line-height:1; }
-  .np-field-wrap.name-input   input.form-control { font-size: 20px; line-height:1; }
+  .np-field-wrap.number-input input.form-control { font-size: clamp(28px, 7.5vw, 56px); }
+  .np-field-wrap.name-input input.form-control   { font-size: clamp(18px, 5.6vw, 32px); }
 
   /* placeholder color */
   .np-field-wrap.name-input input.form-control::placeholder,
@@ -199,13 +195,14 @@
   .np-field-wrap.number-input .max-count {
     display: block;
     position: absolute;
-    right: 6px;
+    right: 8px;
     bottom: -18px;
-    font-size: 12px;
-    font-weight: 600;
     color: #fff;
-    opacity: 0.9;
+    font-weight:700;
+    font-size:12px;
   }
+
+   .np-field-wrap { position: relative; width:100%; }
 
   /* 6) keep helper text legible */
   .np-field-wrap .form-text, .small-delivery { color: rgba(255,255,255,0.9); display : none}
@@ -271,22 +268,33 @@
             <button class="vt-btn" data-panel="panel-color" aria-controls="panel-color" title="Color"><span class="vt-ico">⚪</span></button>
           </nav>
 
+                      <!-- Name panel -->
+            <div id="panel-name" class="vt-panel" role="region" aria-hidden="true">
+              <h6>Name</h6>
+              <div>
+                <div class="np-field-wrap name-input">
+                  <input id="np-name" type="text" maxlength="12"
+                        class="form-control text-center" placeholder="YOUR NAME">
+                  <div class="form-text small">Only A–Z and spaces. 1–12 chars.</div>
+                  <span class="max-count">MAX. 12</span>
+                </div>
+              </div>
+            </div>
+
           <div class="vt-panels" aria-live="polite">
             <!-- Number panel -->
             <div id="panel-number" class="vt-panel" role="region" aria-hidden="true">
               <h6>Number</h6>
               <div>
-                <input id="np-num" type="text" maxlength="3" inputmode="numeric" class="form-control" placeholder="Your Number">
-                <div class="form-text small">Digits only. 1–3 digits.</div>
-              </div>
-            </div>
-
-            <!-- Name panel -->
-            <div id="panel-name" class="vt-panel" role="region" aria-hidden="true">
-              <h6>Name</h6>
-              <div>
-                <input id="np-name" type="text" maxlength="12" class="form-control" placeholder="YOUR NAME">
-                <div class="form-text small">Only A–Z and spaces. 1–12 chars.</div>
+                <!-- wrapper kept simple so mobile mover JS can pick and move this exact input node -->
+                <div class="np-field-wrap number-input">
+                  <input id="np-num" type="text" maxlength="3" inputmode="numeric"
+                        class="form-control text-center" placeholder="11">
+                  <!-- helper text (desktop) -->
+                  <div class="form-text small">Digits only. 1–3 digits.</div>
+                  <!-- MAX label (visible on mobile via CSS) -->
+                  <span class="max-count">MAX. 3</span>
+                </div>
               </div>
             </div>
 
