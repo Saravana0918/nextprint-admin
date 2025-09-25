@@ -72,6 +72,169 @@
       .vt-panel { position: static; left: auto; width: 100%; display: block !important; opacity:1 !important; transform:none !important; padding: 8px 0; background: transparent; border: none; box-shadow: none; }
       .col-md-3.np-col > #np-controls { min-height: auto; padding: 12px !important; }
     }
+    @media (max-width: 767px) {
+
+  /* 1) body stadium background + full-screen tint (below UI) */
+  body {
+    background-image: url('/images/stadium-bg.jpg'); /* change path if needed */
+    background-size: cover;
+    background-position: center center;
+    background-repeat: no-repeat;
+    min-height: 100vh;
+    position: relative;
+  }
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.35); /* tweak 0.22-0.36 */
+    z-index: 5;
+    pointer-events: none;
+  }
+
+  /* ensure UI sits above body tint */
+  .container, .row, .np-stage, header, main, footer {
+    position: relative;
+    z-index: 10;
+  }
+
+  /* 2) np-stage & image frame (visible pale border around t-shirt) */
+  .np-stage {
+    padding: 12px;
+    background: transparent;
+    box-sizing: border-box;
+    border-radius: 10px;
+    z-index: 12;
+    position: relative;
+  }
+  /* style the base image to look like framed box */
+  .np-stage img#np-base {
+    display:block;
+    width:100%;
+    height:auto;
+    border-radius:8px;
+    background-color:#f6f6f6;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+    border: 3px solid rgba(255,255,255,0.12);
+    position: relative;
+    z-index: 14;
+  }
+  /* subtle overlay inside frame to keep overlays readable */
+  .np-stage::after {
+    content: "";
+    position: absolute;
+    left: 12px; right: 12px; top: 12px; bottom: 12px;
+    border-radius: 8px;
+    background: rgba(0,0,0,0.06);
+    z-index: 15;
+    pointer-events: none;
+  }
+
+  /* 3) mobile-only small header shown over image */
+  .np-mobile-head {
+    display: block !important;
+    position: absolute;
+    top: 8px;
+    left: 14px;
+    right: 14px;
+    z-index: 22;
+    color: #fff;
+    text-shadow: 0 3px 8px rgba(0,0,0,0.7);
+    font-weight: 700;
+    font-size: 13px;
+    text-transform: uppercase;
+    pointer-events: none;
+  }
+
+  /* 4) overlays (name & number) default centered */
+  #np-prev-name, #np-prev-num {
+    z-index: 24;
+    position: absolute;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    width: 90% !important;
+    text-align: center !important;
+    color: #fff;
+    text-shadow: 0 3px 8px rgba(0,0,0,0.7);
+    pointer-events: none;
+  }
+
+  /* 5) INPUTS: name & number styles (underline only, centered, MAX tag on right) */
+  .np-field-wrap.name-input,
+  .np-field-wrap.number-input {
+    position: relative;
+    text-align: center;
+    margin: 18px 0;
+  }
+
+  .np-field-wrap.name-input input.form-control,
+  .np-field-wrap.number-input input.form-control {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid #fff;
+    border-radius: 0;
+    color: #fff;
+    text-align: center;
+    width: 100%;
+    letter-spacing: 2px;
+    padding: 6px 0;
+    font-weight: 700;
+    text-transform: uppercase;
+    box-shadow: none;
+  }
+
+  /* font-size: number larger than name */
+  .np-field-wrap.number-input input.form-control { font-size: 20px; line-height:1; }
+  .np-field-wrap.name-input   input.form-control { font-size: 20px; line-height:1; }
+
+  /* placeholder color */
+  .np-field-wrap.name-input input.form-control::placeholder,
+  .np-field-wrap.number-input input.form-control::placeholder {
+    color: rgba(255,255,255,0.45);
+    font-weight: 400;
+  }
+
+  /* MAX label (right below input, aligned right) */
+  .np-field-wrap.name-input .max-count,
+  .np-field-wrap.number-input .max-count {
+    display: block;
+    position: absolute;
+    right: 6px;
+    bottom: -18px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #fff;
+    opacity: 0.9;
+  }
+
+  /* 6) keep helper text legible */
+  .np-field-wrap .form-text, .small-delivery { color: rgba(255,255,255,0.9); display : none}
+
+  /* 7) hide desktop-only bits with this class */
+  .hide-on-mobile { display: none !important; }
+
+  /* 8) make Add to Cart visible */
+  #np-atc-btn { display:block !important; z-index: 30; width:100% !important; }
+
+  /* 9) mobile large overlay styles (apply via JS .mobile-style) */
+  #np-prev-name.mobile-style {
+    top: 18px !important;
+    font-weight: 800 !important;
+    font-size: clamp(18px, 5.6vw, 34px) !important;
+    letter-spacing: 1.5px !important;
+  }
+  #np-prev-num.mobile-style {
+    top: 52% !important;
+    transform: translate(-50%,-50%) !important;
+    font-weight: 900 !important;
+    font-size: clamp(28px, 8.4vw, 56px) !important;
+  }
+
+  /* small utility */
+  .mobile-display { display: none; } /* your elements with mobile-display will show */
+  .color-display  { color: #fff; }
+}
+
 
     /* optional styling for the left wrapper */
     .col-md-3.np-col > #np-controls { padding: 16px !important; box-sizing: border-box; min-height: 360px; }
