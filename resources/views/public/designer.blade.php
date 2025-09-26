@@ -72,6 +72,85 @@
   .desktop-display{
     color:white;
   }
+  .product-meta{
+  background: linear-gradient(135deg, rgba(255,255,255,0.03), rgba(255,255,255,0.02));
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 10px 30px rgba(6,20,40,0.35);
+  backdrop-filter: blur(6px) saturate(120%);
+  border: 1px solid rgba(255,255,255,0.06);
+  color: #fff; /* for dark stadium background. Adjust for light */
+  min-height: 320px;
+}
+.product-meta .product-title{
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  margin-bottom: 6px;
+  color: #ffffff;
+  text-transform: uppercase;
+}
+.product-meta .product-sub{
+  font-size: 13px;
+  color: rgba(255,255,255,0.85);
+  margin-bottom: 14px;
+}
+.product-meta .product-price{
+  display:inline-block;
+  font-size: 20px;
+  font-weight: 900;
+  color: #ffd54a; /* gold accent */
+  margin-left: 6px;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.45);
+}
+
+/* labels */
+.product-meta .form-label{
+  color: rgba(255,255,255,0.9);
+  font-weight:700;
+  font-size: 13px;
+}
+
+/* large inputs with subtle inner shadow */
+.product-meta .form-control,
+.product-meta .form-select{
+  border-radius: 8px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.06);
+  color: #fff;
+  box-shadow: inset 0 3px 8px rgba(0,0,0,0.35);
+  transition: box-shadow .18s ease, transform .12s ease;
+}
+.product-meta .form-control:focus,
+.product-meta .form-select:focus{
+  outline: none;
+  box-shadow: 0 6px 18px rgba(21,95,255,0.12), inset 0 3px 8px rgba(0,0,0,0.45);
+  transform: translateY(-1px);
+  border-color: rgba(21,95,255,0.35);
+}
+
+/* button */
+.product-meta .btn-primary{
+  background: linear-gradient(180deg,#1860ff,#0b3dcf);
+  border: none;
+  font-weight: 800;
+  letter-spacing: .6px;
+  box-shadow: 0 10px 24px rgba(11,61,207,0.24);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 16px;
+}
+.product-meta .btn-primary:disabled{
+  opacity: 0.55;
+  filter: grayscale(.05);
+  box-shadow: none;
+}
+
+/* small helper text */
+.product-meta .small-delivery{
+  font-size: 12px;
+  color: rgba(255,255,255,0.85);
+}
 
     /* small screens: revert to stacked flow (mobile rules unchanged) */
     @media (max-width: 767px) {
@@ -241,6 +320,23 @@
   /* small utility */
   .mobile-display { display: none; } /* your elements with mobile-display will show */
   .color-display  { color: #fff; }
+  @media (max-width: 991px){
+  .product-meta{
+    background: rgba(255,255,255,0.04);
+    box-shadow: none;
+    padding: 14px;
+  }
+  .product-meta .product-title{ font-size: 18px; }
+  .product-meta .product-price{ font-size: 18px; }
+}
+
+/* If background is light (desktop white), invert color choices: optional helper class */
+.product-meta.light{
+  color: #1b2330;
+  background: linear-gradient(180deg,#ffffff,#f7f9fb);
+  border: 1px solid rgba(30,40,50,0.04);
+}
+.product-meta.light .product-price{ color: #0b3dcf; }
 }
 
 
@@ -342,44 +438,44 @@
     </div> <!-- left col -->
 
     <!-- right purchase column -->
-    <div class="col-md-3 np-col order-3 order-md-3">
-      <h4 class="mb-1 mobile-display desktop-display">{{ $product->name ?? ($product->title ?? 'Product') }}</h4>
-      <div class="text mb-3 mobile-display desktop-display">Price: {{ $product->vendor ?? '—' }} • ₹ {{ number_format((float)($displayPrice ?? ($product->min_price ?? 0)), 2) }}</div>
+<div class="col-md-3 np-col order-3 order-md-3">
+  <div class="product-meta p-3">
+    <h4 class="product-title mb-1 desktop-display">{{ $product->name ?? ($product->title ?? 'Product') }}</h4>
+    <div class="product-sub mb-3 desktop-display">Price: <span class="product-price">₹ {{ number_format((float)($displayPrice ?? ($product->min_price ?? 0)), 2) }}</span></div>
 
-      <form id="np-atc-form" method="post" action="{{ route('designer.addtocart') }}">
-        @csrf
-        <input type="hidden" name="name_text" id="np-name-hidden">
-        <input type="hidden" name="number_text" id="np-num-hidden">
-        <input type="hidden" name="font" id="np-font-hidden">
-        <input type="hidden" name="color" id="np-color-hidden">
-        <input type="hidden" name="preview_data" id="np-preview-hidden">
-        <!-- required hidden fields -->
-        <input type="hidden" name="product_id" id="np-product-id" value="{{ $product->id ?? $product->local_id ?? '' }}">
-        <input type="hidden" name="shopify_product_id" id="np-shopify-product-id" value="{{ $product->shopify_product_id ?? $product->shopify_id ?? '' }}">
-        <input type="hidden" name="variant_id" id="np-variant-id" value="">
+    <form id="np-atc-form" method="post" action="{{ route('designer.addtocart') }}">
+      @csrf
+      <!-- hidden inputs ... (keep as-is) -->
+      <input type="hidden" name="name_text" id="np-name-hidden">
+      <input type="hidden" name="number_text" id="np-num-hidden">
+      <input type="hidden" name="font" id="np-font-hidden">
+      <input type="hidden" name="color" id="np-color-hidden">
+      <input type="hidden" name="preview_data" id="np-preview-hidden">
+      <input type="hidden" name="product_id" id="np-product-id" value="{{ $product->id ?? $product->local_id ?? '' }}">
+      <input type="hidden" name="shopify_product_id" id="np-shopify-product-id" value="{{ $product->shopify_product_id ?? $product->shopify_id ?? '' }}">
+      <input type="hidden" name="variant_id" id="np-variant-id" value="">
 
-        <div class="mb-3">
-          <label class="form-label color-display desktop-display">Size</label>
-          <select id="np-size" name="size" class="form-select" required>
-            <option value="">Select Size</option>
-            <option value="S">S</option>
-            <option value="M">M</option>
-            <option value="L">L</option>
-            <option value="XL">XL</option>
-            <option value="XXL">XXL</option>
-          </select>
-        </div>
+      <div class="mb-3">
+        <label class="form-label color-display desktop-display">Size</label>
+        <select id="np-size" name="size" class="form-select form-control-lg" required>
+          <option value="">Select Size</option>
+          <option value="S">S</option>
+          <option value="M">M</option>
+          <option value="L">L</option>
+          <option value="XL">XL</option>
+          <option value="XXL">XXL</option>
+        </select>
+      </div>
 
-        <div class="mb-3">
-          <label class="form-label color-display desktop-display">Quantity</label>
-          <input id="np-qty" name="quantity" type="number" min="1" value="1" class="form-control">
-        </div>
+      <div class="mb-3">
+        <label class="form-label color-display desktop-display">Quantity</label>
+        <input id="np-qty" name="quantity" type="number" min="1" value="1" class="form-control form-control-lg">
+      </div>
 
-        <button id="np-atc-btn" type="submit" class="btn btn-primary w-100" disabled>Add to Cart</button>
-      </form>
+      <button id="np-atc-btn" type="submit" class="btn btn-primary w-100 btn-lg" disabled>Add to Cart</button>
+    </form>
 
-      <div class="small-delivery text mt-2 desktop-display">Button enables when both Name & Number are valid.</div>
-    </div>
+    <div class="small-delivery text mt-2 desktop-display">Button enables when both Name & Number are valid.</div>
   </div>
 </div>
 
