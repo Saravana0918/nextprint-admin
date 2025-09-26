@@ -251,7 +251,7 @@
   /* small utility */
   .mobile-display { display: none; } /* your elements with mobile-display will show */
   .color-display  { color: #fff; }
-  .right-layout{ margin-top: 20px;
+  .right-layout{ margin-top: -210px;
     }
 }
 
