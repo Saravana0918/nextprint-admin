@@ -24,7 +24,7 @@
     .max-count{ display:none; }
 
     /* ---------- Desktop layout: icons + panels (panels positioned beside icons) ---------- */
-    .vertical-tabs { display:flex; gap:12px; align-items:flex-start; }
+    .vertical-tabs { display:flex; gap:12px; align-items:flex-start; margin-top: -30px;}
     .vt-icons { display:flex; flex-direction:column; gap:102px; flex:0 0 56px; align-items:center; padding-top:6px; }
     .vt-btn { display:flex; align-items:center; justify-content:center; width:56px; height:56px; border-radius:8px; border:1px solid #e6e6e6; background:#fff; cursor:pointer; }
     .vt-btn .vt-ico { font-size:18px; line-height:1; }
@@ -61,7 +61,6 @@
     padding-top:225px;
   }
   .hide-on-mobile { display: none !important; }
-  .panel-bottom{ margin-bottom:50px}
 
     /* small screens: revert to stacked flow (mobile rules unchanged) */
     @media (max-width: 767px) {
@@ -275,7 +274,6 @@
     <!-- left controls (icons + panels) -->
     <div class="col-md-3 np-col order-2 order-md-1">
       <div id="np-controls" class="border rounded p-3">
-         <h4 class="mb-1 mobile-display desktop-display">Nextprint Customize</h4>
         <div class="vertical-tabs">
           <nav class="vt-icons" aria-hidden="false" role="tablist" aria-orientation="vertical">
             <button class="vt-btn active" data-panel="panel-name" aria-controls="panel-name" title="Name"><span class="vt-ico">②</span></button>
@@ -286,12 +284,12 @@
 
          <div class="vt-panels" aria-live="polite">
             <!-- Name panel -->
-            <div id="panel-name" class="vt-panel panel-bottom" role="region" aria-hidden="true">
+            <div id="panel-name" class="vt-panel" role="region" aria-hidden="true">
               <h6 class="hide-on-mobile">Name</h6>
               <div>
                 <div class="np-field-wrap name-input">
                   <input id="np-name" type="text" maxlength="12"
-                        class="form-control text-center" placeholder="YOUR NAME">
+                        class="form-control text-center" placeholder="NAME">
                   <div class="form-text small hide-on-mobile">Only A–Z and spaces. 1–12 chars.</div>
                   <span class="max-count">MAX. 12</span>
                 </div>
@@ -304,7 +302,7 @@
                 <!-- wrapper kept simple so mobile mover JS can pick and move this exact input node -->
                 <div class="np-field-wrap number-input">
                   <input id="np-num" type="text" maxlength="3" inputmode="numeric"
-                        class="form-control text-center" placeholder="11">
+                        class="form-control text-center" placeholder="NUMBER">
                   <!-- helper text (desktop) -->
                   <div class="form-text small hide-on-mobile">Digits only. 1–3 digits.</div>
                   <!-- MAX label (visible on mobile via CSS) -->
