@@ -98,6 +98,7 @@
     background-repeat: no-repeat;
     min-height: 100vh;
     position: relative;
+    margin-top: -70px;
   }
   body::before {
     content: "";
