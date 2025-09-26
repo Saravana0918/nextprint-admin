@@ -112,8 +112,8 @@
   
 #np-atc-btn.mobile-fixed {
   position: absolute !important;
-  top: 10px !important;
-  right: 10px !important;
+  top: -40px !important;
+  right: -25px !important;
   z-index: 99999 !important;
   width: auto !important;
   min-width: 110px !important;
