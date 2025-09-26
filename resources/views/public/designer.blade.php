@@ -71,6 +71,8 @@
   }
   .desktop-display{
     color:white;
+    font-family: "Roboto Condensed", sans-serif;
+    font-weight: bold;
   }
   .body-padding{
     padding-top: 100px;
@@ -252,7 +254,7 @@
 
   </style>
 </head>
-<body class="py-4 body-padding">
+<body class="body-padding">
 @php
   $img = $product->image_url ?? ($product->preview_src ?? asset('images/placeholder.png'));
 @endphp
