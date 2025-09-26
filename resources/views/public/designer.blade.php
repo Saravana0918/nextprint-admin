@@ -249,8 +249,20 @@
   .right-layout{ margin-top: -210px;
     }
 }
-
-
+@media (min-width: 768px) {
+  .vt-panels .vt-panel {
+    display: block !important;
+    opacity: 1 !important;
+    position: static !important;
+    transform: none !important;
+    width: 100% !important;
+    margin-bottom: 12px;
+    background: #fff !important;
+    padding: 12px !important;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.06);
+  }
+  .vt-icons { display: none !important; }
+}
     /* optional styling for the left wrapper */
     .col-md-3.np-col > #np-controls { padding: 16px !important; box-sizing: border-box; min-height: 360px; }
 
@@ -393,118 +405,7 @@
 {{-- server-provided layoutSlots --}}
 <script> window.layoutSlots = {!! json_encode($layoutSlots, JSON_NUMERIC_CHECK) !!}; window.personalizationSupported = {{ !empty($layoutSlots) ? 'true' : 'false' }}; </script>
 
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-  // If mobile inputs are present on desktop accidentally, ensure they are moved back on load
-  if (window.disableMobileMode) {
-    try { if (window.innerWidth > 767) window.disableMobileMode(); } catch(e){/*ignore*/ }
-  }
-
-  const buttons = Array.from(document.querySelectorAll('.vt-btn'));
-  const panels  = Array.from(document.querySelectorAll('.vt-panel'));
-  const panelsContainer = document.querySelector('.vt-panels');
-
-  function closeAll() {
-    buttons.forEach(b => b.classList.remove('active'));
-    panels.forEach(p => {
-      p.classList.remove('active');
-      p.setAttribute('aria-hidden','true');
-      p.style.top = '';
-      if (window.innerWidth > 767) {
-        p.style.display = 'none';
-        p.style.opacity = '0';
-      } else {
-        p.style.display = '';
-        p.style.opacity = '';
-      }
-    });
-  }
-
-  function openPanelForButton(btn) {
-    const panelId = btn.dataset.panel;
-    const panel = document.getElementById(panelId);
-    if (!panel) return;
-
-    // IMPORTANT: if we are on desktop but mobile-mode inputs still exist, restore them first
-    if (window.innerWidth > 767 && typeof window.disableMobileMode === 'function') {
-      try { window.disableMobileMode(); } catch(e) { /* ignore */ }
-    }
-
-    if (panel.classList.contains('active')) {
-      closeAll();
-      return;
-    }
-
-    closeAll();
-    btn.classList.add('active');
-
-    panel.classList.add('active');
-    panel.setAttribute('aria-hidden','false');
-
-    if (window.innerWidth > 767) {
-      panel.style.display = 'block';
-      panel.style.opacity = '1';
-      try {
-        const btnRect = btn.getBoundingClientRect();
-        const containerRect = panelsContainer.getBoundingClientRect();
-        const top = (btnRect.top - containerRect.top) + (btnRect.height/2) - (panel.offsetHeight/2);
-        const topClamped = Math.max(6, Math.round(top));
-        panel.style.top = topClamped + 'px';
-      } catch (err) {
-        panel.style.top = '8px';
-      }
-    } else {
-      panel.style.display = '';
-      panel.style.opacity = '';
-      panel.style.top = '';
-    }
-
-    setTimeout(()=> {
-      const focusable = panel.querySelector('input,select,button,textarea');
-      if (focusable) focusable.focus({preventScroll:true});
-    }, 160);
-  }
-
-  buttons.forEach(btn=>{
-    btn.addEventListener('click', (e)=>{
-      e.preventDefault();
-      e.stopPropagation();
-      openPanelForButton(btn);
-    });
-  });
-
-  document.addEventListener('click', (e)=>{
-    if (window.innerWidth <= 767) return;
-    const controls = document.getElementById('np-controls');
-    if (!controls.contains(e.target)) closeAll();
-  });
-
-  let resizeTimer = null;
-  function onResize() {
-    clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(()=>{
-      if (window.innerWidth <= 767) {
-        panels.forEach(p => { p.style.display = ''; p.style.opacity = ''; p.style.top = ''; });
-      } else {
-        closeAll();
-        // ensure inputs restored when coming back to desktop
-        if (typeof window.disableMobileMode === 'function') {
-          try { window.disableMobileMode(); } catch(e){ /*ignore*/ }
-        }
-      }
-    }, 120);
-  }
-  window.addEventListener('resize', onResize);
-
-  // initial state
-  if (window.innerWidth <= 767) {
-    panels.forEach(p => { p.classList.add('active'); p.setAttribute('aria-hidden','false'); p.style.top=''; p.style.display=''; p.style.opacity=''; });
-  } else {
-    closeAll();
-  }
-});
-</script>
-
+ 
 
 {{-- core preview + UI JS (validation + preview layout) --}}
 <script>
