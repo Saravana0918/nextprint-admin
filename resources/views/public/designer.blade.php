@@ -60,6 +60,7 @@
   .right-layout{
     padding-top:225px;
   }
+  .hide-on-mobile { display: none !important; }
 
     /* small screens: revert to stacked flow (mobile rules unchanged) */
     @media (max-width: 767px) {
@@ -242,9 +243,7 @@
     transform: none !important;
     width: 100% !important;
     margin-bottom: 12px;
-    background: #fff !important;
     padding: 12px !important;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.06);
   }
   .vt-icons { display: none !important; }
 }
