@@ -298,7 +298,8 @@
             <button class="vt-btn" data-panel="panel-color" aria-controls="panel-color" title="Color"><span class="vt-ico">⚪</span></button>
           </nav>
 
-                      <!-- Name panel -->
+         <div class="vt-panels" aria-live="polite">
+            <!-- Name panel -->
             <div id="panel-name" class="vt-panel" role="region" aria-hidden="true">
               <h6 class="hide-on-mobile">Name</h6>
               <div>
@@ -310,8 +311,6 @@
                 </div>
               </div>
             </div>
-
-          <div class="vt-panels" aria-live="polite">
             <!-- Number panel -->
             <div id="panel-number" class="vt-panel" role="region" aria-hidden="true">
               <h6 class="hide-on-mobile">Number</h6>
