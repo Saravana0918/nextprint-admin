@@ -106,9 +106,29 @@
     background: transparent;
     box-sizing: border-box;
     border-radius: 10px;
-    z-index: 12;
-    position: relative;
+    z-index: 100;
+    position: relative !important;
   }
+  
+#np-atc-btn.mobile-fixed {
+  position: absolute !important;
+  top: 10px !important;
+  right: 10px !important;
+  z-index: 99999 !important;
+  width: auto !important;
+  min-width: 110px !important;
+  height: 40px !important;
+  padding: 6px 12px !important;
+  border-radius: 24px !important;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.25) !important;
+  white-space: nowrap !important;
+}
+#np-atc-btn.mobile-fixed-outside {
+  position: fixed !important;
+  top: 12px !important;
+  right: 12px !important;
+  z-index: 99999 !important;
+}
   /* style the base image to look like framed box */
   .np-stage img#np-base {
     display:block;
@@ -225,10 +245,6 @@
   box-shadow: 0 6px 18px rgba(0,0,0,0.25) !important;
   font-weight: 700 !important;
   white-space: nowrap !important;
-}
-
-.col-md-3.np-col {
-  padding-bottom: 96px; /* adjust according to button height */
 }
 
   /* 9) mobile large overlay styles (apply via JS .mobile-style) */
@@ -703,5 +719,79 @@
   }
 })();
 </script>
+<script>
+(function(){
+  const btn = document.getElementById('np-atc-btn');
+  const stage = document.getElementById('np-stage');
+  if (!btn || !stage) return;
+
+  // placeholder to restore original location
+  let placeholder = document.getElementById('np-atc-placeholder');
+  if (!placeholder) {
+    placeholder = document.createElement('div');
+    placeholder.id = 'np-atc-placeholder';
+    btn.parentNode.insertBefore(placeholder, btn);
+  }
+
+  function moveButtonToStage() {
+    const isMobile = window.innerWidth <= 767;
+    if (isMobile) {
+      if (btn.parentNode !== stage) {
+        stage.appendChild(btn);
+        btn.classList.remove('mobile-fixed-outside');
+        btn.classList.add('mobile-fixed');
+      }
+    } else {
+      // restore to original place
+      if (placeholder.parentNode) {
+        placeholder.parentNode.insertBefore(btn, placeholder.nextSibling);
+      }
+      btn.classList.remove('mobile-fixed');
+      btn.classList.remove('mobile-fixed-outside');
+    }
+  }
+
+  // Keep stage fixed when keyboard opens, so it doesn't jump off-screen
+  function setupKeyboardHandler() {
+    if (!window.visualViewport) return;
+    let lastHeight = window.visualViewport.height;
+    window.visualViewport.addEventListener('resize', () => {
+      const vH = window.visualViewport.height;
+      const vhRatio = vH / window.innerHeight;
+      // when keyboard opens, visualViewport.height shrinks heavily (< ~0.7)
+      if (vhRatio < 0.75) {
+        // keyboard opened
+        // keep stage position relative to viewport so button stays with stage
+        stage.style.position = 'fixed';
+        // place stage near top so input still visible
+        stage.style.top = '60px';
+        stage.style.left = '50%';
+        stage.style.transform = 'translateX(-50%)';
+        stage.style.width = '100%';
+        stage.style.maxWidth = '420px';
+      } else {
+        // keyboard closed — restore
+        stage.style.position = '';
+        stage.style.top = '';
+        stage.style.left = '';
+        stage.style.transform = '';
+        stage.style.maxWidth = '';
+      }
+      lastHeight = vH;
+    });
+  }
+
+  // initial + on resize/orientation
+  window.addEventListener('load', moveButtonToStage);
+  window.addEventListener('DOMContentLoaded', moveButtonToStage);
+  window.addEventListener('resize', moveButtonToStage);
+  window.addEventListener('orientationchange', () => setTimeout(moveButtonToStage, 200));
+
+  // keyboard handler only on mobile
+  if (window.innerWidth <= 767) setupKeyboardHandler();
+
+})();
+</script>
+
 </body>
 </html>
