@@ -247,28 +247,6 @@
   }
   .vt-icons { display: none !important; }
 }
-@media (max-width: 767px) {
-  .np-stage--fixed-on-keyboard {
-    position: fixed !important;
-    top: 60px;            /* adjust to position below your header */
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 9999;
-    width: calc(100% - 32px);
-    max-width: 534px;
-  }
-
-  .body-scroll-locked {
-    position: fixed;
-    width: 100%;
-    overflow: hidden;
-  }
-
-  /* optional: push controls lower so they are visible below fixed stage */
-  .col-md-3.np-col {
-    margin-top: 420px; /* adjust to match np-stage height */
-  }
-}
     /* optional styling for the left wrapper */
     .col-md-3.np-col > #np-controls { padding: 16px !important; box-sizing: border-box; min-height: 360px; }
 
@@ -707,68 +685,6 @@
       }
     });
   }
-})();
-</script>
-<script>
-(function () {
-  // run only on mobile sizes
-  if (!window.visualViewport || window.innerWidth > 767) return;
-
-  const stage = document.getElementById('np-stage');
-  const body = document.body;
-  let scrollTopBeforeLock = 0;
-  let locked = false;
-
-  function lockPageKeepStage() {
-    if (locked) return;
-    scrollTopBeforeLock = window.scrollY || window.pageYOffset || 0;
-    stage.classList.add('np-stage--fixed-on-keyboard');
-    body.style.top = '-' + scrollTopBeforeLock + 'px';
-    body.classList.add('body-scroll-locked');
-    try { window.scrollTo(0, 0); } catch (e) {}
-    locked = true;
-  }
-
-  function unlockPageRestoreStage() {
-    if (!locked) return;
-    stage.classList.remove('np-stage--fixed-on-keyboard');
-    body.classList.remove('body-scroll-locked');
-    body.style.top = '';
-    window.scrollTo(0, scrollTopBeforeLock);
-    locked = false;
-  }
-
-  let lastViewportHeight = window.visualViewport.height;
-  window.visualViewport.addEventListener('resize', () => {
-    const vh = window.visualViewport.height;
-    if (vh < lastViewportHeight - 100) {
-      lockPageKeepStage();
-    } else if (vh >= lastViewportHeight - 30) {
-      setTimeout(unlockPageRestoreStage, 120);
-    }
-    lastViewportHeight = vh;
-  });
-
-  // focus/blur safety-net
-  const inputs = document.querySelectorAll('#np-name, #np-num, #np-font, #np-color');
-  inputs.forEach(inp => {
-    inp.addEventListener('focus', () => setTimeout(lockPageKeepStage, 80));
-    inp.addEventListener('blur', () => {
-      setTimeout(() => {
-        const vv = window.visualViewport;
-        if (vv && vv.height < window.innerHeight * 0.75) return;
-        unlockPageRestoreStage();
-      }, 120);
-    });
-  });
-
-  window.addEventListener('load', () => {
-    setTimeout(() => {
-      if (window.visualViewport && window.visualViewport.height < window.innerHeight * 0.75) {
-        lockPageKeepStage();
-      }
-    }, 150);
-  });
 })();
 </script>
 </body>
