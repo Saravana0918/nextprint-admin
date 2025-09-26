@@ -247,32 +247,6 @@
   }
   .vt-icons { display: none !important; }
 }
-@media (max-width: 767px) {
-  /* Keep stage fixed on mobile */
-  .np-stage {
-    position: fixed !important;
-    top: 60px;         /* adjust so it sits below header */
-    left: 0;
-    right: 0;
-    z-index: 100;
-    width: 100%;
-    max-width: 400px;
-    margin: auto;
-  }
-
-  /* Allow inputs to scroll below */
-  .col-md-3.np-col {
-    margin-top: 400px;  /* push inputs below fixed stage */
-  }
-
-  /* Prevent body resize on keyboard open */
-  html, body {
-    height: 100%;
-    overflow-x: hidden;
-    overscroll-behavior: contain;
-  }
-}
-
     /* optional styling for the left wrapper */
     .col-md-3.np-col > #np-controls { padding: 16px !important; box-sizing: border-box; min-height: 360px; }
 
@@ -714,22 +688,5 @@
   }
 })();
 </script>
-<script>
-if (window.innerWidth <= 767) {
-  const stage = document.getElementById("np-stage");
-
-  // Detect when keyboard opens
-  window.visualViewport?.addEventListener("resize", () => {
-    if (window.visualViewport.height < window.innerHeight * 0.75) {
-      // Keyboard opened → keep stage fixed
-      stage.style.position = "fixed";
-    } else {
-      // Keyboard closed → normal
-      stage.style.position = "relative";
-    }
-  });
-}
-</script>
-
 </body>
 </html>
