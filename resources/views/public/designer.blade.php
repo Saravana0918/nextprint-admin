@@ -33,22 +33,7 @@
 
     /* panels container is relative; panels absolute (desktop only) */
     .vt-panels { flex:1 1 auto; min-width:0; position: relative; }
-    .vt-panel {
-      position: relative;
-      left: 10px;                      /* place to the right of icons column */
-      width: calc(100% - 10px);        /* leave some space */
-      display: none;
-      opacity: 0;
-      transform-origin: top;
-      transition: opacity 200ms ease, transform 200ms ease;
-      box-sizing: border-box;
-      z-index: 20;
-      background: #ffffff;             /* make panel visually inside a box */
-      padding: 12px;                   /* ensure swatches stay inside */
-      border-radius: 8px;
-      border: 1px solid #eef3fb;
-      box-shadow: 0 6px 18px rgba(12,24,64,0.04);
-    }
+     
     .vt-panel.active { display: block; opacity: 1; transform: translateY(0); }
 
     .vt-panel h6 { margin: 0 0 6px 0; font-size:14px; font-weight:600; }
