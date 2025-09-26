@@ -69,15 +69,9 @@
     min-height: 100vh;
     position: relative;
   }
-  body::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.35); /* tweak 0.22-0.36 */
-    z-index: 5;
-    pointer-events: none;
+  .desktop-display{
+    color:white;
   }
-
 
     /* small screens: revert to stacked flow (mobile rules unchanged) */
     @media (max-width: 767px) {
@@ -349,8 +343,8 @@
 
     <!-- right purchase column -->
     <div class="col-md-3 np-col order-3 order-md-3">
-      <h4 class="mb-1 mobile-display">{{ $product->name ?? ($product->title ?? 'Product') }}</h4>
-      <div class="text-muted mb-3 mobile-display">Vendor: {{ $product->vendor ?? '—' }} • ₹ {{ number_format((float)($displayPrice ?? ($product->min_price ?? 0)), 2) }}</div>
+      <h4 class="mb-1 mobile-display desktop-display">{{ $product->name ?? ($product->title ?? 'Product') }}</h4>
+      <div class="text-muted mb-3 mobile-display desktop-display">Price: {{ $product->vendor ?? '—' }} • ₹ {{ number_format((float)($displayPrice ?? ($product->min_price ?? 0)), 2) }}</div>
 
       <form id="np-atc-form" method="post" action="{{ route('designer.addtocart') }}">
         @csrf
@@ -365,7 +359,7 @@
         <input type="hidden" name="variant_id" id="np-variant-id" value="">
 
         <div class="mb-3">
-          <label class="form-label color-display">Size</label>
+          <label class="form-label color-display desktop-display">Size</label>
           <select id="np-size" name="size" class="form-select" required>
             <option value="">Select Size</option>
             <option value="S">S</option>
@@ -377,14 +371,14 @@
         </div>
 
         <div class="mb-3">
-          <label class="form-label color-display">Quantity</label>
+          <label class="form-label color-display desktop-display">Quantity</label>
           <input id="np-qty" name="quantity" type="number" min="1" value="1" class="form-control">
         </div>
 
         <button id="np-atc-btn" type="submit" class="btn btn-primary w-100" disabled>Add to Cart</button>
       </form>
 
-      <div class="small-delivery text-muted mt-2">Button enables when both Name & Number are valid.</div>
+      <div class="small-delivery text-muted mt-2 desktop-display">Button enables when both Name & Number are valid.</div>
     </div>
   </div>
 </div>
