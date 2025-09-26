@@ -77,6 +77,9 @@
   .body-padding{
     padding-top: 100px;
   }
+  .right-layout{
+    padding-top:225px;
+  }
 
     /* small screens: revert to stacked flow (mobile rules unchanged) */
     @media (max-width: 767px) {
@@ -87,6 +90,9 @@
       .vt-panels { position: static; }
       .vt-panel { position: static; left: auto; width: 100%; display: block !important; opacity:1 !important; transform:none !important; padding: 8px 0; background: transparent; border: none; box-shadow: none; }
       .col-md-3.np-col > #np-controls { min-height: auto; padding: 12px !important; }
+    }
+    .right-layout{
+      margin-top: 20px;
     }
     @media (max-width: 767px) {
 
@@ -348,7 +354,7 @@
     </div> <!-- left col -->
 
     <!-- right purchase column -->
-    <div class="col-md-3 np-col order-3 order-md-3">
+    <div class="col-md-3 np-col order-3 order-md-3 right-layout">
       <h4 class="mb-1 mobile-display desktop-display">{{ $product->name ?? ($product->title ?? 'Product') }}</h4>
       <div class="text mb-3 mobile-display desktop-display">Price: {{ $product->vendor ?? '—' }} • ₹ {{ number_format((float)($displayPrice ?? ($product->min_price ?? 0)), 2) }}</div>
 
