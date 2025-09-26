@@ -13,6 +13,7 @@ class ShopifyCartController extends Controller
 {
     public function addToCart(Request $request)
     {
+        // Validate incoming fields (product_id required)
         $validated = $request->validate([
             'product_id'         => 'required|integer',
             'shopify_product_id' => 'nullable|string',
@@ -24,7 +25,7 @@ class ShopifyCartController extends Controller
             'font'               => 'nullable|string|max:100',
             'color'              => 'nullable|string|max:20',
             'preview_url'        => 'nullable|url',
-            'preview_data'       => 'nullable|string', // optional base64
+            'preview_data'       => 'nullable|string',
         ]);
 
         $productId = $validated['product_id'];
@@ -32,6 +33,13 @@ class ShopifyCartController extends Controller
         $variantId = $validated['variant_id'] ?? null;
         $size = $validated['size'] ?? null;
         $shopifyProductId = $validated['shopify_product_id'] ?? null;
+
+        Log::info('designer: addToCart_called', [
+            'product_id' => $productId,
+            'size' => $size,
+            'variant_id_incoming' => $variantId ? (string)$variantId : null,
+            'shopify_product_id' => $shopifyProductId,
+        ]);
 
         // 1) Try DB lookup if product_variants table exists
         if (empty($variantId) && Schema::hasTable('product_variants')) {
@@ -42,9 +50,10 @@ class ShopifyCartController extends Controller
                      })->first();
                 if ($pv && !empty($pv->shopify_variant_id)) {
                     $variantId = $pv->shopify_variant_id;
+                    Log::info('designer: variant_found_db', ['variant' => $variantId]);
                 }
             } catch (\Throwable $e) {
-                Log::warning('designer: product_variants lookup failed', ['err'=>$e->getMessage()]);
+                Log::warning('designer: product_variants_lookup_failed', ['err' => $e->getMessage()]);
             }
         }
 
@@ -53,11 +62,16 @@ class ShopifyCartController extends Controller
             try {
                 $shop = env('SHOPIFY_STORE');
                 $token = env('SHOPIFY_ADMIN_API_TOKEN');
+
+                Log::info('designer: attempt_admin_fetch', ['shop' => $shop ? $shop : null, 'admin_token_present' => !empty($token)]);
+
                 if ($shop && $token) {
                     $resp = Http::withHeaders([
                         'X-Shopify-Access-Token' => $token,
                         'Content-Type' => 'application/json'
                     ])->get("https://{$shop}/admin/api/2025-01/products/{$shopifyProductId}.json");
+
+                    Log::info('designer: admin_fetch_response', ['status' => $resp->status(), 'body' => $resp->body()]);
 
                     if ($resp->successful() && !empty($resp->json('product'))) {
                         $productData = $resp->json('product');
@@ -73,19 +87,23 @@ class ShopifyCartController extends Controller
                         if (empty($variantId) && !empty($variants)) {
                             $variantId = $variants[0]['id'];
                         }
+                        Log::info('designer: variant_selected_admin', ['variant' => $variantId]);
                     }
+                } else {
+                    Log::warning('designer: admin_fetch_skipped_missing_env', ['shop' => $shop, 'token_present' => !empty($token)]);
                 }
             } catch (\Throwable $e) {
-                Log::warning('designer: shopify variants fetch failed', ['err'=>$e->getMessage()]);
+                Log::warning('designer: shopify_variants_fetch_failed', ['err' => $e->getMessage()]);
             }
         }
 
         if (empty($variantId)) {
             Log::error('designer: no_variant', ['product_id'=>$productId, 'size'=>$size, 'shopify_product_id'=>$shopifyProductId]);
-            return back()->withErrors(['variant' => 'Could not determine a product variant (size).']);
+            // Return JSON error (frontend expects JSON)
+            return response()->json(['error' => 'Could not determine a product variant (size).'], 422);
         }
 
-        // Optionally save preview_data to file and generate preview_url
+        // Save preview_data to file if present
         $previewUrl = $validated['preview_url'] ?? null;
         if (empty($previewUrl) && !empty($validated['preview_data'])) {
             try {
@@ -96,12 +114,13 @@ class ShopifyCartController extends Controller
                 if (!is_dir($dir)) mkdir($dir, 0755, true);
                 file_put_contents($dir . '/' . $file, base64_decode($data));
                 $previewUrl = url('previews/'.$file);
+                Log::info('designer: preview_saved', ['url' => $previewUrl]);
             } catch (\Throwable $e) {
-                Log::warning('designer: preview save failed', ['err'=>$e->getMessage()]);
+                Log::warning('designer: preview_save_failed', ['err' => $e->getMessage()]);
             }
         }
 
-        // Build custom attributes (for cart line item)
+        // Build custom attributes
         $customAttrs = [
             ['key' => 'Name',   'value' => $validated['name_text'] ?? ''],
             ['key' => 'Number', 'value' => $validated['number_text'] ?? ''],
@@ -110,13 +129,18 @@ class ShopifyCartController extends Controller
             ['key' => 'PreviewUrl', 'value' => $previewUrl ?? ''],
         ];
 
-        // --- Use Storefront API cartCreate mutation (recommended) ---
+        // Shopify Storefront API
         $shop = env('SHOPIFY_STORE');
         $storefrontToken = env('SHOPIFY_STOREFRONT_TOKEN');
 
+        Log::info('designer: storefront_check', [
+            'shop' => $shop ? $shop : null,
+            'storefront_present' => !empty($storefrontToken),
+        ]);
+
         if (empty($shop) || empty($storefrontToken)) {
-            Log::error('designer: storefront token or shop missing');
-            return back()->withErrors(['shopify' => 'Storefront token or shop config missing.']);
+            Log::error('designer: storefront_token_or_shop_missing', ['shop'=>$shop, 'storefront' => !empty($storefrontToken)]);
+            return response()->json(['error' => 'Storefront token or shop config missing.'], 500);
         }
 
         // convert variant id to gid
@@ -143,7 +167,6 @@ GRAPHQL;
             'merchandiseId' => $variantGid,
             'quantity' => (int)$quantity,
             'attributes' => array_map(function($a){
-                // Storefront cart attributes use key/value
                 return ['key'=>$a['key'], 'value'=>$a['value']];
             }, $customAttrs),
         ];
@@ -154,8 +177,18 @@ GRAPHQL;
             ]
         ];
 
+        // Log payload
+        Log::info('designer: preparing_cart_create', [
+            'variantGid' => $variantGid,
+            'quantity' => $quantity,
+            'variables' => $variables,
+        ]);
+
+        $endpoint = "https://{$shop}/api/2024-10/graphql.json";
+
         try {
-            $endpoint = "https://{$shop}/api/2024-10/graphql.json";
+            Log::info('designer: cartCreate_request', ['endpoint' => $endpoint, 'variables' => $variables]);
+
             $resp = Http::withHeaders([
                 'X-Shopify-Storefront-Access-Token' => $storefrontToken,
                 'Content-Type' => 'application/json',
@@ -164,34 +197,42 @@ GRAPHQL;
                 'variables' => $variables,
             ]);
 
+            Log::info('designer: cartCreate_response', ['status' => $resp->status(), 'body' => $resp->body()]);
+
             if (!$resp->successful()) {
-                Log::error('designer: cartCreate_failed', ['status'=>$resp->status(), 'body'=>$resp->body()]);
-                return back()->withErrors(['shopify' => 'Failed to create cart (storefront API).']);
+                return response()->json([
+                    'error' => 'cartCreate_failed',
+                    'status' => $resp->status(),
+                    'body' => $resp->body()
+                ], 500);
             }
 
             $data = $resp->json();
-            $cart = data_get($data, 'data.cartCreate.cart');
             $userErrors = data_get($data, 'data.cartCreate.userErrors', []);
 
             if (!empty($userErrors)) {
-                Log::error('designer: cartCreate_userErrors', ['errors'=>$userErrors, 'body'=>$resp->body()]);
-                return back()->withErrors(['shopify' => 'Storefront error: '.json_encode($userErrors)]);
+                Log::error('designer: cartCreate_userErrors', ['errors' => $userErrors, 'body' => $resp->body()]);
+                return response()->json([
+                    'error' => 'cartCreate_userErrors',
+                    'details' => $userErrors,
+                    'body' => $resp->body()
+                ], 500);
             }
 
-            // Some API versions return checkoutUrl or webUrl differently - check both
+            $cart = data_get($data, 'data.cartCreate.cart');
             $checkoutUrl = data_get($cart, 'checkoutUrl') ?: data_get($cart, 'url') ?: null;
 
             if (empty($checkoutUrl)) {
-                Log::error('designer: cartCreate_no_url', ['body'=>$resp->body()]);
-                return back()->withErrors(['shopify' => 'Cart created but no checkout URL returned.']);
+                Log::error('designer: cartCreate_no_url', ['body' => $resp->body()]);
+                return response()->json(['error' => 'no_checkout_url', 'body' => $resp->body()], 500);
             }
 
-            // Redirect user to Shopify checkout/cart
-            return redirect()->away($checkoutUrl);
+            // Success -> return JSON for frontend to redirect
+            return response()->json(['checkoutUrl' => $checkoutUrl]);
 
         } catch (\Throwable $e) {
-            Log::error('designer: cartCreate_exception', ['err'=>$e->getMessage()]);
-            return back()->withErrors(['shopify' => 'Checkout creation failed.']);
+            Log::error('designer: cartCreate_exception', ['err' => $e->getMessage()]);
+            return response()->json(['error' => 'exception', 'msg' => $e->getMessage()], 500);
         }
     }
 }

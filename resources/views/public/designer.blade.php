@@ -342,6 +342,10 @@
         <input type="hidden" name="font" id="np-font-hidden">
         <input type="hidden" name="color" id="np-color-hidden">
         <input type="hidden" name="preview_data" id="np-preview-hidden">
+        <!-- required hidden fields -->
+        <input type="hidden" name="product_id" id="np-product-id" value="{{ $product->id ?? $product->local_id ?? '' }}">
+        <input type="hidden" name="shopify_product_id" id="np-shopify-product-id" value="{{ $product->shopify_product_id ?? $product->shopify_id ?? '' }}">
+        <input type="hidden" name="variant_id" id="np-variant-id" value="">
 
         <div class="mb-3">
           <label class="form-label color-display">Size</label>
@@ -667,41 +671,58 @@ document.addEventListener('DOMContentLoaded', function() {
   const btn = document.getElementById('np-atc-btn');
 
   function syncHiddenFields(){
-    const nameEl = document.getElementById('np-name'), numEl = document.getElementById('np-num'),
-          fontEl = document.getElementById('np-font'), colorEl = document.getElementById('np-color');
+    const nameEl = document.getElementById('np-name'),
+          numEl  = document.getElementById('np-num'),
+          fontEl = document.getElementById('np-font'),
+          colorEl= document.getElementById('np-color');
 
     document.getElementById('np-name-hidden').value  = (nameEl ? (nameEl.value||'') : '').toUpperCase().trim();
     document.getElementById('np-num-hidden').value   = (numEl  ? (numEl.value||'')  : '').replace(/\D/g,'').trim();
     document.getElementById('np-font-hidden').value  = fontEl ? fontEl.value : '';
     document.getElementById('np-color-hidden').value = colorEl ? colorEl.value : '';
+
+    // ensure variant_id hidden is set from variantMap (if available)
+    const size = document.getElementById('np-size')?.value || '';
+    if (window.variantMap && size) {
+      const vid = window.variantMap[size] || '';
+      document.getElementById('np-variant-id').value = vid;
+    }
+  }
+
+  async function postFormData(url, formData) {
+    const token = document.querySelector('input[name="_token"]')?.value || '';
+    const resp = await fetch(url, {
+      method: 'POST',
+      body: formData,
+      credentials: 'same-origin',
+      headers: {
+        'X-CSRF-TOKEN': token,
+        'Accept': 'application/json'
+      }
+    });
+    return resp;
   }
 
   if (atcForm) {
     atcForm.addEventListener('submit', async function(evt){
-      // validate size
-      const size = document.getElementById('np-size')?.value || '';
-      if (!size) {
-        evt.preventDefault();
-        alert('Please select a size.');
-        return;
-      }
+      evt.preventDefault();
 
-      // if personalization visible, validate name & number with same rules
+      // size & personalization validation
+      const size = document.getElementById('np-size')?.value || '';
+      if (!size) { alert('Please select a size.'); return; }
+
       const controlsHidden = document.getElementById('np-controls')?.classList.contains('np-hidden');
       if (!controlsHidden) {
         const NAME_RE = /^[A-Za-z ]{1,12}$/, NUM_RE = /^\d{1,3}$/;
         const name = document.getElementById('np-name')?.value || '';
         const num  = document.getElementById('np-num')?.value || '';
         if (!NAME_RE.test(name.trim()) || !NUM_RE.test(num.trim())) {
-          evt.preventDefault();
           alert('Please enter valid Name (A–Z, 1–12) and Number (1–3 digits).');
           return;
         }
       }
 
-      evt.preventDefault();
       syncHiddenFields();
-
       if (btn) { btn.disabled = true; btn.setAttribute('aria-busy','true'); btn.innerText = 'Preparing...'; }
 
       try {
@@ -710,17 +731,46 @@ document.addEventListener('DOMContentLoaded', function() {
         const dataUrl = canvas.toDataURL('image/png');
         document.getElementById('np-preview-hidden').value = dataUrl;
 
-        // submit native POST to Laravel
-        atcForm.submit();
+        const formData = new FormData(atcForm);
+
+        // ensure product_id present
+        if (!formData.get('product_id') || formData.get('product_id') === '') {
+          const pid = document.getElementById('np-product-id')?.value || '';
+          if (pid) formData.set('product_id', pid);
+        }
+
+        const resp = await postFormData(atcForm.action, formData);
+
+        // if server redirected (302) the fetch won't follow to external domain by default; prefer JSON
+        if (resp.redirected) { window.location.href = resp.url; return; }
+
+        let data = null;
+        try { data = await resp.json(); } catch (err) { /* ignore */ }
+
+        if (!resp.ok) {
+          console.error('AddToCart failed', resp.status, data);
+          const msg = (data && (data.error || data.message)) ? (data.error || data.message) : 'Something went wrong. Try again.';
+          alert(msg);
+          return;
+        }
+
+        if (data && data.checkoutUrl) {
+          window.location.href = data.checkoutUrl;
+          return;
+        }
+
+        console.error('AddToCart: unexpected response', data);
+        alert('Something went wrong. Try again.');
+
       } catch (err) {
-        console.error('Preview capture failed', err);
-        alert('Failed to prepare preview. Try again.');
+        console.error('ATC exception', err);
+        alert('Something went wrong. Try again.');
+      } finally {
         if (btn) { btn.disabled = false; btn.removeAttribute('aria-busy'); btn.innerText = 'Add to Cart'; }
       }
     });
   }
 })();
 </script>
-
 </body>
 </html>
