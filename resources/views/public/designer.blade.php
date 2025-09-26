@@ -61,8 +61,7 @@
     padding-top:225px;
   }
   .hide-on-mobile { display: none !important; }
-  .panel-bottom{ margin-bottom:30px; margin-top: 30px;}
-  .bottom-panel{ margin-bottom:30px;}
+  .panel-bottom{ margin-bottom:50px}
 
     /* small screens: revert to stacked flow (mobile rules unchanged) */
     @media (max-width: 767px) {
@@ -299,7 +298,7 @@
               </div>
             </div>
             <!-- Number panel -->
-            <div id="panel-number" class="vt-panel bottom-panel" role="region" aria-hidden="true">
+            <div id="panel-number" class="vt-panel" role="region" aria-hidden="true">
               <h6 class="hide-on-mobile">Number</h6>
               <div>
                 <!-- wrapper kept simple so mobile mover JS can pick and move this exact input node -->
@@ -315,7 +314,7 @@
             </div>
 
             <!-- Font panel -->
-            <div id="panel-font" class="vt-panel bottom-panel" role="region" aria-hidden="true">
+            <div id="panel-font" class="vt-panel" role="region" aria-hidden="true">
               <h6 class="hide-on-mobile">Font</h6>
               <div>
                 <select id="np-font" class="form-select">
@@ -328,7 +327,7 @@
             </div>
 
             <!-- Color panel -->
-            <div id="panel-color" class="vt-panel bottom-panel" role="region" aria-hidden="true">
+            <div id="panel-color" class="vt-panel" role="region" aria-hidden="true">
               <h6 class="hide-on-mobile">Text Color</h6>
               <div class="swatches-wrap">
                 <div class="d-flex gap-2 flex-wrap mb-2">
