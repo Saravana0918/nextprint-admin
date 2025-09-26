@@ -61,6 +61,8 @@
     padding-top:225px;
   }
   .hide-on-mobile { display: none !important; }
+  .panel-bottom{ margin-bottom:30px; margin-top: 30px;}
+  .bottom-panel{ margin-bottom:30px;}
 
     /* small screens: revert to stacked flow (mobile rules unchanged) */
     @media (max-width: 767px) {
@@ -274,6 +276,7 @@
     <!-- left controls (icons + panels) -->
     <div class="col-md-3 np-col order-2 order-md-1">
       <div id="np-controls" class="border rounded p-3">
+         <h4 class="mb-1 mobile-display desktop-display">Nextprint Customize</h4>
         <div class="vertical-tabs">
           <nav class="vt-icons" aria-hidden="false" role="tablist" aria-orientation="vertical">
             <button class="vt-btn active" data-panel="panel-name" aria-controls="panel-name" title="Name"><span class="vt-ico">②</span></button>
@@ -284,19 +287,19 @@
 
          <div class="vt-panels" aria-live="polite">
             <!-- Name panel -->
-            <div id="panel-name" class="vt-panel" role="region" aria-hidden="true">
+            <div id="panel-name" class="vt-panel panel-bottom" role="region" aria-hidden="true">
               <h6 class="hide-on-mobile">Name</h6>
               <div>
                 <div class="np-field-wrap name-input">
                   <input id="np-name" type="text" maxlength="12"
                         class="form-control text-center" placeholder="YOUR NAME">
-                  <div class="form-text small">Only A–Z and spaces. 1–12 chars.</div>
+                  <div class="form-text small hide-on-mobile">Only A–Z and spaces. 1–12 chars.</div>
                   <span class="max-count">MAX. 12</span>
                 </div>
               </div>
             </div>
             <!-- Number panel -->
-            <div id="panel-number" class="vt-panel" role="region" aria-hidden="true">
+            <div id="panel-number" class="vt-panel bottom-panel" role="region" aria-hidden="true">
               <h6 class="hide-on-mobile">Number</h6>
               <div>
                 <!-- wrapper kept simple so mobile mover JS can pick and move this exact input node -->
@@ -304,7 +307,7 @@
                   <input id="np-num" type="text" maxlength="3" inputmode="numeric"
                         class="form-control text-center" placeholder="11">
                   <!-- helper text (desktop) -->
-                  <div class="form-text small">Digits only. 1–3 digits.</div>
+                  <div class="form-text small hide-on-mobile">Digits only. 1–3 digits.</div>
                   <!-- MAX label (visible on mobile via CSS) -->
                   <span class="max-count">MAX. 3</span>
                 </div>
@@ -312,7 +315,7 @@
             </div>
 
             <!-- Font panel -->
-            <div id="panel-font" class="vt-panel" role="region" aria-hidden="true">
+            <div id="panel-font" class="vt-panel bottom-panel" role="region" aria-hidden="true">
               <h6 class="hide-on-mobile">Font</h6>
               <div>
                 <select id="np-font" class="form-select">
@@ -325,7 +328,7 @@
             </div>
 
             <!-- Color panel -->
-            <div id="panel-color" class="vt-panel" role="region" aria-hidden="true">
+            <div id="panel-color" class="vt-panel bottom-panel" role="region" aria-hidden="true">
               <h6 class="hide-on-mobile">Text Color</h6>
               <div class="swatches-wrap">
                 <div class="d-flex gap-2 flex-wrap mb-2">
