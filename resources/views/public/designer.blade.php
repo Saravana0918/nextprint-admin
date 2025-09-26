@@ -182,7 +182,7 @@
   }
 
   /* font-size: number larger than name */
-  .np-field-wrap.number-input input.form-control { font-size: clamp(28px, 7.5vw, 56px); }
+  .np-field-wrap.number-input input.form-control { font-size: clamp(18px, 5.6vw, 32px); }
   .np-field-wrap.name-input input.form-control   { font-size: clamp(18px, 5.6vw, 32px); }
 
   /* placeholder color */
@@ -435,55 +435,69 @@
     }
 
     function placeOverlay(el, slot, slotKey){
-      if(!el || !slot || !stage) return;
-      el.style.position = 'absolute';
-      el.style.left = (slot.left_pct||0) + '%';
-      el.style.top  = (slot.top_pct||0) + '%';
-      el.style.width = (slot.width_pct||10) + '%';
-      el.style.height = (slot.height_pct||10) + '%';
-      el.style.display = 'flex';
-      el.style.alignItems = 'center';
-      el.style.justifyContent = 'center';
-      el.style.boxSizing = 'border-box';
-      el.style.padding = '0 4px';
-      el.style.transform = 'rotate(' + ((slot.rotation||0)) + 'deg)';
-      el.style.whiteSpace = 'nowrap';
-      el.style.overflow = 'hidden';
-      el.style.pointerEvents = 'none';
-      el.style.zIndex = (slotKey === 'number' ? 60 : 50);
+  if(!el || !slot || !stage) return;
+  el.style.position = 'absolute';
+  el.style.left = (slot.left_pct||0) + '%';
+  el.style.top  = (slot.top_pct||0) + '%';
+  el.style.width = (slot.width_pct||10) + '%';
+  el.style.height = (slot.height_pct||10) + '%';
+  el.style.display = 'flex';
+  el.style.alignItems = 'center';
+  el.style.justifyContent = 'center';
+  el.style.boxSizing = 'border-box';
+  el.style.padding = '0 4px';
+  el.style.transform = 'rotate(' + ((slot.rotation||0)) + 'deg)';
+  el.style.whiteSpace = 'nowrap';
+  el.style.overflow = 'hidden';
+  el.style.pointerEvents = 'none';
+  el.style.zIndex = (slotKey === 'number' ? 60 : 50);
 
-      const {imgW, imgH, stageW, stageH} = computeStageSize();
-      const areaWpx = Math.max(8, Math.round(((slot.width_pct || 10)/100) * stageW));
-      const areaHpx = Math.max(8, Math.round(((slot.height_pct || 10)/100) * stageH));
+  const {imgW, imgH, stageW, stageH} = computeStageSize();
+  const areaWpx = Math.max(8, Math.round(((slot.width_pct || 10)/100) * stageW));
+  const areaHpx = Math.max(8, Math.round(((slot.height_pct || 10)/100) * stageH));
 
-      const text = (el.textContent || '').toString().trim() || 'TEXT';
-      const chars = Math.max(1, text.length);
+  const text = (el.textContent || '').toString().trim() || 'TEXT';
+  const chars = Math.max(1, text.length);
 
-      const isMobile = window.innerWidth <= 767;
-      const heightFactorName = 0.86;
-      const heightFactorNumber = isMobile ? 0.95 : 0.9;
-      const heightCandidate = Math.floor(areaHpx * (slotKey === 'number' ? heightFactorNumber : heightFactorName));
+  const isMobile = window.innerWidth <= 767;
 
-      const avgCharRatio = 0.55;
-      const widthCap = Math.floor((areaWpx * 0.95) / (chars * avgCharRatio));
+  // Increase these to get larger text:
+  const heightFactorName = 1.00;    // was 0.86 — raise to make name taller
+  const heightFactorNumber = isMobile ? 1.05 : 1.00; // slightly bigger numbers on mobile
 
-      let numericShrink = 1.0;
-      if (slotKey === 'number') numericShrink = isMobile ? 1.0 : 0.98;
+  const heightCandidate = Math.floor(areaHpx * (slotKey === 'number' ? heightFactorNumber : heightFactorName));
 
-      let fontSize = Math.floor(Math.min(heightCandidate, widthCap) * numericShrink);
-      const maxAllowed = Math.max(14, Math.floor(stageW * (isMobile ? 0.34 : 0.18)));
-      fontSize = Math.max(8, Math.min(fontSize, maxAllowed));
-      el.style.fontSize = fontSize + 'px';
-      el.style.lineHeight = '1';
-      el.style.fontWeight = '700';
+  // Assume characters take a bit less horizontal space (allow bigger font)
+  const avgCharRatio = 0.48; // was 0.55, lowering this increases font allowed by width
+  const widthCap = Math.floor((areaWpx * 0.95) / (chars * avgCharRatio));
 
-      let attempts = 0;
-      while (el.scrollWidth > el.clientWidth && fontSize > 7 && attempts < 30) {
-        fontSize = Math.max(7, Math.floor(fontSize * 0.92));
-        el.style.fontSize = fontSize + 'px';
-        attempts++;
-      }
-    }
+  // slight boost for numbers on desktop
+  let numericShrink = 1.0;
+  if (slotKey === 'number') numericShrink = isMobile ? 1.0 : 0.98;
+
+  // compute font size and allow bigger maximum relative to stage width
+  let fontSize = Math.floor(Math.min(heightCandidate, widthCap) * numericShrink);
+
+  // raise maxAllowed so name/number can grow more: increase multiplier (0.32 -> 0.38 etc)
+  const maxAllowed = Math.max(14, Math.floor(stageW * (isMobile ? 0.45 : 0.32)));
+
+  fontSize = Math.max(8, Math.min(fontSize, maxAllowed));
+
+  // final nudge multiplier to make overlays a bit larger overall (tweak 1.0 -> 1.2)
+  fontSize = Math.floor(fontSize * 1.10);
+
+  el.style.fontSize = fontSize + 'px';
+  el.style.lineHeight = '1';
+  el.style.fontWeight = '700';
+
+  let attempts = 0;
+  while (el.scrollWidth > el.clientWidth && fontSize > 7 && attempts < 30) {
+    fontSize = Math.max(7, Math.floor(fontSize * 0.92));
+    el.style.fontSize = fontSize + 'px';
+    attempts++;
+  }
+}
+
 
     function applyLayout(){
       if (!baseImg) return;
@@ -495,11 +509,11 @@
     function syncPreview(){
       if (pvName && nameEl) {
         const txt = (nameEl.value||'').toUpperCase();
-        pvName.textContent = txt || 'YOUR NAME';
+        pvName.textContent = txt || 'NAME';
       }
       if (pvNum && numEl) {
         const numTxt = (numEl.value||'').replace(/\D/g,'');
-        pvNum.textContent = numTxt || 'YOUR NUMBER';
+        pvNum.textContent = numTxt || 'NUMBER';
       }
       applyLayout();
     }
