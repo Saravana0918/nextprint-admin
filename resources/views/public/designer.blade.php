@@ -61,7 +61,9 @@
 
     /* ensure swatches block stays inside the panel and is placed nicely */
     .vt-panel .swatches-wrap { margin-top: 8px; display:block; }
-    .body { background-color : #C0C0C0; }
+    body {
+    background-color : #C0C0C0;
+  }
   .desktop-display{
     color:white;
     font-family: "Roboto Condensed", sans-serif;
@@ -277,7 +279,14 @@
     <div class="col-md-3 np-col order-2 order-md-1">
       <div id="np-controls" class="border rounded p-3">
         <div class="vertical-tabs">
-            <!-- Name panel -->
+          <nav class="vt-icons" aria-hidden="false" role="tablist" aria-orientation="vertical">
+            <button class="vt-btn active" data-panel="panel-name" aria-controls="panel-name" title="Name"><span class="vt-ico">②</span></button>
+            <button class="vt-btn" data-panel="panel-number" aria-controls="panel-number" title="Number"><span class="vt-ico">①</span></button>
+            <button class="vt-btn" data-panel="panel-font" aria-controls="panel-font" title="Font"><span class="vt-ico">𝙰</span></button>
+            <button class="vt-btn" data-panel="panel-color" aria-controls="panel-color" title="Color"><span class="vt-ico">⚪</span></button>
+          </nav>
+
+                      <!-- Name panel -->
             <div id="panel-name" class="vt-panel" role="region" aria-hidden="true">
               <h6 class="hide-on-mobile">Name</h6>
               <div>
