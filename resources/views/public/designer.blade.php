@@ -72,6 +72,9 @@
   .desktop-display{
     color:white;
   }
+  .body-padding{
+    padding-top: 100px;
+  }
 
     /* small screens: revert to stacked flow (mobile rules unchanged) */
     @media (max-width: 767px) {
@@ -249,7 +252,7 @@
 
   </style>
 </head>
-<body class="py-4">
+<body class="py-4 body-padding">
 @php
   $img = $product->image_url ?? ($product->preview_src ?? asset('images/placeholder.png'));
 @endphp
