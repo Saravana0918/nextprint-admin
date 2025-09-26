@@ -678,44 +678,55 @@ document.addEventListener('DOMContentLoaded', function() {
 
   if (atcForm) {
     atcForm.addEventListener('submit', async function(evt){
+      evt.preventDefault(); // 🚫 stop normal reload
+
       // validate size
       const size = document.getElementById('np-size')?.value || '';
       if (!size) {
-        evt.preventDefault();
         alert('Please select a size.');
         return;
       }
 
-      // if personalization visible, validate name & number with same rules
+      // validate name & number if personalization shown
       const controlsHidden = document.getElementById('np-controls')?.classList.contains('np-hidden');
       if (!controlsHidden) {
         const NAME_RE = /^[A-Za-z ]{1,12}$/, NUM_RE = /^\d{1,3}$/;
         const name = document.getElementById('np-name')?.value || '';
         const num  = document.getElementById('np-num')?.value || '';
         if (!NAME_RE.test(name.trim()) || !NUM_RE.test(num.trim())) {
-          evt.preventDefault();
           alert('Please enter valid Name (A–Z, 1–12) and Number (1–3 digits).');
           return;
         }
       }
 
-      evt.preventDefault();
       syncHiddenFields();
-
-      if (btn) { btn.disabled = true; btn.setAttribute('aria-busy','true'); btn.innerText = 'Preparing...'; }
+      if (btn) { btn.disabled = true; btn.innerText = 'Preparing...'; }
 
       try {
+        // Capture preview
         const stage = document.getElementById('np-stage');
         const canvas = await html2canvas(stage, { useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1 });
-        const dataUrl = canvas.toDataURL('image/png');
-        document.getElementById('np-preview-hidden').value = dataUrl;
+        document.getElementById('np-preview-hidden').value = canvas.toDataURL('image/png');
 
-        // submit native POST to Laravel
-        atcForm.submit();
+        // Submit via fetch → JSON response
+        const formData = new FormData(atcForm);
+        const resp = await fetch(atcForm.action, {
+          method: 'POST',
+          body: formData
+        });
+        const data = await resp.json();
+
+        if (data.checkoutUrl) {
+          window.location.href = data.checkoutUrl; // ✅ redirect to Shopify checkout
+        } else {
+          console.error('Cart create error:', data);
+          alert('Checkout failed: ' + (data.error || 'Unknown error'));
+        }
       } catch (err) {
-        console.error('Preview capture failed', err);
-        alert('Failed to prepare preview. Try again.');
-        if (btn) { btn.disabled = false; btn.removeAttribute('aria-busy'); btn.innerText = 'Add to Cart'; }
+        console.error('ATC failed', err);
+        alert('Something went wrong. Try again.');
+      } finally {
+        if (btn) { btn.disabled = false; btn.innerText = 'Add to Cart'; }
       }
     });
   }
