@@ -24,7 +24,7 @@
     .max-count{ display:none; }
 
     /* ---------- Desktop layout: icons + panels (panels positioned beside icons) ---------- */
-    .vertical-tabs { display:flex; gap:12px; align-items:flex-start; margin-top: -30px;}
+    .vertical-tabs { display:flex; gap:12px; align-items:flex-start;}
     .vt-icons { display:flex; flex-direction:column; gap:102px; flex:0 0 56px; align-items:center; padding-top:6px; }
     .vt-btn { display:flex; align-items:center; justify-content:center; width:56px; height:56px; border-radius:8px; border:1px solid #e6e6e6; background:#fff; cursor:pointer; }
     .vt-btn .vt-ico { font-size:18px; line-height:1; }
@@ -289,7 +289,7 @@
               <div>
                 <div class="np-field-wrap name-input">
                   <input id="np-name" type="text" maxlength="12"
-                        class="form-control text-center" placeholder="NAME">
+                        class="form-control text-center" placeholder="YOUR NAME">
                   <div class="form-text small hide-on-mobile">Only A–Z and spaces. 1–12 chars.</div>
                   <span class="max-count">MAX. 12</span>
                 </div>
@@ -302,7 +302,7 @@
                 <!-- wrapper kept simple so mobile mover JS can pick and move this exact input node -->
                 <div class="np-field-wrap number-input">
                   <input id="np-num" type="text" maxlength="3" inputmode="numeric"
-                        class="form-control text-center" placeholder="NUMBER">
+                        class="form-control text-center" placeholder="YOUR NUMBER">
                   <!-- helper text (desktop) -->
                   <div class="form-text small hide-on-mobile">Digits only. 1–3 digits.</div>
                   <!-- MAX label (visible on mobile via CSS) -->
