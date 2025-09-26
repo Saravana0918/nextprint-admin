@@ -72,34 +72,6 @@
       .vt-panel { position: static; left: auto; width: 100%; display: block !important; opacity:1 !important; transform:none !important; padding: 8px 0; background: transparent; border: none; box-shadow: none; }
       .col-md-3.np-col > #np-controls { min-height: auto; padding: 12px !important; }
     }
-
-    @media (max-width: 767px) {
-  /* fix the preview area so keyboard won't push it */
-  .np-stage {
-    position: fixed !important;
-    top: 12px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: calc(100% - 32px);
-    max-width: 520px;
-    z-index: 60;
-    pointer-events: none; /* taps pass through to controls */
-  }
-
-  /* controls column must start below the fixed preview */
-  #np-controls {
-    margin-top: 460px; /* <-- Tweak this number if preview height differs */
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-    max-height: calc(100vh - 64px);
-  }
-
-  /* while an input is focused, prevent whole page reflow */
-  body.input-focused {
-    height: 100vh;
-    overflow: hidden;
-  }
-}
     
     @media (max-width: 767px) {
 
@@ -275,6 +247,32 @@
   }
   .vt-icons { display: none !important; }
 }
+@media (max-width: 767px) {
+  /* Keep stage fixed on mobile */
+  .np-stage {
+    position: fixed !important;
+    top: 60px;         /* adjust so it sits below header */
+    left: 0;
+    right: 0;
+    z-index: 100;
+    width: 100%;
+    max-width: 400px;
+    margin: auto;
+  }
+
+  /* Allow inputs to scroll below */
+  .col-md-3.np-col {
+    margin-top: 400px;  /* push inputs below fixed stage */
+  }
+
+  /* Prevent body resize on keyboard open */
+  html, body {
+    height: 100%;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+  }
+}
+
     /* optional styling for the left wrapper */
     .col-md-3.np-col > #np-controls { padding: 16px !important; box-sizing: border-box; min-height: 360px; }
 
@@ -488,15 +486,32 @@
   const chars = Math.max(1, text.length);
 
   const isMobile = window.innerWidth <= 767;
-  const heightFactorName = 1.05;    // increase (was ~0.86)
-  const heightFactorNumber = isMobile ? 1.10 : 1.00;
+
+  // Increase these to get larger text:
+  const heightFactorName = 1.00;    // was 0.86 — raise to make name taller
+  const heightFactorNumber = isMobile ? 1.05 : 1.00; // slightly bigger numbers on mobile
+
   const heightCandidate = Math.floor(areaHpx * (slotKey === 'number' ? heightFactorNumber : heightFactorName));
-  const avgCharRatio = 0.48; // smaller -> allows wider characters -> larger font
+
+  // Assume characters take a bit less horizontal space (allow bigger font)
+  const avgCharRatio = 0.48; // was 0.55, lowering this increases font allowed by width
   const widthCap = Math.floor((areaWpx * 0.95) / (chars * avgCharRatio));
-  let fontSize = Math.floor(Math.min(heightCandidate, widthCap));
-  const maxAllowed = Math.max(14, Math.floor(stageW * (isMobile ? 0.45 : 0.34)));
+
+  // slight boost for numbers on desktop
+  let numericShrink = 1.0;
+  if (slotKey === 'number') numericShrink = isMobile ? 1.0 : 0.98;
+
+  // compute font size and allow bigger maximum relative to stage width
+  let fontSize = Math.floor(Math.min(heightCandidate, widthCap) * numericShrink);
+
+  // raise maxAllowed so name/number can grow more: increase multiplier (0.32 -> 0.38 etc)
+  const maxAllowed = Math.max(14, Math.floor(stageW * (isMobile ? 0.45 : 0.32)));
+
   fontSize = Math.max(8, Math.min(fontSize, maxAllowed));
-  fontSize = Math.floor(fontSize * 1.10); // final nudge
+
+  // final nudge multiplier to make overlays a bit larger overall (tweak 1.0 -> 1.2)
+  fontSize = Math.floor(fontSize * 1.10);
+
   el.style.fontSize = fontSize + 'px';
   el.style.lineHeight = '1';
   el.style.fontWeight = '700';
@@ -700,38 +715,20 @@
 })();
 </script>
 <script>
-(function(){
-  // keep vh correct on mobile
-  function setVH(){
-    document.documentElement.style.setProperty('--vh', (window.innerHeight * 0.01) + 'px');
-  }
-  setVH();
-  window.addEventListener('resize', setVH);
+if (window.innerWidth <= 767) {
+  const stage = document.getElementById("np-stage");
 
-  // inputs that matter
-  const inputs = Array.from(document.querySelectorAll('#np-name, #np-num'));
-
-  function onFocus() {
-    document.body.classList.add('input-focused');
-    const controls = document.getElementById('np-controls');
-    if (controls) {
-      setTimeout(()=> {
-        const active = document.activeElement;
-        if (active && controls.contains(active)) {
-          active.scrollIntoView({behavior:'smooth', block:'center'});
-        }
-      }, 350);
+  // Detect when keyboard opens
+  window.visualViewport?.addEventListener("resize", () => {
+    if (window.visualViewport.height < window.innerHeight * 0.75) {
+      // Keyboard opened → keep stage fixed
+      stage.style.position = "fixed";
+    } else {
+      // Keyboard closed → normal
+      stage.style.position = "relative";
     }
-  }
-  function onBlur() {
-    setTimeout(()=> document.body.classList.remove('input-focused'), 300);
-  }
-
-  inputs.forEach(i=>{
-    i.addEventListener('focus', onFocus);
-    i.addEventListener('blur', onBlur);
   });
-})();
+}
 </script>
 
 </body>
