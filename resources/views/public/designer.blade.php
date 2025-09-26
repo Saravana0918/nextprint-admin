@@ -91,9 +91,7 @@
       .vt-panel { position: static; left: auto; width: 100%; display: block !important; opacity:1 !important; transform:none !important; padding: 8px 0; background: transparent; border: none; box-shadow: none; }
       .col-md-3.np-col > #np-controls { min-height: auto; padding: 12px !important; }
     }
-    .right-layout{
-      margin-top: 20px;
-    }
+    
     @media (max-width: 767px) {
 
   /* 1) body stadium background + full-screen tint (below UI) */
@@ -253,6 +251,8 @@
   /* small utility */
   .mobile-display { display: none; } /* your elements with mobile-display will show */
   .color-display  { color: #fff; }
+  .right-layout{ margin-top: 20px;
+    }
 }
 
 
