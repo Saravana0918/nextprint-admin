@@ -61,6 +61,23 @@
 
     /* ensure swatches block stays inside the panel and is placed nicely */
     .vt-panel .swatches-wrap { margin-top: 8px; display:block; }
+    body {
+    background-image: url('/images/stadium-bg.jpg'); /* change path if needed */
+    background-size: cover;
+    background-position: center center;
+    background-repeat: no-repeat;
+    min-height: 100vh;
+    position: relative;
+  }
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.35); /* tweak 0.22-0.36 */
+    z-index: 5;
+    pointer-events: none;
+  }
+
 
     /* small screens: revert to stacked flow (mobile rules unchanged) */
     @media (max-width: 767px) {
