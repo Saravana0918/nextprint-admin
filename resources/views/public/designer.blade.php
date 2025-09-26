@@ -213,7 +213,23 @@
   .hide-on-mobile { display: none !important; }
 
   /* 8) make Add to Cart visible */
-  #np-atc-btn { display:block !important; z-index: 30; width:100% !important; }
+  #np-atc-btn {
+  position: fixed !important;
+  top: 12px !important;        /* distance from top — adjust */
+  right: 12px !important;      /* distance from right — adjust */
+  z-index: 99999 !important;
+  width: 130px !important;     /* button width on mobile */
+  height: 44px !important;
+  padding: 6px 12px !important;
+  border-radius: 28px !important;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.25) !important;
+  font-weight: 700 !important;
+  white-space: nowrap !important;
+}
+
+.col-md-3.np-col {
+  padding-bottom: 96px; /* adjust according to button height */
+}
 
   /* 9) mobile large overlay styles (apply via JS .mobile-style) */
   #np-prev-name.mobile-style {
