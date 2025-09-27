@@ -118,6 +118,79 @@
     box-shadow: 0 0 0 3px rgba(20,120,220,0.08);
     border-color: rgba(20,120,220,0.12);
   }
+  /* === Mobile / tablet responsive tweaks === */
+@media (max-width: 991px) {
+  /* stack columns vertically */
+  .d-flex.align-items-start.gap-4 {
+    flex-direction: column !important;
+  }
+
+  /* make the right preview card full width and centered */
+  .card .card-body {
+    padding: 1rem !important;
+  }
+
+  /* limit stage width on mobile so overlay sizing works predictably */
+  #player-stage {
+    width: 320px !important;
+    height: 420px !important;
+    display: block !important;
+    margin: 0 auto 1rem !important;
+  }
+  #player-base {
+    width: 320px !important;
+    height: 420px !important;
+    object-fit: contain !important;
+  }
+
+  /* make inputs full width and stack nicely */
+  .player-row .player-number,
+  .player-row .player-size,
+  .player-row .player-name {
+    width: 100% !important;
+    display: block !important;
+    margin-bottom: .5rem !important;
+  }
+
+  /* move buttons below inputs (stack) */
+  .player-row .btn-remove,
+  .player-row .btn-preview {
+    width: 49% !important;
+    display: inline-block !important;
+    margin-top: .25rem !important;
+  }
+
+  /* left form area spacing */
+  .flex-grow-1 {
+    width: 100% !important;
+  }
+
+  /* form submit buttons full width */
+  .mt-3 .btn {
+    display: block;
+    width: 100%;
+    margin-bottom: .5rem;
+  }
+
+  /* small text adjustments to keep overlays readable */
+  #overlay-name { font-size: 22px !important; text-shadow: 0 2px 4px rgba(0,0,0,0.5) !important; }
+  #overlay-number { font-size: 38px !important; text-shadow: 0 2px 4px rgba(0,0,0,0.5) !important; }
+
+  /* avoid horizontal scroll */
+  html, body { overflow-x: hidden; }
+}
+
+/* Slight smaller adjustments for very small phones */
+@media (max-width: 420px) {
+  #player-stage { width: 280px !important; height: 380px !important; }
+  #player-base { width: 280px !important; height: 380px !important; }
+  #overlay-name { font-size: 18px !important; }
+  #overlay-number { font-size: 34px !important; }
+
+  .player-row .btn-remove,
+  .player-row .btn-preview { width: 100% !important; margin-top: .5rem !important; }
+}
+
 </style>
 
 <script>
@@ -429,6 +502,50 @@ document.addEventListener('DOMContentLoaded', function() {
       return false;
     }
     return true;
+  });
+
+    /* ===== Mobile stage sizing helper ===== */
+  function adjustStageForViewport() {
+    try {
+      // If mobile/tablet, set explicit stage size used by CSS; else let stage be auto
+      const vw = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
+      const stageEl = document.getElementById('player-stage');
+      const imgEl = document.getElementById('player-base');
+
+      if (!stageEl || !imgEl) return;
+
+      if (vw <= 991) {
+        // sizes match CSS; keep them in sync for JS calculations
+        const w = (vw <= 420) ? 280 : 320;
+        const h = (vw <= 420) ? 380 : 420;
+        stageEl.style.width = w + 'px';
+        stageEl.style.height = h + 'px';
+        imgEl.style.width = w + 'px';
+        imgEl.style.height = h + 'px';
+      } else {
+        // on desktop, let existing CSS/style manage it (remove inline)
+        stageEl.style.width = '';
+        stageEl.style.height = '';
+        imgEl.style.width = '';
+        imgEl.style.height = '';
+      }
+      // Recompute overlay placement after changing stage dimensions
+      onStageChange();
+    } catch(e) {
+      // ignore silently
+      console.error('adjustStageForViewport error', e);
+    }
+  }
+
+  // call once on load and on resize / orientation change
+  adjustStageForViewport();
+  window.addEventListener('resize', function() {
+    adjustStageForViewport();
+    // small debounce for onStageChange
+    setTimeout(onStageChange, 120);
+  });
+  window.addEventListener('orientationchange', function() {
+    setTimeout(adjustStageForViewport, 150);
   });
 
 });
