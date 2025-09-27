@@ -40,7 +40,7 @@
                  alt="{{ $product->name }}" class="img-fluid">
             <!-- Overlays -->
             <div id="overlay-name" class="overlay-text">NAME</div>
-            <div id="overlay-number" class="overlay-text">NUMBER</div>
+            <div id="overlay-number" class="overlay-texts">NUMBER</div>
           </div>
 
           <!-- product meta below -->
@@ -75,6 +75,19 @@
 <style>
 /* overlay base styles */
 .overlay-text {
+  position: absolute;
+  left: 48%;
+  transform: translateX(-50%);
+  color: #D4AF37;
+  text-shadow: 0 3px 6px rgba(0,0,0,0.6);
+  font-weight: 800;
+  pointer-events: none;
+  white-space: nowrap;
+  line-height: 3;
+  z-index: 30;
+  font-family: 'Bebas Neue', Arial, sans-serif;
+}
+.overlay-texts{
   position: absolute;
   left: 48%;
   transform: translateX(-50%);
