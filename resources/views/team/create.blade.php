@@ -31,51 +31,26 @@
     </div>
 
     <!-- RIGHT: product preview (thumbnail) -->
-    <!-- RIGHT: product preview (thumbnail) -->
-<div style="width:320px; flex-shrink:0;">
-  <div class="card">
-    <div class="card-body text-center" style="position:relative;">
-      <!-- Stage container (position:relative) -->
-      <div id="player-stage" style="position:relative; display:inline-block; width:220px; height:320px;">
-        <img id="player-base" src="{{ $product->image_url ?? asset('images/placeholder.png') }}"
-             alt="{{ $product->name }}" class="img-fluid" style="width:100%; height:100%; object-fit:contain;">
-        <!-- Overlays -->
-        <div id="overlay-name" style="
-            position:absolute;
-            top:38px;              /* adjust to place near neck */
-            left:50%;
-            transform:translateX(-50%);
-            font-weight:800;
-            font-family: 'Bebas Neue', sans-serif;
-            color:#D4AF37;
-            text-shadow: 0 3px 6px rgba(0,0,0,0.6);
-            font-size:20px;
-            pointer-events:none;
-            white-space:nowrap;
-        ">NAME</div>
+    <div style="width:320px; flex-shrink:0;">
+      <div class="card">
+        <div class="card-body text-center" style="position:relative;">
+          <!-- Stage container (position:relative) -->
+          <div id="player-stage" style="position:relative; display:inline-block; width:220px; height:320px;">
+            <img id="player-base" src="{{ $product->image_url ?? asset('images/placeholder.png') }}"
+                 alt="{{ $product->name }}" class="img-fluid" style="width:100%; height:100%; object-fit:contain; display:block;">
+            <!-- Overlays -->
+            <div id="overlay-name" class="overlay-text">NAME</div>
+            <div id="overlay-number" class="overlay-text">NUMBER</div>
+          </div>
 
-        <div id="overlay-number" style="
-            position:absolute;
-            bottom:58px;           /* adjust to place on back lower */
-            left:50%;
-            transform:translateX(-50%);
-            font-weight:900;
-            font-family: 'Bebas Neue', sans-serif;
-            color:#D4AF37;
-            text-shadow: 0 3px 6px rgba(0,0,0,0.6);
-            font-size:30px;
-            pointer-events:none;
-            white-space:nowrap;
-        ">NUMBER</div>
+          <!-- product meta below -->
+          <h5 class="card-title mt-3">{{ $product->name }}</h5>
+          <p class="text-muted">Price: ₹ {{ number_format($product->min_price ?? 0, 2) }}</p>
+        </div>
       </div>
-
-      <!-- product meta below -->
-      <h5 class="card-title mt-3">{{ $product->name }}</h5>
-      <p class="text-muted">Price: ₹ {{ number_format($product->min_price ?? 0, 2) }}</p>
     </div>
   </div>
 </div>
-
 
 <!-- template for player row -->
 <template id="player-row-template">
@@ -97,85 +72,192 @@
   </div>
 </template>
 
+<style>
+/* overlay base styles */
+.overlay-text {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #D4AF37;
+  text-shadow: 0 3px 6px rgba(0,0,0,0.6);
+  font-weight: 800;
+  pointer-events: none;
+  white-space: nowrap;
+  line-height: 1;
+  z-index: 30;
+  font-family: 'Bebas Neue', Arial, sans-serif;
+}
+
+/* sensible defaults (these will be recalculated by JS) */
+#overlay-name { top: 8%; font-size: 18px; letter-spacing: 1px; }
+#overlay-number { top: 60%; font-size: 32px; }
+
+/* ensure stage doesn't clip overlays */
+#player-stage { overflow: visible; }
+
+/* small visual for active row */
+.player-row.preview-active { box-shadow: 0 0 0 3px rgba(20,120,220,0.08); border-color: rgba(20,120,220,0.12); }
+</style>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
   const list = document.getElementById('players-list');
   const template = document.getElementById('player-row-template');
   const addBtn = document.getElementById('btn-add-row');
 
-  // overlay elements
-  const overlayName = document.getElementById('overlay-name');
-  const overlayNum  = document.getElementById('overlay-number');
+  const stage = document.getElementById('player-stage');
+  const img = document.getElementById('player-base');
+  const ovName = document.getElementById('overlay-name');
+  const ovNum  = document.getElementById('overlay-number');
 
+  // Layout "slots" as percentage of stage (tweak these to match your artwork)
+  const nameSlot = { top_pct: 6, height_pct: 12, width_pct: 80 };   // near shoulders
+  const numSlot  = { top_pct: 62, height_pct: 18, width_pct: 60 };  // lower back
+
+  function computeStageRect() {
+    return stage.getBoundingClientRect();
+  }
+
+  function fitTextToBox(el, boxW, boxH, text, options = {}) {
+    // Put text then compute font-size
+    el.textContent = text || (el.id === 'overlay-name' ? 'NAME' : 'NUMBER');
+
+    // Choose starting font size relative to box height
+    const start = Math.floor(boxH * (options.heightFactor || 0.8));
+    let fs = Math.max(6, start);
+    el.style.fontSize = fs + 'px';
+
+    // Reduce until fits width or reaches minimum
+    let attempts = 0;
+    while (el.scrollWidth > boxW && fs > 6 && attempts < 60) {
+      fs = Math.max(6, Math.floor(fs * 0.92));
+      el.style.fontSize = fs + 'px';
+      attempts++;
+    }
+
+    // Ensure it doesn't exceed box height
+    if (fs > boxH) {
+      fs = Math.floor(boxH);
+      el.style.fontSize = fs + 'px';
+    }
+  }
+
+  function placeOverlay(el, slot, text, opts) {
+    const rect = computeStageRect();
+    const w = Math.max(8, Math.round((slot.width_pct/100) * rect.width));
+    const h = Math.max(8, Math.round((slot.height_pct/100) * rect.height));
+    const topPx = Math.round((slot.top_pct/100) * rect.height);
+
+    // set top in px relative to stage
+    el.style.top = topPx + 'px';
+
+    // center horizontally
+    el.style.left = '50%';
+    el.style.transform = 'translateX(-50%)';
+
+    fitTextToBox(el, w, h, text, opts || {});
+  }
+
+  function refreshPreview(nameText, numText) {
+    // sanitize
+    const name = (nameText || '').toUpperCase();
+    const num  = (numText || '').toString().replace(/\D/g,'');
+
+    // apply for name and number with different height factors
+    placeOverlay(ovName, nameSlot, name || 'NAME', { heightFactor: 0.9 });
+    placeOverlay(ovNum, numSlot, num || 'NUMBER',  { heightFactor: 0.95 });
+  }
+
+  // Expose helper to use from row preview buttons
+  window.setPlayerPreview = function(name, number) {
+    ovName.dataset.value = (name || '').toUpperCase();
+    ovNum.dataset.value  = (number || '').toString().replace(/\D/g,'');
+    refreshPreview(ovName.dataset.value, ovNum.dataset.value);
+  };
+
+  // react to image load & window resize to reflow overlays
+  function onStageChange() {
+    // re-render using current stored dataset values if present
+    const n = ovName.dataset.value || ovName.textContent;
+    const m = ovNum.dataset.value  || ovNum.textContent;
+    refreshPreview(n, m);
+  }
+
+  if (img.complete) onStageChange();
+  img.addEventListener('load', onStageChange);
+  window.addEventListener('resize', onStageChange);
+
+  // ADD row
   function addRow() {
     const node = template.content.cloneNode(true);
     list.appendChild(node);
     wireRowEvents();
   }
 
+  // Wire up events for rows (remove, preview, live sync)
   function wireRowEvents() {
-    // wire remove buttons
+    // .btn-remove
     list.querySelectorAll('.btn-remove').forEach(btn=>{
       if (!btn.dataset.wired) {
         btn.dataset.wired = '1';
         btn.addEventListener('click', e => {
           const row = e.target.closest('.player-row');
-          row.remove();
-          // optional: clear overlay if removed active row
+          if (row) row.remove();
         });
       }
     });
 
-    // wire preview buttons (show this row on jersey)
+    // .btn-preview
     list.querySelectorAll('.btn-preview').forEach(btn=>{
       if (!btn.dataset.wired) {
         btn.dataset.wired = '1';
         btn.addEventListener('click', e => {
           const row = e.target.closest('.player-row');
+          if (!row) return;
+          // mark active
+          list.querySelectorAll('.player-row').forEach(r=>r.classList.remove('preview-active'));
+          row.classList.add('preview-active');
+
           const name = (row.querySelector('.player-name')?.value || '').toUpperCase();
           const num  = (row.querySelector('.player-number')?.value || '').replace(/\D/g,'');
-          overlayName.textContent = name || 'NAME';
-          overlayNum.textContent = num || 'NUMBER';
+          // set preview
+          window.setPlayerPreview(name, num);
         });
       }
     });
 
-    // wire live typing sync on focused row
+    // inputs: focus -> make that row active + immediate preview
     list.querySelectorAll('.player-name, .player-number').forEach(inp=>{
       if (!inp.dataset.wired) {
         inp.dataset.wired = '1';
-        inp.addEventListener('input', e => {
-          // update overlay only if this input's row has been last-previewed OR if input is focused and you want live update
+        inp.addEventListener('focus', (e) => {
           const row = e.target.closest('.player-row');
-          // if this row was marked as active, update immediately
+          if (!row) return;
+          list.querySelectorAll('.player-row').forEach(r=>r.classList.remove('preview-active'));
+          row.classList.add('preview-active');
+
+          const name = (row.querySelector('.player-name')?.value || '').toUpperCase();
+          const num  = (row.querySelector('.player-number')?.value || '').replace(/\D/g,'');
+          window.setPlayerPreview(name, num);
+        });
+
+        // live update only if that row is active
+        inp.addEventListener('input', (e) => {
+          const row = e.target.closest('.player-row');
+          if (!row) return;
           if (row.classList.contains('preview-active')) {
             const name = (row.querySelector('.player-name')?.value || '').toUpperCase();
             const num  = (row.querySelector('.player-number')?.value || '').replace(/\D/g,'');
-            overlayName.textContent = name || 'NAME';
-            overlayNum.textContent = num || 'NUMBER';
-          }
-        });
-
-        // set preview-active when focus (optional: live preview)
-        inp.addEventListener('focus', (e) => {
-          list.querySelectorAll('.player-row').forEach(r => r.classList.remove('preview-active'));
-          const row = e.target.closest('.player-row');
-          if (row) {
-            row.classList.add('preview-active');
-            // also update overlay when focusing
-            const name = (row.querySelector('.player-name')?.value || '').toUpperCase();
-            const num  = (row.querySelector('.player-number')?.value || '').replace(/\D/g,'');
-            overlayName.textContent = name || 'NAME';
-            overlayNum.textContent = num || 'NUMBER';
+            window.setPlayerPreview(name, num);
           }
         });
       }
     });
   }
 
+  // init
   addBtn.addEventListener('click', addRow);
-
-  // initial row
+  // start with one row
   addRow();
 });
 </script>
