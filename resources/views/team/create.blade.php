@@ -83,8 +83,12 @@
 <template id="player-row-template">
   <div class="card mb-2 p-2 player-row">
     <div class="d-flex gap-2 align-items-start">
-      <input name="players[][number]" class="form-control w-25 player-number" placeholder="00" />
-      <input name="players[][name]" class="form-control player-name" placeholder="PLAYER NAME" />
+      <!-- number: maxlength=3, inputmode numeric -->
+      <input name="players[][number]" class="form-control w-25 player-number" placeholder="00"
+             maxlength="3" inputmode="numeric" pattern="\d*" />
+      <!-- name: maxlength=12 -->
+      <input name="players[][name]" class="form-control player-name" placeholder="PLAYER NAME"
+             maxlength="12" />
       <select name="players[][size]" class="form-select w-25">
         <option value="">Size</option>
         <option value="XS">XS</option>
@@ -147,46 +151,36 @@ document.addEventListener('DOMContentLoaded', function() {
   const list = document.getElementById('players-list');
   const template = document.getElementById('player-row-template');
   const addBtn = document.getElementById('btn-add-row');
+  const form = document.getElementById('team-form');
 
   const stage = document.getElementById('player-stage');
   const img = document.getElementById('player-base');
   const ovName = document.getElementById('overlay-name');
   const ovNum  = document.getElementById('overlay-number');
 
-  // Tweak these slot values to control how much vertical space name/number get.
-  // We reduced height_pct so text will be sized smaller by default.
-  const nameSlot = { top_pct: 9,  height_pct: 9,  width_pct: 90 };   // name sits higher, smaller height
-  const numSlot  = { top_pct: 54, height_pct: 12, width_pct: 60 };   // number lower, less vertical space
+  // slot values
+  const nameSlot = { top_pct: 12,  height_pct: 8,  width_pct: 85 };
+  const numSlot  = { top_pct: 54, height_pct: 12, width_pct: 60 };
 
   function computeStageRect() {
-    // bounding rect for the stage area (used to compute pixel box for overlays)
     return stage.getBoundingClientRect();
   }
 
   function fitTextToBox(el, boxW, boxH, text, options = {}) {
-    // apply text
     el.textContent = text || (el.id === 'overlay-name' ? 'NAME' : 'NUMBER');
-
-    // start font-size based on box height and optional factor
     const heightFactor = (options.heightFactor !== undefined) ? options.heightFactor : 0.8;
     let fs = Math.max(6, Math.floor(boxH * heightFactor));
-
-    // limit maximum font relative to stage width (prevents huge fonts on big screens)
     const stageRect = computeStageRect();
-    const maxAllowed = Math.max(12, Math.floor(stageRect.width * 0.12)); // tweak 0.10-0.14 for different results
+    const maxAllowed = Math.max(12, Math.floor(stageRect.width * 0.12));
     fs = Math.min(fs, maxAllowed);
-
     el.style.fontSize = fs + 'px';
 
-    // shrink loop until it fits horizontally
     let attempts = 0;
     while (el.scrollWidth > boxW && fs > 6 && attempts < 80) {
       fs = Math.max(6, Math.floor(fs * 0.9));
       el.style.fontSize = fs + 'px';
       attempts++;
     }
-
-    // ensure it doesn't overflow vertically
     if (fs > boxH) {
       fs = Math.floor(boxH * 0.95);
       el.style.fontSize = fs + 'px';
@@ -198,32 +192,25 @@ document.addEventListener('DOMContentLoaded', function() {
     const w = Math.max(8, Math.round((slot.width_pct/100) * rect.width));
     const h = Math.max(8, Math.round((slot.height_pct/100) * rect.height));
     const topPx = Math.round((slot.top_pct/100) * rect.height);
-
-    // position top relative to stage container
     el.style.top = topPx + 'px';
     el.style.left = '50%';
     el.style.transform = 'translateX(-50%)';
-
     fitTextToBox(el, w, h, text, opts || {});
   }
 
   function refreshPreview(nameText, numText) {
     const name = (nameText || '').toString().toUpperCase();
     const num  = (numText || '').toString().replace(/\D/g,'');
-
-    // We pass smaller heightFactor so text stays smaller than before.
     placeOverlay(ovName, nameSlot, name || 'NAME', { heightFactor: 0.65 });
     placeOverlay(ovNum, numSlot, num || 'NUMBER',  { heightFactor: 0.72 });
   }
 
-  // Expose for buttons to call
   window.setPlayerPreview = function(name, number) {
     ovName.dataset.value = (name || '').toUpperCase();
     ovNum.dataset.value  = (number || '').toString().replace(/\D/g,'');
     refreshPreview(ovName.dataset.value, ovNum.dataset.value);
   };
 
-  // when image loads or window resizes, reflow overlays
   function onStageChange() {
     const n = ovName.dataset.value || ovName.textContent;
     const m = ovNum.dataset.value  || ovNum.textContent;
@@ -234,14 +221,45 @@ document.addEventListener('DOMContentLoaded', function() {
   img.addEventListener('load', onStageChange);
   window.addEventListener('resize', onStageChange);
 
-  // add a new row
+  // add row
   function addRow() {
     const node = template.content.cloneNode(true);
     list.appendChild(node);
     wireRowEvents();
   }
 
-  // wire events for existing + newly added rows
+  function enforceInputLimits(input) {
+    if (!input) return;
+    // name: enforce uppercase + maxlength 12
+    if (input.classList.contains('player-name')) {
+      input.addEventListener('input', (e) => {
+        // uppercase and cut to 12 chars
+        const v = (e.target.value || '').toString().toUpperCase().slice(0, 12);
+        if (e.target.value !== v) e.target.value = v;
+      });
+      // prevent paste longer than 12
+      input.addEventListener('paste', (ev) => {
+        ev.preventDefault();
+        const pasted = (ev.clipboardData.getData('text') || '').toUpperCase().slice(0,12);
+        document.execCommand('insertText', false, pasted);
+      });
+    }
+
+    // number: allow digits only, maxlength 3
+    if (input.classList.contains('player-number')) {
+      input.addEventListener('input', (e) => {
+        let v = (e.target.value || '').replace(/\D/g,'').slice(0,3);
+        if (e.target.value !== v) e.target.value = v;
+      });
+      input.addEventListener('paste', (ev) => {
+        ev.preventDefault();
+        const pasted = (ev.clipboardData.getData('text') || '').replace(/\D/g,'').slice(0,3);
+        document.execCommand('insertText', false, pasted);
+      });
+    }
+  }
+
+  // wire events for rows
   function wireRowEvents() {
     // Remove buttons
     list.querySelectorAll('.btn-remove').forEach(btn=>{
@@ -261,29 +279,30 @@ document.addEventListener('DOMContentLoaded', function() {
         btn.addEventListener('click', e => {
           const row = e.target.closest('.player-row');
           if (!row) return;
-          // mark active
           list.querySelectorAll('.player-row').forEach(r=>r.classList.remove('preview-active'));
           row.classList.add('preview-active');
 
-          const name = (row.querySelector('.player-name')?.value || '').toUpperCase();
-          const num  = (row.querySelector('.player-number')?.value || '').replace(/\D/g,'');
+          const name = (row.querySelector('.player-name')?.value || '').toUpperCase().slice(0,12);
+          const num  = (row.querySelector('.player-number')?.value || '').replace(/\D/g,'').slice(0,3);
           window.setPlayerPreview(name, num);
         });
       }
     });
 
-    // Focus & live update handlers
+    // inputs: focus & live update + enforce limits
     list.querySelectorAll('.player-name, .player-number').forEach(inp=>{
-      if (!inp.dataset.wired) {
-        inp.dataset.wired = '1';
+      if (!inp.dataset.wiredInput) {
+        inp.dataset.wiredInput = '1';
+        enforceInputLimits(inp);
+
         inp.addEventListener('focus', (e) => {
           const row = e.target.closest('.player-row');
           if (!row) return;
           list.querySelectorAll('.player-row').forEach(r=>r.classList.remove('preview-active'));
           row.classList.add('preview-active');
 
-          const name = (row.querySelector('.player-name')?.value || '').toUpperCase();
-          const num  = (row.querySelector('.player-number')?.value || '').replace(/\D/g,'');
+          const name = (row.querySelector('.player-name')?.value || '').toUpperCase().slice(0,12);
+          const num  = (row.querySelector('.player-number')?.value || '').replace(/\D/g,'').slice(0,3);
           window.setPlayerPreview(name, num);
         });
 
@@ -291,8 +310,8 @@ document.addEventListener('DOMContentLoaded', function() {
           const row = e.target.closest('.player-row');
           if (!row) return;
           if (row.classList.contains('preview-active')) {
-            const name = (row.querySelector('.player-name')?.value || '').toUpperCase();
-            const num  = (row.querySelector('.player-number')?.value || '').replace(/\D/g,'');
+            const name = (row.querySelector('.player-name')?.value || '').toUpperCase().slice(0,12);
+            const num  = (row.querySelector('.player-number')?.value || '').replace(/\D/g,'').slice(0,3);
             window.setPlayerPreview(name, num);
           }
         });
@@ -300,10 +319,43 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-  // init handlers
+  // initial add
   addBtn.addEventListener('click', addRow);
-  // initial row
   addRow();
+
+  // FINAL form submit validation: ensure each player row respects limits
+  form.addEventListener('submit', function(evt) {
+    const rows = list.querySelectorAll('.player-row');
+    const errors = [];
+    rows.forEach((row, idx) => {
+      const nameEl = row.querySelector('.player-name');
+      const numEl  = row.querySelector('.player-number');
+      const name = (nameEl?.value || '').trim();
+      const num  = (numEl?.value || '').trim();
+
+      if (!name) {
+        errors.push(`Row ${idx+1}: Name is required (max 12 chars).`);
+      } else if (name.length > 12) {
+        errors.push(`Row ${idx+1}: Name must be 12 characters or fewer.`);
+      }
+
+      if (!num) {
+        errors.push(`Row ${idx+1}: Number is required (1–3 digits).`);
+      } else if (!/^\d{1,3}$/.test(num)) {
+        errors.push(`Row ${idx+1}: Number must be 1 to 3 digits.`);
+      }
+    });
+
+    if (errors.length) {
+      evt.preventDefault();
+      alert('Please fix these issues:\n\n' + errors.join('\n'));
+      return false;
+    }
+
+    // otherwise submit normally
+    return true;
+  });
+
 });
 </script>
 
