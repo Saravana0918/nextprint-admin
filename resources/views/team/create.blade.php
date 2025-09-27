@@ -64,6 +64,8 @@
 
         <div class="mb-3">
           <button type="button" id="btn-add-row" class="btn btn-primary">ADD NEW</button>
+          <button type="submit" class="btn btn-success btn-block">Save Team</button>
+          <a href="{{ url()->previous() }}" class="btn btn-secondary btn-block">Back</a>
         </div>
 
         <div id="players-list" class="mb-4">
@@ -71,8 +73,7 @@
         </div>
 
         <div class="mt-3">
-          <button type="submit" class="btn btn-success btn-block" style="width:100%;">Save Team</button>
-          <a href="{{ url()->previous() }}" class="btn btn-secondary btn-block" style="width:100%; margin-top:8px;">Back</a>
+          
         </div>
       </form>
     </div>
