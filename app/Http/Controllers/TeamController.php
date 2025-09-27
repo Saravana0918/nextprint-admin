@@ -16,19 +16,40 @@ class TeamController extends Controller
     }
 
     public function store(Request $request)
-    {
-        $data = $request->validate([
-            'product_id' => 'required|integer|exists:products,id',
+        {
+            $data = $request->validate([
+            'product_id' => 'required|integer',
             'players' => 'required|array|min:1',
+            'players.*.name' => 'required|string|max:50',
             'players.*.number' => 'required|numeric',
-            'players.*.name' => 'required|string',
-            'players.*.size' => 'nullable|string',
-        ]);
+            'players.*.size' => 'nullable|string|max:10',
+            'preview_data' => 'nullable|string',
+            ]);
 
-        // save your team logic - e.g. Team model or just return
-        // Team::create([...]) or loop players
+            // optional: create Team
+            $team = \App\Models\Team::create(['product_id'=>$data['product_id'],'name'=>'Team for product '.$data['product_id']]);
 
-        return redirect()->route('team.create', ['product_id'=>$request->product_id])
-                        ->with('success','Team saved');
-    }
+            foreach($data['players'] as $p){
+            \App\Models\Player::create([
+                'team_id' => $team->id,
+                'name' => $p['name'],
+                'number' => $p['number'],
+                'size' => $p['size'] ?? null,
+            ]);
+            }
+
+            // if preview_data present (data:image/png;base64,...)
+            if(!empty($data['preview_data'])){
+            if(preg_match('/^data:image\/png;base64,/', $data['preview_data'])) {
+                $base64 = substr($data['preview_data'], strpos($data['preview_data'], ',') + 1);
+                $img = base64_decode($base64);
+                $filename = 'teams/previews/team-'.$team->id.'-'.time().'.png';
+                \Storage::disk('public')->put($filename, $img);
+                $team->preview_path = $filename; $team->save();
+            }
+            }
+
+            return redirect()->route('team.create', ['product_id'=>$data['product_id']])->with('success','Team saved.');
+        }
+
 }

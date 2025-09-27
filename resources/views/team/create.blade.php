@@ -31,7 +31,7 @@
     </div>
 
     <!-- RIGHT: product preview (thumbnail) -->
-    <div style="width:320px; flex-shrink:0;">
+    <div style="width:450px; flex-shrink:0;">
       <div class="card">
         <div class="card-body text-center" style="position:relative;">
           <!-- Stage container (position:relative) -->
@@ -76,7 +76,7 @@
 /* overlay base styles */
 .overlay-text {
   position: absolute;
-  left: 50%;
+  left: 48%;
   transform: translateX(-50%);
   color: #D4AF37;
   text-shadow: 0 3px 6px rgba(0,0,0,0.6);
@@ -89,14 +89,14 @@
 }
 
 /* sensible defaults (these will be recalculated by JS) */
-#overlay-name { font-size: 20px; top: 6%; }
-#overlay-number { font-size: 36px; top: 62%; }
+#overlay-name { font-size: 20px; top: 15%; }
+#overlay-number { font-size: 36px; top: 60%; }
 
 /* ensure stage doesn't clip overlays */
 #player-stage {
   display: inline-block;
-  width: 260px;    
-  height: 380px;  
+  width: 320px;    
+  height: 320px;  
   position: relative;
   overflow: visible;
 }
