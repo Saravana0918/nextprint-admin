@@ -35,7 +35,7 @@
       <div class="card">
         <div class="card-body text-center" style="position:relative;">
           <!-- Stage container (position:relative) -->
-          <div id="player-stage" style="position:relative; display:inline-block; width:220px; height:320px;">
+          <div id="player-stage">
             <img id="player-base" src="{{ $product->image_url ?? asset('images/placeholder.png') }}"
                  alt="{{ $product->name }}" class="img-fluid" style="width:100%; height:100%; object-fit:contain; display:block;">
             <!-- Overlays -->
