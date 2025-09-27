@@ -159,7 +159,7 @@ document.addEventListener('DOMContentLoaded', function() {
   const ovNum  = document.getElementById('overlay-number');
 
   // slot values
-  const nameSlot = { top_pct: 12,  height_pct: 8,  width_pct: 85 };
+  const nameSlot = { top_pct: 18,  height_pct: 8,  width_pct: 85 };
   const numSlot  = { top_pct: 54, height_pct: 12, width_pct: 60 };
 
   function computeStageRect() {
