@@ -35,10 +35,10 @@
       <div class="card">
         <div class="card-body text-center" style="position:relative;">
           <!-- Stage container (position:relative) -->
-          <div id="player-stage" style="position:relative; display:inline-block; margin: 0 auto;">
+          <div id="player-stage" style="position:relative; display:inline-block; width:360px; height:460px; margin: 0 auto;">
             <img id="player-base" src="{{ $product->image_url ?? asset('images/placeholder.png') }}"
                  alt="{{ $product->name }}" class="img-fluid"
-                 style="width:100%; height:100%; object-fit:contain; display:block;">
+                 style="width:360px; height:460px; object-fit:contain; display:block;">
 
             <!-- Overlays (will be positioned by JS) -->
             <div id="overlay-name" style="
@@ -46,13 +46,13 @@
                 left:50%;
                 transform:translateX(-50%);
                 font-weight:800;
-                font-family: 'Bebas Neue', 'Arial Black', sans-serif;
-                color:#D4AF37;
+                font-family: 'Oswald', sans-serif;
+                color:#ffffff;
                 text-shadow: 0 3px 6px rgba(0,0,0,0.6);
                 pointer-events:none;
                 white-space:nowrap;
                 z-index:30;
-                font-size:16px;
+                font-size:28px;
             ">NAME</div>
 
             <div id="overlay-number" style="
@@ -60,13 +60,13 @@
                 left:50%;
                 transform:translateX(-50%);
                 font-weight:900;
-                font-family: 'Bebas Neue', 'Arial Black', sans-serif;
-                color:#D4AF37;
+                font-family: 'Oswald', sans-serif;
+                color:#ffffff;
                 text-shadow: 0 3px 6px rgba(0,0,0,0.6);
                 pointer-events:none;
                 white-space:nowrap;
                 z-index:30;
-                font-size:28px;
+                font-size:48px;
             ">NUMBER</div>
           </div>
 
@@ -102,6 +102,11 @@
         <option value="L">L</option>
         <option value="XL">XL</option>
       </select>
+
+      <!-- hidden per-row font/color (will be filled by JS) -->
+      <input type="hidden" name="players[][font]" class="player-font">
+      <input type="hidden" name="players[][color]" class="player-color">
+
       <button type="button" class="btn btn-danger btn-remove">Remove</button>
       <button type="button" class="btn btn-outline-primary btn-preview ml-2">Preview</button>
     </div>
@@ -109,13 +114,10 @@
 </template>
 
 <style>
-  /* small visual for active row */
   .player-row.preview-active {
     box-shadow: 0 0 0 3px rgba(20,120,220,0.08);
     border-color: rgba(20,120,220,0.12);
   }
- 
- 
 </style>
 
 <script>
@@ -130,33 +132,27 @@ document.addEventListener('DOMContentLoaded', function() {
   const ovName = document.getElementById('overlay-name');
   const ovNum  = document.getElementById('overlay-number');
 
-  const nameSlot = { top_pct: 18,  height_pct: 8,  width_pct: 85 };
-  const numSlot  = { top_pct: 54, height_pct: 12, width_pct: 60 };
+  // Slot positions (percent of stage height)
+  const nameSlot = { top_pct: 12,  height_pct: 10,  width_pct: 85 };
+  const numSlot  = { top_pct: 56, height_pct: 20, width_pct: 60 };
 
-  function computeStageRect() {
-    return stage.getBoundingClientRect();
-  }
+  function computeStageRect() { return stage.getBoundingClientRect(); }
 
-  function fitTextToBox(el, boxW, boxH, text, options = {}) {
-    el.textContent = text || (el.id === 'overlay-name' ? 'NAME' : 'NUMBER');
-    const heightFactor = (options.heightFactor !== undefined) ? options.heightFactor : 0.8;
-    let fs = Math.max(6, Math.floor(boxH * heightFactor));
+  function fitTextToBox(el, boxW, boxH, options = {}) {
+    const heightFactor = options.heightFactor || 0.8;
+    let fs = Math.max(8, Math.floor(boxH * heightFactor));
     const stageRect = computeStageRect();
-    const maxAllowed = Math.max(10, Math.floor(stageRect.width * 0.12)); // upper cap
+    const maxAllowed = Math.max(12, Math.floor(stageRect.width * 0.18));
     fs = Math.min(fs, maxAllowed);
     el.style.fontSize = fs + 'px';
-
-    // shrink until fits horizontally
     let attempts = 0;
-    while (el.scrollWidth > boxW && fs > 6 && attempts < 60) {
-      fs = Math.max(6, Math.floor(fs * 0.9));
+    while (el.scrollWidth > boxW && fs > 6 && attempts < 80) {
+      fs = Math.max(6, Math.floor(fs * 0.92));
       el.style.fontSize = fs + 'px';
       attempts++;
     }
-    // ensure not taller than box
-    if (fs > boxH) {
-      fs = Math.floor(boxH * 0.95);
-      el.style.fontSize = fs + 'px';
+    if (parseInt(el.style.fontSize) > boxH) {
+      el.style.fontSize = Math.floor(boxH * 0.95) + 'px';
     }
   }
 
@@ -168,17 +164,17 @@ document.addEventListener('DOMContentLoaded', function() {
     el.style.top = topPx + 'px';
     el.style.left = '50%';
     el.style.transform = 'translateX(-50%)';
-    fitTextToBox(el, w, h, text, opts || {});
+    el.textContent = text || '';
+    fitTextToBox(el, w, h, opts);
   }
 
   function refreshPreview(nameText, numText) {
     const name = (nameText || '').toString().toUpperCase();
     const num  = (numText || '').toString().replace(/\D/g,'');
     placeOverlay(ovName, nameSlot, name || 'NAME', { heightFactor: 0.65 });
-    placeOverlay(ovNum, numSlot, num || 'NUMBER',  { heightFactor: 0.60 });
+    placeOverlay(ovNum, numSlot, num || 'NUMBER',  { heightFactor: 0.70 });
   }
 
-  // expose global helper so row code can call preview easily
   window.setPlayerPreview = function(name, number) {
     ovName.dataset.value = (name || '').toUpperCase();
     ovNum.dataset.value  = (number || '').toString().replace(/\D/g,'');
@@ -195,25 +191,67 @@ document.addEventListener('DOMContentLoaded', function() {
   img.addEventListener('load', onStageChange);
   window.addEventListener('resize', onStageChange);
 
-  /* ------------------ Row creation + wiring ------------------ */
+  // --- apply prefill styles (font/color) from designer ---
+  (function applyPrefillStyles(){
+    try {
+      const pf = window.prefill || {};
+      const fontMap = {
+        'oswald': "'Oswald', sans-serif",
+        'bebas': "'Bebas Neue', sans-serif",
+        'anton': "'Anton', sans-serif",
+      };
+      if (!ovName || !ovNum) return;
+      if (pf.color) {
+        let c = pf.color;
+        try { c = decodeURIComponent(c); } catch(e){}
+        ovName.style.color = c;
+        ovNum.style.color  = c;
+        window._team_prefill_color = c;
+      } else {
+        window._team_prefill_color = '';
+      }
+      if (pf.font) {
+        const key = pf.font.toString().toLowerCase();
+        const family = fontMap[key] || pf.font;
+        ovName.style.fontFamily = family;
+        ovNum.style.fontFamily  = family;
+        window._team_prefill_font = pf.font;
+      } else {
+        window._team_prefill_font = '';
+      }
+      if (typeof window.setPlayerPreview === 'function') {
+        window.setPlayerPreview((pf.name||'').toString().toUpperCase(), (pf.number||'').toString().replace(/\D/g,''));
+      }
+    } catch(err) {
+      console.error('applyPrefillStyles', err);
+    }
+  })();
 
+  // --- row creation + wiring ---
   function createRow(values = {}) {
     const node = template.content.cloneNode(true);
     list.appendChild(node);
 
-    // get last appended row
     const rows = list.querySelectorAll('.player-row');
     const last = rows[rows.length - 1];
     const numEl = last.querySelector('.player-number');
     const nameEl = last.querySelector('.player-name');
     const sizeEl = last.querySelector('.player-size');
 
-    // set values if provided
+    // hidden inputs in template
+    const fontInput = last.querySelector('.player-font');
+    const colorInput = last.querySelector('.player-color');
+
     if (values.number) numEl.value = values.number.toString().slice(0,3);
     if (values.name) nameEl.value = values.name.toString().toUpperCase().slice(0,12);
     if (values.size) sizeEl.value = values.size;
 
-    // wire behaviour for this row's inputs/buttons
+    // set font/color hidden inputs: prefer row values, else fallback to prefill
+    const preFont = (values.font || window._team_prefill_font || '').toString();
+    const preColor = (values.color || window._team_prefill_color || '').toString();
+    if (fontInput) fontInput.value = preFont;
+    if (colorInput) colorInput.value = preColor;
+
     enforceInputLimits(numEl);
     enforceInputLimits(nameEl);
 
@@ -221,7 +259,6 @@ document.addEventListener('DOMContentLoaded', function() {
     last.querySelectorAll('.btn-remove').forEach(btn=>{
       btn.addEventListener('click', () => {
         last.remove();
-        // if removed row was active, clear preview or revert to first row
         const any = list.querySelector('.player-row.preview-active');
         if (!any) {
           ovName.dataset.value = '';
@@ -238,6 +275,26 @@ document.addEventListener('DOMContentLoaded', function() {
         last.classList.add('preview-active');
         const name = (nameEl.value || '').toUpperCase().slice(0,12);
         const num  = (numEl.value || '').replace(/\D/g,'').slice(0,3);
+
+        // apply row font/color to overlays
+        const rowFont = fontInput?.value || window._team_prefill_font || '';
+        const rowColor = colorInput?.value || window._team_prefill_color || '';
+
+        const fontMap = {
+          'oswald': "'Oswald', sans-serif",
+          'bebas': "'Bebas Neue', sans-serif",
+          'anton': "'Anton', sans-serif",
+        };
+        if (rowFont) {
+          const fam = fontMap[rowFont.toString().toLowerCase()] || rowFont;
+          ovName.style.fontFamily = fam;
+          ovNum.style.fontFamily  = fam;
+        }
+        if (rowColor) {
+          ovName.style.color = rowColor;
+          ovNum.style.color  = rowColor;
+        }
+
         window.setPlayerPreview(name, num);
       });
     });
@@ -248,6 +305,19 @@ document.addEventListener('DOMContentLoaded', function() {
       last.classList.add('preview-active');
       const name = (nameEl.value || '').toUpperCase().slice(0,12);
       const num  = (numEl.value || '').replace(/\D/g,'').slice(0,3);
+      const rowFont = fontInput?.value || window._team_prefill_font || '';
+      const rowColor = colorInput?.value || window._team_prefill_color || '';
+      const fontMap = {
+        'oswald': "'Oswald', sans-serif",
+        'bebas': "'Bebas Neue', sans-serif",
+        'anton': "'Anton', sans-serif",
+      };
+      if (rowFont) {
+        const fam = fontMap[rowFont.toString().toLowerCase()] || rowFont;
+        ovName.style.fontFamily = fam; ovNum.style.fontFamily  = fam;
+      }
+      if (rowColor) { ovName.style.color = rowColor; ovNum.style.color  = rowColor; }
+
       window.setPlayerPreview(name, num);
     });
     numEl.addEventListener('focus', () => {
@@ -255,10 +325,23 @@ document.addEventListener('DOMContentLoaded', function() {
       last.classList.add('preview-active');
       const name = (nameEl.value || '').toUpperCase().slice(0,12);
       const num  = (numEl.value || '').replace(/\D/g,'').slice(0,3);
+      const rowFont = fontInput?.value || window._team_prefill_font || '';
+      const rowColor = colorInput?.value || window._team_prefill_color || '';
+      const fontMap = {
+        'oswald': "'Oswald', sans-serif",
+        'bebas': "'Bebas Neue', sans-serif",
+        'anton': "'Anton', sans-serif",
+      };
+      if (rowFont) {
+        const fam = fontMap[rowFont.toString().toLowerCase()] || rowFont;
+        ovName.style.fontFamily = fam; ovNum.style.fontFamily  = fam;
+      }
+      if (rowColor) { ovName.style.color = rowColor; ovNum.style.color  = rowColor; }
+
       window.setPlayerPreview(name, num);
     });
 
-    // live update while typing but only if this row is active
+    // live update while typing (if active row)
     nameEl.addEventListener('input', () => {
       if (last.classList.contains('preview-active')) {
         const name = (nameEl.value || '').toUpperCase().slice(0,12);
@@ -279,7 +362,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
   function enforceInputLimits(input) {
     if (!input) return;
-    // name: uppercase + maxlength 12
     if (input.classList.contains('player-name')) {
       input.addEventListener('input', (e) => {
         const v = (e.target.value || '').toUpperCase().slice(0, 12);
@@ -291,8 +373,6 @@ document.addEventListener('DOMContentLoaded', function() {
         document.execCommand('insertText', false, pasted);
       });
     }
-
-    // number: digits only, maxlength 3
     if (input.classList.contains('player-number')) {
       input.addEventListener('input', (e) => {
         const v = (e.target.value || '').replace(/\D/g,'').slice(0,3);
@@ -306,35 +386,31 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-  // add a new blank row
   addBtn.addEventListener('click', () => createRow());
 
-  // create initial row(s) depending on prefill
+  // create initial row(s) from prefill
   const pf = window.prefill || {};
   if ((pf.name && pf.name.length) || (pf.number && pf.number.length)) {
-    // create a prefilled row
     const r = createRow({
       name: pf.name ? pf.name.toString().toUpperCase().slice(0,12) : '',
       number: pf.number ? pf.number.toString().replace(/\D/g,'').slice(0,3) : '',
-      size: pf.size || ''
+      size: pf.size || '',
+      font: pf.font || '',
+      color: (pf.color ? decodeURIComponent(pf.color) : '') || '',
     });
     r.classList.add('preview-active');
-    // show preview immediately
     if (typeof window.setPlayerPreview === 'function') {
       window.setPlayerPreview(pf.name ? pf.name.toString().toUpperCase().slice(0,12) : '', pf.number ? pf.number.toString().slice(0,3) : '');
     }
   } else {
-    // no prefill => create a single blank row
     createRow();
   }
 
-  // final form validation on submit
+  // final validation before submit
   form.addEventListener('submit', function(evt) {
     const rows = list.querySelectorAll('.player-row');
     if (rows.length === 0) {
-      evt.preventDefault();
-      alert('Please add at least one player.');
-      return false;
+      evt.preventDefault(); alert('Please add at least one player.'); return false;
     }
     const errors = [];
     rows.forEach((row, idx) => {
@@ -342,20 +418,16 @@ document.addEventListener('DOMContentLoaded', function() {
       const numEl  = row.querySelector('.player-number');
       const name = (nameEl?.value || '').trim();
       const num  = (numEl?.value || '').trim();
-
       if (!name) errors.push(`Row ${idx+1}: Name is required.`);
-      else if (name.length > 12) errors.push(`Row ${idx+1}: Name must be 12 characters or fewer.`);
-
+      else if (name.length > 12) errors.push(`Row ${idx+1}: Name must be 12 chars or fewer.`);
       if (!num) errors.push(`Row ${idx+1}: Number is required.`);
       else if (!/^\d{1,3}$/.test(num)) errors.push(`Row ${idx+1}: Number must be 1 to 3 digits.`);
     });
-
     if (errors.length) {
       evt.preventDefault();
       alert('Please fix these issues:\n\n' + errors.join('\n'));
       return false;
     }
-    // OK => allow submit
     return true;
   });
 

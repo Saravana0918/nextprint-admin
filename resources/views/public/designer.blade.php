@@ -296,16 +296,14 @@ document.getElementById('btn-add-team').addEventListener('click', function(e){
   e.preventDefault();
 
   // read current inputs on the designer page
-  const name = (document.getElementById('np-name')?.value || '').trim();
-  const number = (document.getElementById('np-num')?.value || '').trim();
-  const font = (document.getElementById('np-font')?.value || '').trim();
+  const name  = (document.getElementById('np-name')?.value || '').trim();
+  const number= (document.getElementById('np-num')?.value || '').trim();
+  const font  = (document.getElementById('np-font')?.value || '').trim();
   const color = (document.getElementById('np-color')?.value || '').trim();
-  const size = (document.getElementById('np-size')?.value || '').trim();
-
-  // product id from hidden field
+  const size  = (document.getElementById('np-size')?.value || '').trim();
   const productId = document.getElementById('np-product-id')?.value || '';
 
-  // build query string (encode)
+  // build query params (encode values)
   const params = new URLSearchParams();
   if (productId) params.set('product_id', productId);
   if (name) params.set('prefill_name', name);
@@ -314,12 +312,12 @@ document.getElementById('btn-add-team').addEventListener('click', function(e){
   if (color) params.set('prefill_color', color);
   if (size) params.set('prefill_size', size);
 
-  // route to team.create — adjust route path if different
-  const url = '{{ route("team.create") }}' + '?' + params.toString();
-  window.location.href = url;
+  // navigate to team.create route (adjust path if your route differs)
+  // prefer named route URL generated server-side:
+  const base = "{{ route('team.create') }}";
+  window.location.href = base + '?' + params.toString();
 });
 </script>
- 
 
 {{-- core preview + UI JS (validation + preview layout) --}}
 <script>
