@@ -31,13 +31,13 @@
     </div>
 
     <!-- RIGHT: product preview (thumbnail) -->
-    <div style="width:450px; flex-shrink:0;">
+    <div style="width:550px; flex-shrink:0;">
       <div class="card">
         <div class="card-body text-center" style="position:relative;">
           <!-- Stage container (position:relative) -->
           <div id="player-stage">
             <img id="player-base" src="{{ $product->image_url ?? asset('images/placeholder.png') }}"
-                 alt="{{ $product->name }}" class="img-fluid" style="width:100%; height:100%; object-fit:contain; display:block;">
+                 alt="{{ $product->name }}" class="img-fluid">
             <!-- Overlays -->
             <div id="overlay-name" class="overlay-text">NAME</div>
             <div id="overlay-number" class="overlay-text">NUMBER</div>
@@ -94,11 +94,7 @@
 
 /* ensure stage doesn't clip overlays */
 #player-stage {
-  display: inline-block;
-  width: 320px;    
-  height: 320px;  
   position: relative;
-  overflow: visible;
 }
 
 #player-base {
