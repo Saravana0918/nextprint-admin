@@ -49,7 +49,7 @@
     body { background-color : #929292; }
   .desktop-display{ color:white; font-family: "Roboto Condensed", sans-serif; font-weight: bold; }
   .body-padding{ padding-top: 100px; }
-  .right-layout{ padding-top:275px; }
+  .right-layout{ padding-top:350px; }
   .hide-on-mobile { display: none !important; }
 
     /* small screens: revert to stacked flow (mobile rules unchanged) */
