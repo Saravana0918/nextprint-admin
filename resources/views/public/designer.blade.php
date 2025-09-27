@@ -49,7 +49,7 @@
     body { background-color : #929292; }
   .desktop-display{ color:white; font-family: "Roboto Condensed", sans-serif; font-weight: bold; }
   .body-padding{ padding-top: 100px; }
-  .right-layout{ padding-top:225px; }
+  .right-layout{ padding-top:275px; }
   .hide-on-mobile { display: none !important; }
 
     /* small screens: revert to stacked flow (mobile rules unchanged) */
@@ -264,7 +264,7 @@
         <input type="hidden" name="variant_id" id="np-variant-id" value="">
 
         <div class="mb-3">
-          <label class="form-label color-display desktop-display">Size</label>
+          <label class="form-label color-display desktop-display hide-on-mobile">Size</label>
           <select id="np-size" name="size" class="form-select" required>
             <option value="">Select Size</option>
             <option value="S">S</option>
@@ -276,7 +276,7 @@
         </div>
 
         <div class="mb-3">
-          <label class="form-label color-display desktop-display">Quantity</label>
+          <label class="form-label color-display desktop-display hide-on-mobile">Quantity</label>
           <input id="np-qty" name="quantity" type="number" min="1" value="1" class="form-control">
         </div>
 
@@ -284,7 +284,7 @@
         <a href="#" class="btn btn-success" id="btn-add-team">Add Team Players</a>
       </form>
 
-      <div class="small-delivery text mt-2 desktop-display">Button enables when both Name & Number are valid.</div>
+      <div class="small-delivery text mt-2 desktop-display hide-on-mobile">Button enables when both Name & Number are valid.</div>
     </div>
   </div>
 </div>
