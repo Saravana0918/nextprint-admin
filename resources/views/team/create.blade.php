@@ -35,7 +35,7 @@
       <div class="card">
         <div class="card-body text-center" style="position:relative;">
           <!-- Stage container (position:relative) -->
-          <div id="player-stage" style="position:relative; display:inline-block; width: 360px; height: 420px; margin: 0 auto;">
+          <div id="player-stage" style="position:relative; display:inline-block; margin: 0 auto;">
             <img id="player-base" src="{{ $product->image_url ?? asset('images/placeholder.png') }}"
                  alt="{{ $product->name }}" class="img-fluid"
                  style="width:100%; height:100%; object-fit:contain; display:block;">
@@ -114,8 +114,8 @@
     box-shadow: 0 0 0 3px rgba(20,120,220,0.08);
     border-color: rgba(20,120,220,0.12);
   }
-  /* ensure stage responsive */
-  #player-stage { max-width: 360px; }
+ 
+ 
 </style>
 
 <script>
