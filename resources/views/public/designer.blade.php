@@ -281,7 +281,7 @@
         </div>
 
         <button id="np-atc-btn" type="submit" class="btn btn-primary" disabled>Add to Cart</button>
-        <a href="#" class="btn btn-success w-100 mb-3" id="btn-add-team">Add Team Players</a>
+        <a href="#" class="btn btn-success" id="btn-add-team">Add Team Players</a>
       </form>
 
       <div class="small-delivery text mt-2 desktop-display">Button enables when both Name & Number are valid.</div>
