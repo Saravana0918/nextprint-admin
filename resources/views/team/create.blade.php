@@ -35,10 +35,10 @@
       <div class="card">
         <div class="card-body text-center" style="position:relative;">
           <!-- Stage container (position:relative) -->
-          <div id="player-stage" style="position:relative; display:inline-block; width:360px; height:460px; margin: 0 auto;">
+          <div id="player-stage" style="position:relative; display:inline-block;">
             <img id="player-base" src="{{ $product->image_url ?? asset('images/placeholder.png') }}"
                  alt="{{ $product->name }}" class="img-fluid"
-                 style="width:360px; height:460px; object-fit:contain; display:block;">
+                 style="object-fit:contain; display:block;">
 
             <!-- Overlays (will be positioned by JS) -->
             <div id="overlay-name" style="
@@ -134,7 +134,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Slot positions (percent of stage height)
    const nameSlot = { top_pct: 18,  height_pct: 8,  width_pct: 85 };
-   const numSlot  = { top_pct: 54, height_pct: 12, width_pct: 60 };
+   const numSlot  = { top_pct: 54, height_pct: 12, width_pct: 65 };
 
   function computeStageRect() { return stage.getBoundingClientRect(); }
 
