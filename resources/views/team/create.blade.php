@@ -126,57 +126,67 @@
 /* === Mobile / tablet responsive tweaks === */
 @media (max-width: 991px) {
   /* stack columns vertically and make preview appear first */
-  .main-flex {
-    flex-direction: column !important;
-  }
-  .preview-col {
-    order: 1;
-    width: 100% !important;
-    margin-bottom: 1rem;
-  }
-  .form-col {
-    order: 2;
-    width: 100% !important;
-  }
+  .main-flex { flex-direction: column !important; }
+  .preview-col { order: 1; width: 100% !important; margin-bottom: 1rem; }
+  .form-col { order: 2; width: 100% !important; }
 
   /* make preview card body padding comfortable */
   .preview-col .card-body { padding: 0.75rem 1rem; }
 
   /* limit stage width on mobile so overlay sizing works predictably */
-  #player-stage {
-    width: 320px !important;
-    height: 420px !important;
-    display: block !important;
-    margin: 0 auto 1rem !important;
+  #player-stage { width: 320px !important; height: 420px !important; display:block !important; margin:0 auto 1rem !important; }
+  #player-base  { width: 320px !important; height: 420px !important; object-fit:contain !important; }
+
+  .row-controls {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0.5rem !important;
+    align-items: stretch !important;
   }
-  #player-base {
-    width: 320px !important;
-    height: 420px !important;
-    object-fit: contain !important;
-  }
+
 
   /* make inputs full width and stack nicely */
   .player-row .player-number,
-  .player-row .player-size,
-  .player-row .player-name {
+  .player-row .player-name,
+  .player-row .player-size {
     width: 100% !important;
     display: block !important;
-    margin-bottom: .5rem !important;
+    margin: 0 !important;
+    font-size: 18px !important;        /* larger readable text */
+    height: 48px !important;           /* taller tap target */
+    padding: 10px 12px !important;     /* comfortable padding */
+    border-radius: 6px !important;
+    box-sizing: border-box !important;
+  }
+
+  .player-row .player-size {
+    -webkit-appearance: none;
+    appearance: none;
+    background-position: right 12px center;
+    background-repeat: no-repeat;
   }
 
   /* move buttons below inputs (stack) */
-  .player-row .btn-remove,
+   .player-row .btn-remove,
   .player-row .btn-preview {
-    width: 49% !important;
-    display: inline-block !important;
-    margin-top: .25rem !important;
+    width: 100% !important;
+    display: block !important;
+    margin-top: 6px !important;
+    font-size: 16px !important;
+    padding: 10px 12px !important;
+  }
+
+    .player-row.preview-active {
+    padding: 0.8rem !important;
+    border: 1px solid rgba(20,120,220,0.12) !important;
+    border-radius: 8px !important;
   }
 
   /* submit buttons full width */
-  .mt-3 .btn { display:block; width:100%; margin-bottom:.5rem; }
+   .mt-3 .btn { display:block; width:100%; font-size:16px; padding:12px 14px; }
 
   /* overlay text sizing for mobile */
-  #overlay-name { font-size: 22px !important; text-shadow: 0 2px 4px rgba(0,0,0,0.5) !important; }
+   #overlay-name { font-size: 22px !important; text-shadow: 0 2px 4px rgba(0,0,0,0.5) !important; }
   #overlay-number { font-size: 38px !important; text-shadow: 0 2px 4px rgba(0,0,0,0.5) !important; }
 
   html, body { overflow-x: hidden; }
@@ -185,12 +195,12 @@
 /* Slight smaller adjustments for very small phones */
 @media (max-width: 420px) {
   #player-stage { width: 280px !important; height: 380px !important; }
-  #player-base { width: 280px !important; height: 380px !important; }
-  #overlay-name { font-size: 18px !important; }
-  #overlay-number { font-size: 34px !important; }
-
+  #player-base  { width: 280px !important; height: 380px !important; }
+  .player-row .player-number,
+  .player-row .player-name,
+  .player-row .player-size { font-size: 16px !important; height:44px !important; padding:8px 10px !important; }
   .player-row .btn-remove,
-  .player-row .btn-preview { width: 100% !important; margin-top: .5rem !important; }
+  .player-row .btn-preview { font-size:15px !important; padding:10px 12px !important; }
 }
 </style>
 
@@ -207,8 +217,8 @@ document.addEventListener('DOMContentLoaded', function() {
   const ovNum  = document.getElementById('overlay-number');
 
   // Slot positions (percent of stage height)
-  const nameSlot = { top_pct: 12,  height_pct: 10,  width_pct: 85 };
-  const numSlot  = { top_pct: 56, height_pct: 20, width_pct: 60 };
+  const nameSlot = { top_pct: 18,  height_pct: 8,  width_pct: 85 };
+  const numSlot  = { top_pct: 54, height_pct: 12, width_pct: 70 };
 
   function computeStageRect() { return stage.getBoundingClientRect(); }
 
@@ -246,7 +256,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const name = (nameText || '').toString().toUpperCase();
     const num  = (numText || '').toString().replace(/\D/g,'');
     placeOverlay(ovName, nameSlot, name || 'NAME', { heightFactor: 0.65 });
-    placeOverlay(ovNum, numSlot, num || 'NUMBER',  { heightFactor: 0.70 });
+    placeOverlay(ovNum, numSlot, num || 'NUMBER',  { heightFactor: 0.60 });
   }
 
   window.setPlayerPreview = function(name, number) {
