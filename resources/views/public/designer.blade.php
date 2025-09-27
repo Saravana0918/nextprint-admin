@@ -127,7 +127,7 @@
   /* small utility */
   .mobile-display { display: none; }  
   .color-display  { color: #fff; }
-  .right-layout{ margin-top: -210px; }
+  .right-layout{ margin-top: -320px; }
     
   .np-stage.covering { pointer-events: none; -webkit-user-select: none; }
 
