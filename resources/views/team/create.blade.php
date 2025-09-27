@@ -89,11 +89,24 @@
 }
 
 /* sensible defaults (these will be recalculated by JS) */
-#overlay-name { top: 8%; font-size: 18px; letter-spacing: 1px; }
-#overlay-number { top: 60%; font-size: 32px; }
+#overlay-name { font-size: 20px; top: 6%; }
+#overlay-number { font-size: 36px; top: 62%; }
 
 /* ensure stage doesn't clip overlays */
-#player-stage { overflow: visible; }
+#player-stage {
+  display: inline-block;
+  width: 260px;    
+  height: 380px;  
+  position: relative;
+  overflow: visible;
+}
+
+#player-base {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
 
 /* small visual for active row */
 .player-row.preview-active { box-shadow: 0 0 0 3px rgba(20,120,220,0.08); border-color: rgba(20,120,220,0.12); }
@@ -111,8 +124,8 @@ document.addEventListener('DOMContentLoaded', function() {
   const ovNum  = document.getElementById('overlay-number');
 
   // Layout "slots" as percentage of stage (tweak these to match your artwork)
-  const nameSlot = { top_pct: 6, height_pct: 12, width_pct: 80 };   // near shoulders
-  const numSlot  = { top_pct: 62, height_pct: 18, width_pct: 60 };  // lower back
+  const nameSlot = { top_pct: 5,  height_pct: 12, width_pct: 85 };   // moved a little up, wider
+  const numSlot  = { top_pct: 62, height_pct: 20, width_pct: 60 };   // slightly larger number box
 
   function computeStageRect() {
     return stage.getBoundingClientRect();
