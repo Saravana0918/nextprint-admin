@@ -35,7 +35,7 @@
       <div class="card">
         <div class="card-body text-center" style="position:relative;">
           <!-- Stage container (position:relative) -->
-          <div id="player-stage" style="position:relative; display:inline-block; width:320px; height:420px;">
+          <div id="player-stage" style="position:relative; display:inline-block;">
             <img id="player-base" src="{{ $product->image_url ?? asset('images/placeholder.png') }}"
                  alt="{{ $product->name }}" class="img-fluid" style="width:100%; height:100%; object-fit:contain; display:block;">
             <!-- Overlays -->
@@ -155,8 +155,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Tweak these slot values to control how much vertical space name/number get.
   // We reduced height_pct so text will be sized smaller by default.
-  const nameSlot = { top_pct: 5,  height_pct: 8,  width_pct: 85 };   // name sits higher, smaller height
-  const numSlot  = { top_pct: 62, height_pct: 12, width_pct: 60 };   // number lower, less vertical space
+  const nameSlot = { top_pct: 6,  height_pct: 8,  width_pct: 85 };   // name sits higher, smaller height
+  const numSlot  = { top_pct: 58, height_pct: 12, width_pct: 60 };   // number lower, less vertical space
 
   function computeStageRect() {
     // bounding rect for the stage area (used to compute pixel box for overlays)
