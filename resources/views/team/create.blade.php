@@ -31,16 +31,43 @@
     </div>
 
     <!-- RIGHT: product preview (thumbnail) -->
-    <div style="width:550px; flex-shrink:0;">
+    <div style="width:520px; flex-shrink:0;">
       <div class="card">
         <div class="card-body text-center" style="position:relative;">
           <!-- Stage container (position:relative) -->
-          <div id="player-stage">
+          <div id="player-stage" style="position:relative; display:inline-block; width:320px; height:420px;">
             <img id="player-base" src="{{ $product->image_url ?? asset('images/placeholder.png') }}"
-                 alt="{{ $product->name }}" class="img-fluid">
+                 alt="{{ $product->name }}" class="img-fluid" style="width:100%; height:100%; object-fit:contain; display:block;">
             <!-- Overlays -->
-            <div id="overlay-name" class="overlay-text">NAME</div>
-            <div id="overlay-number" class="overlay-texts">NUMBER</div>
+            <div id="overlay-name" style="
+                position:absolute;
+                top:38px;
+                left:50%;
+                transform:translateX(-50%);
+                font-weight:800;
+                font-family: 'Bebas Neue', sans-serif;
+                color:#D4AF37;
+                text-shadow: 0 3px 6px rgba(0,0,0,0.6);
+                font-size:18px;
+                pointer-events:none;
+                white-space:nowrap;
+                z-index:30;
+            ">NAME</div>
+
+            <div id="overlay-number" style="
+                position:absolute;
+                bottom:58px;
+                left:50%;
+                transform:translateX(-50%);
+                font-weight:900;
+                font-family: 'Bebas Neue', sans-serif;
+                color:#D4AF37;
+                text-shadow: 0 3px 6px rgba(0,0,0,0.6);
+                font-size:28px;
+                pointer-events:none;
+                white-space:nowrap;
+                z-index:30;
+            ">NUMBER</div>
           </div>
 
           <!-- product meta below -->
@@ -73,52 +100,46 @@
 </template>
 
 <style>
-/* overlay base styles */
-.overlay-text {
+/* overlay base: keep reasonably small by default; JS will re-calc */
+#player-stage { position: relative; display:inline-block; }
+#player-base { width:100%; height:100%; object-fit:contain; display:block; }
+
+/* overlay defaults (smaller than before) */
+#overlay-name {
   position: absolute;
-  left: 48%;
+  left: 50%;
   transform: translateX(-50%);
   color: #D4AF37;
   text-shadow: 0 3px 6px rgba(0,0,0,0.6);
   font-weight: 800;
   pointer-events: none;
   white-space: nowrap;
-  line-height: 3;
   z-index: 30;
   font-family: 'Bebas Neue', Arial, sans-serif;
+  font-size: 16px;   /* smaller default */
+  top: 8%;
 }
-.overlay-texts{
+
+#overlay-number {
   position: absolute;
-  left: 48%;
+  left: 50%;
   transform: translateX(-50%);
   color: #D4AF37;
   text-shadow: 0 3px 6px rgba(0,0,0,0.6);
-  font-weight: 800;
+  font-weight: 900;
   pointer-events: none;
   white-space: nowrap;
-  line-height: 1;
   z-index: 30;
   font-family: 'Bebas Neue', Arial, sans-serif;
+  font-size: 26px;   /* smaller default */
+  top: 62%;
 }
 
-/* sensible defaults (these will be recalculated by JS) */
-#overlay-name { font-size: 20px; top: 15%; }
-#overlay-number { font-size: 36px; top: 60%; }
-
-/* ensure stage doesn't clip overlays */
-#player-stage {
-  position: relative;
+/* visual highlight on the active row */
+.player-row.preview-active {
+  box-shadow: 0 0 0 3px rgba(20,120,220,0.08);
+  border-color: rgba(20,120,220,0.12);
 }
-
-#player-base {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  display: block;
-}
-
-/* small visual for active row */
-.player-row.preview-active { box-shadow: 0 0 0 3px rgba(20,120,220,0.08); border-color: rgba(20,120,220,0.12); }
 </style>
 
 <script>
@@ -132,34 +153,42 @@ document.addEventListener('DOMContentLoaded', function() {
   const ovName = document.getElementById('overlay-name');
   const ovNum  = document.getElementById('overlay-number');
 
-  // Layout "slots" as percentage of stage (tweak these to match your artwork)
-  const nameSlot = { top_pct: 5,  height_pct: 12, width_pct: 85 };   // moved a little up, wider
-  const numSlot  = { top_pct: 62, height_pct: 20, width_pct: 60 };   // slightly larger number box
+  // Tweak these slot values to control how much vertical space name/number get.
+  // We reduced height_pct so text will be sized smaller by default.
+  const nameSlot = { top_pct: 5,  height_pct: 8,  width_pct: 85 };   // name sits higher, smaller height
+  const numSlot  = { top_pct: 62, height_pct: 12, width_pct: 60 };   // number lower, less vertical space
 
   function computeStageRect() {
+    // bounding rect for the stage area (used to compute pixel box for overlays)
     return stage.getBoundingClientRect();
   }
 
   function fitTextToBox(el, boxW, boxH, text, options = {}) {
-    // Put text then compute font-size
+    // apply text
     el.textContent = text || (el.id === 'overlay-name' ? 'NAME' : 'NUMBER');
 
-    // Choose starting font size relative to box height
-    const start = Math.floor(boxH * (options.heightFactor || 0.8));
-    let fs = Math.max(6, start);
+    // start font-size based on box height and optional factor
+    const heightFactor = (options.heightFactor !== undefined) ? options.heightFactor : 0.8;
+    let fs = Math.max(6, Math.floor(boxH * heightFactor));
+
+    // limit maximum font relative to stage width (prevents huge fonts on big screens)
+    const stageRect = computeStageRect();
+    const maxAllowed = Math.max(12, Math.floor(stageRect.width * 0.12)); // tweak 0.10-0.14 for different results
+    fs = Math.min(fs, maxAllowed);
+
     el.style.fontSize = fs + 'px';
 
-    // Reduce until fits width or reaches minimum
+    // shrink loop until it fits horizontally
     let attempts = 0;
-    while (el.scrollWidth > boxW && fs > 6 && attempts < 60) {
-      fs = Math.max(6, Math.floor(fs * 0.92));
+    while (el.scrollWidth > boxW && fs > 6 && attempts < 80) {
+      fs = Math.max(6, Math.floor(fs * 0.9));
       el.style.fontSize = fs + 'px';
       attempts++;
     }
 
-    // Ensure it doesn't exceed box height
+    // ensure it doesn't overflow vertically
     if (fs > boxH) {
-      fs = Math.floor(boxH);
+      fs = Math.floor(boxH * 0.95);
       el.style.fontSize = fs + 'px';
     }
   }
@@ -170,10 +199,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const h = Math.max(8, Math.round((slot.height_pct/100) * rect.height));
     const topPx = Math.round((slot.top_pct/100) * rect.height);
 
-    // set top in px relative to stage
+    // position top relative to stage container
     el.style.top = topPx + 'px';
-
-    // center horizontally
     el.style.left = '50%';
     el.style.transform = 'translateX(-50%)';
 
@@ -181,25 +208,23 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   function refreshPreview(nameText, numText) {
-    // sanitize
-    const name = (nameText || '').toUpperCase();
+    const name = (nameText || '').toString().toUpperCase();
     const num  = (numText || '').toString().replace(/\D/g,'');
 
-    // apply for name and number with different height factors
-    placeOverlay(ovName, nameSlot, name || 'NAME', { heightFactor: 0.9 });
-    placeOverlay(ovNum, numSlot, num || 'NUMBER',  { heightFactor: 0.95 });
+    // We pass smaller heightFactor so text stays smaller than before.
+    placeOverlay(ovName, nameSlot, name || 'NAME', { heightFactor: 0.65 });
+    placeOverlay(ovNum, numSlot, num || 'NUMBER',  { heightFactor: 0.72 });
   }
 
-  // Expose helper to use from row preview buttons
+  // Expose for buttons to call
   window.setPlayerPreview = function(name, number) {
     ovName.dataset.value = (name || '').toUpperCase();
     ovNum.dataset.value  = (number || '').toString().replace(/\D/g,'');
     refreshPreview(ovName.dataset.value, ovNum.dataset.value);
   };
 
-  // react to image load & window resize to reflow overlays
+  // when image loads or window resizes, reflow overlays
   function onStageChange() {
-    // re-render using current stored dataset values if present
     const n = ovName.dataset.value || ovName.textContent;
     const m = ovNum.dataset.value  || ovNum.textContent;
     refreshPreview(n, m);
@@ -209,16 +234,16 @@ document.addEventListener('DOMContentLoaded', function() {
   img.addEventListener('load', onStageChange);
   window.addEventListener('resize', onStageChange);
 
-  // ADD row
+  // add a new row
   function addRow() {
     const node = template.content.cloneNode(true);
     list.appendChild(node);
     wireRowEvents();
   }
 
-  // Wire up events for rows (remove, preview, live sync)
+  // wire events for existing + newly added rows
   function wireRowEvents() {
-    // .btn-remove
+    // Remove buttons
     list.querySelectorAll('.btn-remove').forEach(btn=>{
       if (!btn.dataset.wired) {
         btn.dataset.wired = '1';
@@ -229,7 +254,7 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     });
 
-    // .btn-preview
+    // Preview buttons
     list.querySelectorAll('.btn-preview').forEach(btn=>{
       if (!btn.dataset.wired) {
         btn.dataset.wired = '1';
@@ -242,13 +267,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
           const name = (row.querySelector('.player-name')?.value || '').toUpperCase();
           const num  = (row.querySelector('.player-number')?.value || '').replace(/\D/g,'');
-          // set preview
           window.setPlayerPreview(name, num);
         });
       }
     });
 
-    // inputs: focus -> make that row active + immediate preview
+    // Focus & live update handlers
     list.querySelectorAll('.player-name, .player-number').forEach(inp=>{
       if (!inp.dataset.wired) {
         inp.dataset.wired = '1';
@@ -263,7 +287,6 @@ document.addEventListener('DOMContentLoaded', function() {
           window.setPlayerPreview(name, num);
         });
 
-        // live update only if that row is active
         inp.addEventListener('input', (e) => {
           const row = e.target.closest('.player-row');
           if (!row) return;
@@ -277,9 +300,9 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-  // init
+  // init handlers
   addBtn.addEventListener('click', addRow);
-  // start with one row
+  // initial row
   addRow();
 });
 </script>
