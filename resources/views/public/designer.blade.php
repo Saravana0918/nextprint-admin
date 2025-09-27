@@ -281,9 +281,7 @@
         </div>
 
         <button id="np-atc-btn" type="submit" class="btn btn-primary" disabled>Add to Cart</button>
-        <a href="{{ route('team.create', ['product_id' => $product->id]) }}" class="btn btn-success w-100 mb-3" id="btn-add-team">
-          Add Team Players
-        </a>
+        <a href="#" class="btn btn-success w-100 mb-3" id="btn-add-team">Add Team Players</a>
       </form>
 
       <div class="small-delivery text mt-2 desktop-display">Button enables when both Name & Number are valid.</div>
@@ -293,7 +291,34 @@
 
 {{-- server-provided layoutSlots --}}
 <script> window.layoutSlots = {!! json_encode($layoutSlots, JSON_NUMERIC_CHECK) !!}; window.personalizationSupported = {{ !empty($layoutSlots) ? 'true' : 'false' }}; </script>
+<script>
+document.getElementById('btn-add-team').addEventListener('click', function(e){
+  e.preventDefault();
 
+  // read current inputs on the designer page
+  const name = (document.getElementById('np-name')?.value || '').trim();
+  const number = (document.getElementById('np-num')?.value || '').trim();
+  const font = (document.getElementById('np-font')?.value || '').trim();
+  const color = (document.getElementById('np-color')?.value || '').trim();
+  const size = (document.getElementById('np-size')?.value || '').trim();
+
+  // product id from hidden field
+  const productId = document.getElementById('np-product-id')?.value || '';
+
+  // build query string (encode)
+  const params = new URLSearchParams();
+  if (productId) params.set('product_id', productId);
+  if (name) params.set('prefill_name', name);
+  if (number) params.set('prefill_number', number);
+  if (font) params.set('prefill_font', font);
+  if (color) params.set('prefill_color', color);
+  if (size) params.set('prefill_size', size);
+
+  // route to team.create — adjust route path if different
+  const url = '{{ route("team.create") }}' + '?' + params.toString();
+  window.location.href = url;
+});
+</script>
  
 
 {{-- core preview + UI JS (validation + preview layout) --}}

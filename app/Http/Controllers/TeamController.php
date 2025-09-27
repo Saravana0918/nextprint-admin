@@ -10,9 +10,23 @@ class TeamController extends Controller
 {
     public function create(Request $request)
     {
+        // read optional prefill params
         $productId = $request->query('product_id');
-        $product = Product::find($productId);
-        return view('team.create', compact('product'));
+        $product = null;
+        if ($productId) {
+            // adjust if Product::find(...) is the correct model
+            $product = \App\Models\Product::find($productId);
+        }
+
+        $prefill = [
+            'name' => $request->query('prefill_name', ''),
+            'number' => $request->query('prefill_number', ''),
+            'font' => $request->query('prefill_font', ''),
+            'color' => $request->query('prefill_color', ''),
+            'size' => $request->query('prefill_size', ''),
+        ];
+
+        return view('team.create', compact('product', 'prefill'));
     }
 
     public function store(Request $request)

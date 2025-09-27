@@ -98,7 +98,7 @@ Route::post('/designer/upload-preview', [\App\Http\Controllers\ShopifyCartContro
 Route::post('/designer/add-to-cart', [\App\Http\Controllers\ShopifyCartController::class, 'addToCart'])
     ->name('designer.addtocart');
 Route::get('/team/create', [TeamController::class, 'create'])->name('team.create');
-Route::post('/team/store',  [TeamController::class, 'store'])->name('team.store');
+Route::post('/team/store', [TeamController::class, 'store'])->name('team.store');
 
 // Simple PDP (preview/test page)
 Route::get('/p/{handle}', [StoreController::class, 'show'])->name('store.product');
