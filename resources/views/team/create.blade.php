@@ -2,36 +2,9 @@
 
 @section('content')
 <div class="container py-4">
-  <div class="d-flex align-items-start gap-4">
-    <!-- LEFT: form area -->
-    <div class="flex-grow-1">
-      <h3>Add Team Players for: {{ $product->name ?? 'Product' }}</h3>
-
-      @if(session('success'))
-        <div class="alert alert-success">{{ session('success') }}</div>
-      @endif
-
-      <form method="post" action="{{ route('team.store') }}" id="team-form">
-        @csrf
-        <input type="hidden" name="product_id" value="{{ $product->id ?? '' }}">
-
-        <div class="mb-3">
-          <button type="button" id="btn-add-row" class="btn btn-primary">ADD NEW</button>
-        </div>
-
-        <div id="players-list" class="mb-4">
-          <!-- JS will insert rows here -->
-        </div>
-
-        <div class="mt-3">
-          <button type="submit" class="btn btn-success">Save Team</button>
-          <a href="{{ url()->previous() }}" class="btn btn-secondary">Back</a>
-        </div>
-      </form>
-    </div>
-
-    <!-- RIGHT: product preview (thumbnail) -->
-    <div style="width:520px; flex-shrink:0;">
+  <div class="d-flex align-items-start gap-4 main-flex">
+    <!-- RIGHT (on desktop) but shown FIRST on mobile): product preview (thumbnail) -->
+    <div class="preview-col" style="width:520px; flex-shrink:0;">
       <div class="card">
         <div class="card-body text-center" style="position:relative;">
           <!-- Stage container (position:relative) -->
@@ -76,6 +49,33 @@
         </div>
       </div>
     </div>
+
+    <!-- LEFT: form area (will appear below preview on mobile) -->
+    <div class="flex-grow-1 form-col">
+      <h3 class="mb-3">Add Team Players for: {{ $product->name ?? 'Product' }}</h3>
+
+      @if(session('success'))
+        <div class="alert alert-success">{{ session('success') }}</div>
+      @endif
+
+      <form method="post" action="{{ route('team.store') }}" id="team-form">
+        @csrf
+        <input type="hidden" name="product_id" value="{{ $product->id ?? '' }}">
+
+        <div class="mb-3">
+          <button type="button" id="btn-add-row" class="btn btn-primary">ADD NEW</button>
+        </div>
+
+        <div id="players-list" class="mb-4">
+          <!-- JS will insert rows here -->
+        </div>
+
+        <div class="mt-3">
+          <button type="submit" class="btn btn-success btn-block" style="width:100%;">Save Team</button>
+          <a href="{{ url()->previous() }}" class="btn btn-secondary btn-block" style="width:100%; margin-top:8px;">Back</a>
+        </div>
+      </form>
+    </div>
   </div>
 </div>
 
@@ -87,7 +87,7 @@
 <!-- template for player row -->
 <template id="player-row-template">
   <div class="card mb-2 p-2 player-row">
-    <div class="d-flex gap-2 align-items-start">
+    <div class="d-flex gap-2 align-items-start row-controls">
       <!-- number: maxlength=3, inputmode numeric -->
       <input name="players[][number]" class="form-control w-25 player-number" placeholder="00"
              maxlength="3" inputmode="numeric" pattern="\d*" />
@@ -114,21 +114,33 @@
 </template>
 
 <style>
-  .player-row.preview-active {
-    box-shadow: 0 0 0 3px rgba(20,120,220,0.08);
-    border-color: rgba(20,120,220,0.12);
-  }
-  /* === Mobile / tablet responsive tweaks === */
+/* Desktop default makes two columns (preview right, form left) */
+.main-flex { align-items: flex-start; }
+
+/* small visual for active row */
+.player-row.preview-active {
+  box-shadow: 0 0 0 3px rgba(20,120,220,0.08);
+  border-color: rgba(20,120,220,0.12);
+}
+
+/* === Mobile / tablet responsive tweaks === */
 @media (max-width: 991px) {
-  /* stack columns vertically */
-  .d-flex.align-items-start.gap-4 {
+  /* stack columns vertically and make preview appear first */
+  .main-flex {
     flex-direction: column !important;
   }
-
-  /* make the right preview card full width and centered */
-  .card .card-body {
-    padding: 1rem !important;
+  .preview-col {
+    order: 1;
+    width: 100% !important;
+    margin-bottom: 1rem;
   }
+  .form-col {
+    order: 2;
+    width: 100% !important;
+  }
+
+  /* make preview card body padding comfortable */
+  .preview-col .card-body { padding: 0.75rem 1rem; }
 
   /* limit stage width on mobile so overlay sizing works predictably */
   #player-stage {
@@ -160,23 +172,13 @@
     margin-top: .25rem !important;
   }
 
-  /* left form area spacing */
-  .flex-grow-1 {
-    width: 100% !important;
-  }
+  /* submit buttons full width */
+  .mt-3 .btn { display:block; width:100%; margin-bottom:.5rem; }
 
-  /* form submit buttons full width */
-  .mt-3 .btn {
-    display: block;
-    width: 100%;
-    margin-bottom: .5rem;
-  }
-
-  /* small text adjustments to keep overlays readable */
+  /* overlay text sizing for mobile */
   #overlay-name { font-size: 22px !important; text-shadow: 0 2px 4px rgba(0,0,0,0.5) !important; }
   #overlay-number { font-size: 38px !important; text-shadow: 0 2px 4px rgba(0,0,0,0.5) !important; }
 
-  /* avoid horizontal scroll */
   html, body { overflow-x: hidden; }
 }
 
@@ -190,7 +192,6 @@
   .player-row .btn-remove,
   .player-row .btn-preview { width: 100% !important; margin-top: .5rem !important; }
 }
-
 </style>
 
 <script>
@@ -206,8 +207,8 @@ document.addEventListener('DOMContentLoaded', function() {
   const ovNum  = document.getElementById('overlay-number');
 
   // Slot positions (percent of stage height)
-   const nameSlot = { top_pct: 18,  height_pct: 8,  width_pct: 85 };
-   const numSlot  = { top_pct: 54, height_pct: 12, width_pct: 70 };
+  const nameSlot = { top_pct: 12,  height_pct: 10,  width_pct: 85 };
+  const numSlot  = { top_pct: 56, height_pct: 20, width_pct: 60 };
 
   function computeStageRect() { return stage.getBoundingClientRect(); }
 
@@ -245,7 +246,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const name = (nameText || '').toString().toUpperCase();
     const num  = (numText || '').toString().replace(/\D/g,'');
     placeOverlay(ovName, nameSlot, name || 'NAME', { heightFactor: 0.65 });
-    placeOverlay(ovNum, numSlot, num || 'NUMBER',  { heightFactor: 0.60 });
+    placeOverlay(ovNum, numSlot, num || 'NUMBER',  { heightFactor: 0.70 });
   }
 
   window.setPlayerPreview = function(name, number) {
@@ -264,7 +265,7 @@ document.addEventListener('DOMContentLoaded', function() {
   img.addEventListener('load', onStageChange);
   window.addEventListener('resize', onStageChange);
 
-  // --- apply prefill styles (font/color) from designer ---
+  // apply prefill styles (font/color) from designer
   (function applyPrefillStyles(){
     try {
       const pf = window.prefill || {};
@@ -300,7 +301,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   })();
 
-  // --- row creation + wiring ---
+  // Row creation + wiring
   function createRow(values = {}) {
     const node = template.content.cloneNode(true);
     list.appendChild(node);
@@ -504,10 +505,9 @@ document.addEventListener('DOMContentLoaded', function() {
     return true;
   });
 
-    /* ===== Mobile stage sizing helper ===== */
+  /* ===== Mobile stage sizing helper ===== */
   function adjustStageForViewport() {
     try {
-      // If mobile/tablet, set explicit stage size used by CSS; else let stage be auto
       const vw = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
       const stageEl = document.getElementById('player-stage');
       const imgEl = document.getElementById('player-base');
@@ -515,7 +515,6 @@ document.addEventListener('DOMContentLoaded', function() {
       if (!stageEl || !imgEl) return;
 
       if (vw <= 991) {
-        // sizes match CSS; keep them in sync for JS calculations
         const w = (vw <= 420) ? 280 : 320;
         const h = (vw <= 420) ? 380 : 420;
         stageEl.style.width = w + 'px';
@@ -523,25 +522,20 @@ document.addEventListener('DOMContentLoaded', function() {
         imgEl.style.width = w + 'px';
         imgEl.style.height = h + 'px';
       } else {
-        // on desktop, let existing CSS/style manage it (remove inline)
         stageEl.style.width = '';
         stageEl.style.height = '';
         imgEl.style.width = '';
         imgEl.style.height = '';
       }
-      // Recompute overlay placement after changing stage dimensions
       onStageChange();
     } catch(e) {
-      // ignore silently
       console.error('adjustStageForViewport error', e);
     }
   }
 
-  // call once on load and on resize / orientation change
   adjustStageForViewport();
   window.addEventListener('resize', function() {
     adjustStageForViewport();
-    // small debounce for onStageChange
     setTimeout(onStageChange, 120);
   });
   window.addEventListener('orientationchange', function() {
