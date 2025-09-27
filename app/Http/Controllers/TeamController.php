@@ -12,27 +12,23 @@ class TeamController extends Controller
     {
         $productId = $request->query('product_id');
         $product = Product::find($productId);
-        // pass any defaults you want to second page
         return view('team.create', compact('product'));
     }
 
     public function store(Request $request)
     {
-        // $request->players will be an array of players
-        // validate:
         $data = $request->validate([
-            'product_id' => 'required|integer',
+            'product_id' => 'required|integer|exists:products,id',
             'players' => 'required|array|min:1',
             'players.*.number' => 'required|numeric',
             'players.*.name' => 'required|string',
-            'players.*.size' => 'nullable|string'
+            'players.*.size' => 'nullable|string',
         ]);
 
-        // Example: save to DB or session — depends on your flow
-        // For demo, I will save to session and redirect back to product or checkout
-        session(['team_players_' . $data['product_id'] => $data['players']]);
+        // save your team logic - e.g. Team model or just return
+        // Team::create([...]) or loop players
 
-        return redirect()->route('team.create', ['product_id' => $data['product_id']])
-                         ->with('success', 'Team saved (in session).');
+        return redirect()->route('team.create', ['product_id'=>$request->product_id])
+                        ->with('success','Team saved');
     }
 }

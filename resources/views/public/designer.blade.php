@@ -280,9 +280,8 @@
           <input id="np-qty" name="quantity" type="number" min="1" value="1" class="form-control">
         </div>
 
-        <button id="np-atc-btn" type="submit" class="btn btn-primary w-100" disabled>Add to Cart</button>
-        <a href="{{ route('team.create', ['product_id' => $product->id]) }}"
-          class="btn btn-success w-100 mb-3" id="btn-add-team">
+        <button id="np-atc-btn" type="submit" class="btn btn-primary" disabled>Add to Cart</button>
+        <a href="{{ route('team.create', ['product_id' => $product->id]) }}" class="btn btn-success w-100 mb-3" id="btn-add-team">
           Add Team Players
         </a>
       </form>

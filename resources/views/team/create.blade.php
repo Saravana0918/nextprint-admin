@@ -2,42 +2,55 @@
 
 @section('content')
 <div class="container py-4">
-  <h3>Add Team Players for: {{ $product->name ?? 'Product' }}</h3>
+  <div class="d-flex align-items-start gap-4">
+    <!-- LEFT: form area -->
+    <div class="flex-grow-1">
+      <h3>Add Team Players for: {{ $product->name ?? 'Product' }}</h3>
 
-  @if(session('success'))
-    <div class="alert alert-success">{{ session('success') }}</div>
-  @endif
+      @if(session('success'))
+        <div class="alert alert-success">{{ session('success') }}</div>
+      @endif
 
-  <form method="post" action="{{ route('team.store') }}" id="team-form">
-    @csrf
-    <input type="hidden" name="product_id" value="{{ $product->id ?? '' }}">
+      <form method="post" action="{{ route('team.store') }}" id="team-form">
+        @csrf
+        <input type="hidden" name="product_id" value="{{ $product->id ?? '' }}">
 
-    <div class="mb-3">
-      <button type="button" id="btn-add-row" class="btn btn-primary">ADD NEW</button>
+        <div class="mb-3">
+          <button type="button" id="btn-add-row" class="btn btn-primary">ADD NEW</button>
+        </div>
+
+        <div id="players-list" class="mb-4">
+          <!-- JS will insert rows here -->
+        </div>
+
+        <div class="mt-3">
+          <button type="submit" class="btn btn-success">Save Team</button>
+          <a href="{{ url()->previous() }}" class="btn btn-secondary">Back</a>
+        </div>
+      </form>
     </div>
 
-    <div id="players-list">
-      <!-- initial example row inserted by JS -->
+    <!-- RIGHT: product preview (thumbnail) -->
+    <div style="width:320px; flex-shrink:0;">
+      <div class="card">
+        <div class="card-body text-center">
+          <img src="{{ $product->image_url ?? asset('images/placeholder.png') }}" 
+               alt="{{ $product->name }}" class="img-fluid mb-2" style="max-height:260px; object-fit:contain;">
+          <h5 class="card-title">{{ $product->name }}</h5>
+          <p class="text-muted">Price: ₹ {{ number_format($product->min_price ?? 0, 2) }}</p>
+        </div>
+      </div>
     </div>
-
-    <div class="mt-3">
-      <button type="submit" class="btn btn-success">Save Team</button>
-      <a href="{{ url()->previous() }}" class="btn btn-secondary">Back</a>
-    </div>
-  </form>
+  </div>
 </div>
 
-<!-- template for player row (hidden) -->
+<!-- template for player row -->
 <template id="player-row-template">
-  <div class="player-row card mb-2 p-2 d-flex align-items-center">
-    <div style="width:60px">
-      <input name="players[][number]" class="form-control player-number" placeholder="00" />
-    </div>
-    <div class="mx-2 flex-grow-1">
-      <input name="players[][name]" class="form-control player-name" placeholder="PLAYER NAME" />
-    </div>
-    <div style="width:110px">
-      <select name="players[][size]" class="form-control player-size">
+  <div class="card mb-2 p-2 player-row">
+    <div class="d-flex gap-2 align-items-start">
+      <input name="players[][number]" class="form-control w-25" placeholder="00" />
+      <input name="players[][name]" class="form-control" placeholder="PLAYER NAME" />
+      <select name="players[][size]" class="form-select w-25">
         <option value="">Size</option>
         <option value="XS">XS</option>
         <option value="S">S</option>
@@ -45,50 +58,30 @@
         <option value="L">L</option>
         <option value="XL">XL</option>
       </select>
-    </div>
-    <div class="ms-2">
       <button type="button" class="btn btn-danger btn-remove">Remove</button>
     </div>
   </div>
 </template>
 
 <script>
-document.addEventListener('DOMContentLoaded', function(){
+document.addEventListener('DOMContentLoaded', function() {
   const addBtn = document.getElementById('btn-add-row');
   const list = document.getElementById('players-list');
-  const template = document.getElementById('player-row-template').content;
+  const template = document.getElementById('player-row-template');
 
-  function addRow(data = {}) {
-    const clone = template.cloneNode(true);
-    const row = clone.querySelector('.player-row');
-
-    // fill defaults if provided
-    if (data.number) row.querySelector('.player-number').value = data.number;
-    if (data.name)   row.querySelector('.player-name').value = data.name;
-    if (data.size)   row.querySelector('.player-size').value = data.size;
-
-    row.querySelector('.btn-remove').addEventListener('click', () => {
-      row.remove();
+  function addRow() {
+    const node = template.content.cloneNode(true);
+    list.appendChild(node);
+    // wire remove
+    list.querySelectorAll('.btn-remove').forEach(btn=>{
+      btn.onclick = (e)=> e.target.closest('.player-row').remove();
     });
-
-    list.appendChild(row);
   }
 
-  addBtn.addEventListener('click', ()=> addRow());
+  addBtn.addEventListener('click', addRow);
 
-  // add 1 initial row
+  // add initial row
   addRow();
-
-  // optional: validate on submit
-  document.getElementById('team-form').addEventListener('submit', function(e){
-    const rows = document.querySelectorAll('.player-row');
-    if (rows.length === 0) {
-      e.preventDefault();
-      alert('Add at least one player.');
-      return;
-    }
-    // additional client-side validation if you want
-  });
 });
 </script>
 @endsection
