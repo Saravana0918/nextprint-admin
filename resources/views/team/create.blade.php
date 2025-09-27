@@ -202,7 +202,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const name = (nameText || '').toString().toUpperCase();
     const num  = (numText || '').toString().replace(/\D/g,'');
     placeOverlay(ovName, nameSlot, name || 'NAME', { heightFactor: 0.65 });
-    placeOverlay(ovNum, numSlot, num || 'NUMBER',  { heightFactor: 0.72 });
+    placeOverlay(ovNum, numSlot, num || 'NUMBER',  { heightFactor: 0.60 });
   }
 
   window.setPlayerPreview = function(name, number) {
