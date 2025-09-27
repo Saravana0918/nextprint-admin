@@ -155,7 +155,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Tweak these slot values to control how much vertical space name/number get.
   // We reduced height_pct so text will be sized smaller by default.
-  const nameSlot = { top_pct: 9,  height_pct: 8,  width_pct: 85 };   // name sits higher, smaller height
+  const nameSlot = { top_pct: 9,  height_pct: 9,  width_pct: 90 };   // name sits higher, smaller height
   const numSlot  = { top_pct: 54, height_pct: 12, width_pct: 60 };   // number lower, less vertical space
 
   function computeStageRect() {
