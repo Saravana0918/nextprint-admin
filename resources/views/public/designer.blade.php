@@ -59,7 +59,7 @@
     .vt-btn { width:40px; height:40px; }
       /* On mobile, panels should behave as normal block elements (flow) */
       .vt-panels { position: static; }
-      .vt-panel { position: static; left: auto; width: 100%; display: block !important; opacity:1 !important; transform:none !important; padding: 8px 0; background: transparent; border: none; box-shadow: none; }
+      .vt-panel { position: static; left: auto; width: 100%; display: block !important; opacity:1 !important; transform:none !important; background: transparent; border: none; box-shadow: none; }
       .col-md-3.np-col > #np-controls { min-height: auto; padding: 12px !important; }
     }
     
