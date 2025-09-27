@@ -49,7 +49,7 @@
     body { background-color : #929292; }
   .desktop-display{ color:white; font-family: "Roboto Condensed", sans-serif; font-weight: bold; }
   .body-padding{ padding-top: 100px; }
-  .right-layout{ padding-top:350px; border: 2px solid #ffffff; border-radius: 5px;}
+  .right-layout{ padding-top:350px; }
   .hide-on-mobile { display: none !important; }
 
     /* small screens: revert to stacked flow (mobile rules unchanged) */
@@ -176,7 +176,7 @@
 
     <!-- left controls (icons + panels) -->
     <div class="col-md-3 np-col order-2 order-md-1">
-      <div id="np-controls" class="border rounded p-3">
+      <div id="np-controls">
         <div class="vertical-tabs">
           <nav class="vt-icons" aria-hidden="false" role="tablist" aria-orientation="vertical">
             <button class="vt-btn active" data-panel="panel-name" aria-controls="panel-name" title="Name"><span class="vt-ico">②</span></button>
