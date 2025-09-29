@@ -7,11 +7,10 @@ use Illuminate\Support\Facades\Schema;
 class CreateTeamsTable extends Migration
 {
     public function up()
-    {
-        if (! Schema::hasTable('teams')) {
+        {
             Schema::create('teams', function (Blueprint $table) {
                 $table->id();
-                $table->unsignedBigInteger('product_id')->nullable();
+                $table->unsignedBigInteger('product_id');
                 $table->unsignedBigInteger('created_by')->nullable();
                 $table->string('name')->nullable();
                 $table->json('players')->nullable();
@@ -19,7 +18,7 @@ class CreateTeamsTable extends Migration
                 $table->timestamps();
             });
         }
-    }
+
 
     public function down()
     {
