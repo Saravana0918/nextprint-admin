@@ -208,10 +208,10 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+  const form = document.getElementById('team-form');
   const list = document.getElementById('players-list');
   const template = document.getElementById('player-row-template');
   const addBtn = document.getElementById('btn-add-row');
-  const form = document.getElementById('team-form');
 
   const stage = document.getElementById('player-stage');
   const img = document.getElementById('player-base');
@@ -493,29 +493,47 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   // final validation before submit
-  form.addEventListener('submit', function(evt) {
-    const rows = list.querySelectorAll('.player-row');
-    if (rows.length === 0) {
-      evt.preventDefault(); alert('Please add at least one player.'); return false;
+  form.addEventListener('submit', async function(evt) {
+  evt.preventDefault();
+
+  // collect players
+  const fd = new FormData(form);
+  const data = {};
+  fd.forEach((val, key) => {
+    const m = key.match(/^players\[(\d*)\]\[(\w+)\]$/);
+    if (m) {
+      const idx = m[1] || 0;
+      const field = m[2];
+      data.players = data.players || [];
+      data.players[idx] = data.players[idx] || {};
+      data.players[idx][field] = val;
+    } else {
+      data[key] = val;
     }
-    const errors = [];
-    rows.forEach((row, idx) => {
-      const nameEl = row.querySelector('.player-name');
-      const numEl  = row.querySelector('.player-number');
-      const name = (nameEl?.value || '').trim();
-      const num  = (numEl?.value || '').trim();
-      if (!name) errors.push(`Row ${idx+1}: Name is required.`);
-      else if (name.length > 12) errors.push(`Row ${idx+1}: Name must be 12 chars or fewer.`);
-      if (!num) errors.push(`Row ${idx+1}: Number is required.`);
-      else if (!/^\d{1,3}$/.test(num)) errors.push(`Row ${idx+1}: Number must be 1 to 3 digits.`);
-    });
-    if (errors.length) {
-      evt.preventDefault();
-      alert('Please fix these issues:\n\n' + errors.join('\n'));
-      return false;
-    }
-    return true;
   });
+
+  try {
+    const res = await fetch(form.action, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-CSRF-TOKEN': document.querySelector('input[name=_token]').value
+      },
+      body: JSON.stringify(data)
+    });
+    const json = await res.json();
+    if (json.checkoutUrl) {
+      window.location.href = json.checkoutUrl;
+    } else {
+      alert('No checkoutUrl returned.');
+      console.warn('Response:', json);
+    }
+  } catch (err) {
+    console.error('AddToCart failed', err);
+    alert('Server error, please try again.');
+  }
+});
 
   /* ===== Mobile stage sizing helper ===== */
   function adjustStageForViewport() {
