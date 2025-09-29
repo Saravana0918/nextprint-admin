@@ -11,7 +11,7 @@ use App\Models\Product;
 use App\Http\Controllers\ShopifyCartController;
 use Illuminate\Support\Facades\Log;
 
-class TeamController extends Controller
+class ShopifyCartController extends Controller
 {
     public function create(Request $request)
     {
