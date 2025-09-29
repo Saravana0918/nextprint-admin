@@ -62,6 +62,7 @@
       <form method="post" action="{{ route('team.store') }}" id="team-form">
         @csrf
         <input type="hidden" name="product_id" value="{{ $product->id ?? '' }}">
+        <input type="hidden" name="shopify_product_id" value="{{ $product->shopify_product_id ?? '' }}">
 
         <div class="mb-3">
         <button type="button" id="btn-add-row" class="btn btn-primary">ADD NEW</button>
@@ -108,6 +109,7 @@
       <!-- hidden per-row font/color (will be filled by JS) -->
       <input type="hidden" name="players[][font]" class="player-font">
       <input type="hidden" name="players[][color]" class="player-color">
+      <input type="hidden" name="players[][variant_id]" class="player-variant-id">
 
       <button type="button" class="btn btn-danger btn-remove">Remove</button>
       <button type="button" class="btn btn-outline-primary btn-preview ml-2">Preview</button>
