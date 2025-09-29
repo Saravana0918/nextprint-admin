@@ -35,7 +35,9 @@ class TeamController extends Controller
      * Persist team + players to DB (teams table) and redirect back with a message.
      */
     public function store(Request $request)
-    {
+{
+    \Log::info('TEAM_STORE_CALLED', $request->all());
+    dd($request->all()); // <- temporary debugging, shows input data in browser
         $data = $request->validate([
             'product_id'         => 'required|integer',
             'players'            => 'required|array|min:1',
