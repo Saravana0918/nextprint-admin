@@ -219,16 +219,37 @@ GRAPHQL;
                 ], 500);
             }
 
-            $cart = data_get($data, 'data.cartCreate.cart');
-            $checkoutUrl = data_get($cart, 'checkoutUrl') ?: data_get($cart, 'url') ?: null;
+            // existing extraction
+$cart = data_get($data, 'data.cartCreate.cart');
+$checkoutUrl = data_get($cart, 'checkoutUrl') ?: data_get($cart, 'url') ?: null;
 
-            if (empty($checkoutUrl)) {
-                Log::error('designer: cartCreate_no_url', ['body' => $resp->body()]);
-                return response()->json(['error' => 'no_checkout_url', 'body' => $resp->body()], 500);
-            }
+// ---- START PATCH: fallback if Shopify didn't return checkoutUrl ----
+if (empty($checkoutUrl)) {
+    // Log full response body for debugging (keeps root cause traceable)
+    Log::warning('designer: cartCreate returned no checkoutUrl', ['body' => $resp->body()]);
 
-            // Success -> return JSON for frontend to redirect
-            return response()->json(['checkoutUrl' => $checkoutUrl]);
+    // Build a simple fallback cart permalink using numeric variant id and quantity.
+    // We have $variantId (numeric) and $quantity earlier in the method.
+    // Ensure $variantId is numeric (if it is gid, try to extract the numeric id)
+    $numericVariantId = $variantId;
+    // If variant id looks like gid://shopify/ProductVariant/12345, extract last part
+    if (is_string($numericVariantId) && str_contains($numericVariantId, '/')) {
+        $parts = explode('/', $numericVariantId);
+        $numericVariantId = end($parts);
+    }
+    // Build fallback URL
+    $fallbackCheckout = "https://{$shop}/cart/{$numericVariantId}:{$quantity}";
+
+    Log::info('designer: using fallback cart url', ['fallback' => $fallbackCheckout, 'variant' => $numericVariantId, 'quantity' => $quantity]);
+
+    // Set checkoutUrl to fallback so front-end will redirect to it
+    $checkoutUrl = $fallbackCheckout;
+}
+// ---- END PATCH ----
+
+// Return success JSON with checkoutUrl (either real or fallback)
+return response()->json(['success' => true, 'team_id' => $team->id ?? null, 'checkoutUrl' => $checkoutUrl]);
+
 
         } catch (\Throwable $e) {
             Log::error('designer: cartCreate_exception', ['err' => $e->getMessage()]);
