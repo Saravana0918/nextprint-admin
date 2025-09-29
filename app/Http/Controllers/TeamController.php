@@ -67,11 +67,11 @@ class TeamController extends Controller
         $playersForShopify = [];
         foreach ($data['players'] as $p) {
             $playersForShopify[] = [
-                'name'     => $p['name'] ?? '',
-                'number'   => $p['number'] ?? '',
-                'size'     => $p['size'] ?? null,
-                'font'     => $p['font'] ?? '',
-                'color'    => $p['color'] ?? '',
+                'name'       => $p['name'] ?? '',
+                'number'     => $p['number'] ?? '',
+                'size'       => $p['size'] ?? null,
+                'font'       => $p['font'] ?? '',
+                'color'      => $p['color'] ?? '',
                 'variant_id' => $p['variant_id'] ?? null,
             ];
         }
@@ -87,7 +87,7 @@ class TeamController extends Controller
             'team_id'    => $team->id,
         ];
 
-        // Call ShopifyCartController (which we'll modify to accept players array)
+        // Call ShopifyCartController (which accepts players array)
         try {
             $shopifyController = app(ShopifyCartController::class);
             $resp = $shopifyController->addToCart(new Request($shopifyPayload));

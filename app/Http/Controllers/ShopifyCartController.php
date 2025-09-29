@@ -15,18 +15,18 @@ class ShopifyCartController extends Controller
     {
         // Validate incoming (players OR product_id)
         $validated = $request->validate([
-            'product_id'         => 'required|integer',
-            'shopify_product_id' => 'nullable|string',
-            'players'            => 'nullable|array',
-            'players.*.name'     => 'nullable|string|max:60',
-            'players.*.number'   => 'nullable|string|max:20',
-            'players.*.font'     => 'nullable|string|max:100',
-            'players.*.color'    => 'nullable|string|max:20',
-            'players.*.size'     => 'nullable|string|max:20',
+            'product_id'           => 'required|integer',
+            'shopify_product_id'   => 'nullable|string',
+            'players'              => 'nullable|array',
+            'players.*.name'       => 'nullable|string|max:60',
+            'players.*.number'     => 'nullable|string|max:20',
+            'players.*.font'       => 'nullable|string|max:100',
+            'players.*.color'      => 'nullable|string|max:20',
+            'players.*.size'       => 'nullable|string|max:20',
             'players.*.variant_id' => 'nullable',
-            'quantity'           => 'nullable|integer|min:1', // fallback quantity
-            'preview_url'        => 'nullable|url',
-            'preview_data'       => 'nullable|string',
+            'quantity'             => 'nullable|integer|min:1', // fallback quantity
+            'preview_url'          => 'nullable|url',
+            'preview_data'         => 'nullable|string',
         ]);
 
         $productId = $validated['product_id'];
@@ -184,7 +184,7 @@ GRAPHQL;
                 'variables' => $variables,
             ]);
 
-            Log::info('designer: cartCreate_response', ['status'=>$resp->status(), 'body'=>$resp->body()]);
+            Log::info('designer: cartCreate_response', ['status'=>$resp->status(), 'body'=>strval($resp->body())]);
 
             if (!$resp->successful()) {
                 return response()->json(['error'=>'cartCreate_failed','status'=>$resp->status(),'body'=>$resp->body()], 500);
