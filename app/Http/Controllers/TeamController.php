@@ -29,53 +29,52 @@ class TeamController extends Controller
     }
 
     public function store(Request $request)
-    {
-        $data = $request->validate([
-            'product_id' => 'required|integer',
-            'players' => 'required|array|min:1',
-            'players.*.name' => 'required|string|max:12',
-            'players.*.number' => ['required','regex:/^\d{1,3}$/'],
-            'players.*.size' => 'nullable|string|max:10',
-            'players.*.font' => 'nullable|string|max:50',
-            'players.*.color' => 'nullable|string|max:20',
+{
+    $data = $request->validate([
+        'product_id' => 'required|integer',
+        'players' => 'required|array|min:1',
+        'players.*.name' => 'required|string|max:12',
+        'players.*.number' => ['required','regex:/^\d{1,3}$/'],
+        'players.*.size' => 'nullable|string|max:10',
+        'players.*.font' => 'nullable|string|max:50',
+        'players.*.color' => 'nullable|string|max:20',
+    ]);
+
+    // save team in DB
+    try {
+        Team::create([
+            'product_id' => $data['product_id'],
+            'players'    => $data['players'],
+            'created_by' => auth()->id() ?? null,
         ]);
-
-        // save team record (optional)
-        try {
-            Team::create([
-                'product_id' => $data['product_id'],
-                'players'    => $data['players'],
-                'created_by' => auth()->id() ?? null,
-            ]);
-        } catch (\Throwable $e) {
-            \Log::warning('team.save_failed', ['err'=>$e->getMessage()]);
-        }
-
-        // Build request for Shopify (example: combine players into one name_text)
-        $first = $data['players'][0] ?? [];
-        $req = new Request([
-            'product_id'   => $data['product_id'],
-            'quantity'     => 1,
-            'name_text'    => implode(', ', array_map(fn($p) => ($p['name'] ?? '').'#'.($p['number'] ?? ''), $data['players'])),
-            'number_text'  => 'TEAM',
-            'font'         => $first['font'] ?? '',
-            'color'        => $first['color'] ?? '',
-            'preview_data' => null,
-        ]);
-
-        $shopify = app(ShopifyCartController::class);
-        $resp = $shopify->addToCart($req);
-
-        if ($resp instanceof \Illuminate\Http\JsonResponse) {
-            $json = $resp->getData(true);
-        } else {
-            $json = json_decode($resp->getContent(), true) ?? [];
-        }
-
-        if (!empty($json['checkoutUrl'])) {
-            return redirect()->away($json['checkoutUrl']);
-        }
-
-        return back()->with('error', 'Could not add to Shopify cart.');
+    } catch (\Throwable $e) {
+        \Log::warning('team.save_failed', ['err'=>$e->getMessage()]);
     }
+
+    // Call Shopify
+    $first = $data['players'][0] ?? [];
+    $req = new Request([
+        'product_id'   => $data['product_id'],
+        'quantity'     => 1,
+        'name_text'    => implode(', ', array_map(fn($p) => $p['name'].'#'.$p['number'], $data['players'])),
+        'number_text'  => 'TEAM',
+        'font'         => $first['font'] ?? '',
+        'color'        => $first['color'] ?? '',
+        'preview_data' => null,
+    ]);
+
+    $shopify = app(ShopifyCartController::class);
+    $resp = $shopify->addToCart($req);
+
+    // 🔴 Fix: force redirect to checkout url
+    if ($resp instanceof \Illuminate\Http\JsonResponse) {
+        $json = $resp->getData(true);
+        if (!empty($json['checkoutUrl'])) {
+            return redirect()->away($json['checkoutUrl']); // ✅ direct to checkout
+        }
+    }
+
+    return back()->with('error', 'Could not add to Shopify cart.');
+}
+
 }
