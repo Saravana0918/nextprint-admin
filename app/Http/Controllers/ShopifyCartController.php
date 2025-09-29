@@ -46,10 +46,12 @@ class ShopifyCartController extends Controller
             try {
                 $pv = ProductVariant::where('product_id', $productId)
                      ->when($size, function ($q) use ($size) {
-                         return $q->where('option_value', $size);
+                         return $q->where('option_value', $size)
+                                  ->orWhere('option_value', strtoupper($size))
+                                  ->orWhere('option_value', strtolower($size));
                      })->first();
                 if ($pv && !empty($pv->shopify_variant_id)) {
-                    $variantId = $pv->shopify_variant_id;
+                    $variantId = (string) $pv->shopify_variant_id;
                     Log::info('designer: variant_found_db', ['variant' => $variantId]);
                 }
             } catch (\Throwable $e) {
@@ -86,6 +88,9 @@ class ShopifyCartController extends Controller
                         }
                         if (empty($variantId) && !empty($variants)) {
                             $variantId = $variants[0]['id'];
+                        }
+                        if (!empty($variantId)) {
+                            $variantId = (string) $variantId;
                         }
                         Log::info('designer: variant_selected_admin', ['variant' => $variantId]);
                     }
@@ -219,46 +224,52 @@ GRAPHQL;
                 ], 500);
             }
 
-            // existing extraction
-$cart = data_get($data, 'data.cartCreate.cart');
-$checkoutUrl = data_get($cart, 'checkoutUrl') ?: data_get($cart, 'url') ?: null;
+            // Extract cart and checkoutUrl
+            $cart = data_get($data, 'data.cartCreate.cart');
+            $checkoutUrl = data_get($cart, 'checkoutUrl') ?: data_get($cart, 'url') ?: null;
 
-// FALLBACK: if cartCreate didn't return checkoutUrl, build a /cart/{variant}:{qty} URL
-if (empty($checkoutUrl)) {
-    \Log::warning('designer: cartCreate_no_url_falling_back', ['variantId' => $variantId ?? null, 'productId' => $productId ?? null]);
+            // log parsed cart for debugging
+            Log::info('designer: cartCreate_response_parsed', ['cart' => $cart, 'checkoutUrl' => $checkoutUrl]);
 
-    // try get numeric variant id if we have it (strip gid if present)
-    $numericVariantId = $variantId ?? null;
-    if (is_string($numericVariantId) && str_contains($numericVariantId, '/')) {
-        $parts = explode('/', $numericVariantId);
-        $numericVariantId = end($parts);
-    }
+            // If checkoutUrl present -> return it
+            if (!empty($checkoutUrl)) {
+                return response()->json(['checkoutUrl' => $checkoutUrl]);
+            }
 
-    // if still empty try product_variants table
-    if (empty($numericVariantId) && \Illuminate\Support\Facades\Schema::hasTable('product_variants')) {
-        try {
-            $pv = \App\Models\ProductVariant::where('product_id', $productId)
-                  ->whereNotNull('shopify_variant_id')
-                  ->first();
-            if ($pv) $numericVariantId = $pv->shopify_variant_id;
+            // FALLBACK: if cartCreate didn't return checkoutUrl, build a /cart/{variant}:{qty} URL
+            Log::warning('designer: cartCreate_no_url_falling_back', ['variantId' => $variantId ?? null, 'productId' => $productId ?? null]);
+
+            // try get numeric variant id if we have it (strip gid if present)
+            $numericVariantId = $variantId ?? null;
+            if (is_string($numericVariantId) && str_contains($numericVariantId, '/')) {
+                $parts = explode('/', $numericVariantId);
+                $numericVariantId = end($parts);
+            }
+
+            // if still empty try product_variants table
+            if (empty($numericVariantId) && Schema::hasTable('product_variants')) {
+                try {
+                    $pv = ProductVariant::where('product_id', $productId)
+                          ->whereNotNull('shopify_variant_id')
+                          ->first();
+                    if ($pv) $numericVariantId = $pv->shopify_variant_id;
+                } catch (\Throwable $e) {
+                    Log::warning('designer: fallback_lookup_failed', ['err' => $e->getMessage()]);
+                }
+            }
+
+            if (!empty($numericVariantId) && !empty($shop)) {
+                $fallback = "https://{$shop}/cart/{$numericVariantId}:{$quantity}";
+                Log::info('designer: fallback_cart_url', ['fallback' => $fallback]);
+                return response()->json(['checkoutUrl' => $fallback]);
+            }
+
+            // final fallback: return error json (and log body)
+            Log::error('designer: cartCreate_no_checkout_and_no_fallback', ['body' => $resp->body()]);
+            return response()->json(['error'=>'no_checkout_url','body'=>$resp->body() ?? null], 500);
+
         } catch (\Throwable $e) {
-            \Log::warning('designer: fallback_lookup_failed', ['err' => $e->getMessage()]);
-        }
-    }
-
-    if (!empty($numericVariantId) && !empty($shop = env('SHOPIFY_STORE'))) {
-        $fallback = "https://{$shop}/cart/{$numericVariantId}:{$quantity}";
-        \Log::info('designer: fallback_cart_url', ['fallback' => $fallback]);
-        return response()->json(['checkoutUrl' => $fallback]);
-    }
-
-    // final fallback: return error json (and log body)
-    return response()->json(['error'=>'no_checkout_url','body'=>$resp->body() ?? null], 500);
-}
-
-
-        } catch (\Throwable $e) {
-            Log::error('designer: cartCreate_exception', ['err' => $e->getMessage()]);
+            Log::error('designer: cartCreate_exception', ['err' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
             return response()->json(['error' => 'exception', 'msg' => $e->getMessage()], 500);
         }
     }
