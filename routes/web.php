@@ -17,6 +17,7 @@ use App\Http\Controllers\StoreController;
 use App\Http\Controllers\ShopifyCartController;
 use App\Http\Controllers\PublicDesignerController;
 use App\Http\Controllers\TeamController;
+use App\Http\Controllers\AdminAuthController;
 
 /*
 |--------------------------------------------------------------------------
@@ -82,14 +83,9 @@ Route::prefix('admin')->name('admin.')->group(function () {
 
 }); // <-- end admin group
 
-Route::get('/admin/login', function () {
-    return view('auth.admin-login'); // we'll create this blade next
-})->name('admin.login');
-
-// ensure named 'login' exists (middleware expects route('login'))
-Route::get('/login', function () {
-    return redirect()->route('admin.login');
-})->name('login');
+Route::get('/admin/login', [AdminAuthController::class, 'showLoginForm'])->name('admin.login');
+Route::post('/admin/login', [AdminAuthController::class, 'login'])->name('admin.login.post');
+Route::post('/admin/logout', [AdminAuthController::class, 'logout'])->name('admin.logout');
 /*
 |--------------------------------------------------------------------------
 | Public API + Storefront routes
