@@ -8,9 +8,10 @@ class Team extends Model
 {
     protected $fillable = [
         'product_id',
-        'players',
-        'preview_path',
         'created_by',
+        'name',
+        'players',
+        'preview_path'
     ];
 
     protected $casts = [

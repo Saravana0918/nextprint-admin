@@ -28,56 +28,62 @@ class TeamController extends Controller
 
     public function store(Request $request)
     {
-        // server-side validation (strict)
         $data = $request->validate([
-            'product_id' => 'required|integer|exists:products,id',
+            'product_id' => 'required|integer',
             'players' => 'required|array|min:1',
             'players.*.name' => 'required|string|max:12',
             'players.*.number' => ['required','regex:/^\d{1,3}$/'],
             'players.*.size' => 'nullable|string|max:10',
             'players.*.font' => 'nullable|string|max:50',
-            'players.*.color' => 'nullable|string|max:20',
+            'players.*.color' => 'nullable|string|max:30',
+            'team_name' => 'nullable|string|max:100',
+            'preview_data' => 'nullable|string', // optional base64 preview image
         ]);
 
-        // normalize players
-        foreach ($data['players'] as &$p) {
-            $p['name'] = isset($p['name']) ? mb_strtoupper($p['name']) : null;
-            $p['number'] = isset($p['number']) ? preg_replace('/\D/','',$p['number']) : null;
-            $p['size'] = $p['size'] ?? null;
-            $p['font'] = $p['font'] ?? null;
-            $p['color'] = $p['color'] ?? null;
+        // sanitize players: uppercase names + numbers trimmed
+        $players = array_map(function($p){
+            return [
+                'name' => isset($p['name']) ? strtoupper(substr($p['name'],0,12)) : '',
+                'number' => isset($p['number']) ? preg_replace('/\D/','', substr($p['number'],0,3)) : '',
+                'size' => $p['size'] ?? null,
+                'font' => $p['font'] ?? null,
+                'color' => $p['color'] ?? null,
+            ];
+        }, $data['players']);
+
+        $team = Team::create([
+            'product_id' => $data['product_id'],
+            'created_by' => auth()->id() ?? null,
+            'name' => $data['team_name'] ?? null,
+            'players' => $players,
+        ]);
+
+        // optional: save preview image (data:image/png;base64,....)
+        if (!empty($data['preview_data']) && preg_match('/^data:image\/(\w+);base64,/', $data['preview_data'])) {
+            $base64 = preg_replace('#^data:image/\w+;base64,#i', '', $data['preview_data']);
+            $img = base64_decode($base64);
+            $ext = 'png';
+            $filename = "teams/previews/team-{$team->id}-".time().'.'.$ext;
+            \Storage::disk('public')->put($filename, $img);
+            $team->preview_path = $filename;
+            $team->save();
         }
-        unset($p);
 
-        DB::beginTransaction();
-        try {
-            $team = Team::create([
-                'product_id' => $data['product_id'],
-                'players'    => $data['players'],
-                'created_by' => auth()->id() ?? null,
-            ]);
+        // Add to session cart as single cart item with team meta
+        $cartItem = [
+            'product_id' => $team->product_id,
+            'qty' => 1,
+            'price' => 0, // optionally set price lookup from product
+            'team_id' => $team->id,
+            'players' => $team->players,
+        ];
 
-            DB::commit();
+        // push to session cart array
+        $cart = session()->get('cart', []);
+        $cart[] = $cartItem;
+        session(['cart' => $cart]);
 
-            // If you later want to support "save_and_cart", check $request->input('submit_action')
-            return redirect()->route('team.create', ['product_id' => $data['product_id']])
-                             ->with('success', 'Team saved successfully.');
-
-        } catch (\Throwable $e) {
-            DB::rollBack();
-            // Log full exception to storage/logs/laravel.log
-            Log::error('Team store failed: '.$e->getMessage(), [
-                'trace' => $e->getTraceAsString(),
-                'payload' => $request->all()
-            ]);
-
-            // For debugging on dev server only: you can return error message (or just redirect)
-            if (config('app.debug')) {
-                // show message to browser (helpful while debugging)
-                abort(500, 'Team save error: '.$e->getMessage());
-            }
-
-            return redirect()->back()->withInput()->with('error', 'Unable to save team. Try again or check logs.');
-        }
+        // redirect to public cart / checkout page
+        return redirect()->route('cart.index')->with('success', 'Team saved and added to cart.');
     }
 }
