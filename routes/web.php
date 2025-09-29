@@ -84,10 +84,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
 }); // <-- end admin group
 
 Route::get('/admin/login', [AdminAuthController::class, 'showLoginForm'])->name('admin.login');
-// alias so middleware redirect works (route('login'))
-Route::get('/login', function() {
-    return redirect()->route('admin.login');
-})->name('login');
+Route::post('/admin/login', [AdminAuthController::class, 'login'])->name('admin.login.post');
+Route::post('/admin/logout', [AdminAuthController::class, 'logout'])->name('admin.logout');
 /*
 |--------------------------------------------------------------------------
 | Public API + Storefront routes
@@ -102,13 +100,8 @@ Route::post('/designer/upload-preview', [\App\Http\Controllers\ShopifyCartContro
 
 Route::post('/designer/add-to-cart', [\App\Http\Controllers\ShopifyCartController::class, 'addToCart'])
     ->name('designer.addtocart');
-Route::prefix('admin')->name('admin.')->middleware('auth')->group(function() {
-    Route::get('/team/create', [\App\Http\Controllers\TeamController::class,'create'])->name('team.create');
-    // don't put POST /team/store here if you want guests to save
-});
-
-// expose store publicly (guests can post team data)
-Route::post('/team/store', [\App\Http\Controllers\TeamController::class,'store'])->name('team.store');
+Route::get('/team/create', [TeamController::class,'create'])->name('team.create');
+Route::post('/team/store', [\App\Http\Controllers\TeamController::class, 'store'])->name('team.store');
 
 // Simple PDP (preview/test page)
 Route::get('/p/{handle}', [StoreController::class, 'show'])->name('store.product');
