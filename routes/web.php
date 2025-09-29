@@ -117,7 +117,6 @@ Route::post('/admin/sync-now', function () {
     $synced = app(\App\Services\ShopifyService::class)->syncNextprintToLocal();
     return back()->with('ok', "Synced {$synced} products.");
 })->name('admin.sync-now');
-Route::post('/api/shopify/cart/add', [ShopifyCartController::class, 'addToCart']);
 
 Route::get('/files/{path}', function ($path) {
     $full = storage_path('app/public/'.$path);
