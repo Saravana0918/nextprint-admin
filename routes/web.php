@@ -82,18 +82,14 @@ Route::prefix('admin')->name('admin.')->group(function () {
 
 }); // <-- end admin group
 
-// Simple fallback named login route — change target if your admin login URL differs
-Route::get('/login', function () {
-    // if you have an admin login URI like /admin/login, change to that:
-    return redirect('/admin/login'); 
-})->name('login');
+Route::get('/admin/login', function () {
+    return view('auth.admin-login'); // we'll create this blade next
+})->name('admin.login');
 
-// optional: also define logout route to avoid other route not defined issues
-Route::post('/logout', function(){
-    // you might want to implement actual logout logic
-    auth()->logout();
-    return redirect('/');
-})->name('logout');
+// ensure named 'login' exists (middleware expects route('login'))
+Route::get('/login', function () {
+    return redirect()->route('admin.login');
+})->name('login');
 /*
 |--------------------------------------------------------------------------
 | Public API + Storefront routes
