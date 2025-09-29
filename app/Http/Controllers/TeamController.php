@@ -8,10 +8,8 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Response;
 use App\Models\Team;
 use App\Models\Product;
-use App\Models\ProductVariant;
 use App\Http\Controllers\ShopifyCartController;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Schema;
 
 class TeamController extends Controller
 {
@@ -44,14 +42,13 @@ class TeamController extends Controller
             'players.*.size'    => 'nullable|string|max:10',
             'players.*.font'    => 'nullable|string|max:50',
             'players.*.color'   => 'nullable|string|max:20',
-            'players.*.variant_id' => 'nullable', // optional if UI passes variant id
+            'players.*.variant_id' => 'nullable',
         ]);
 
-        // Save team
         try {
             $team = Team::create([
                 'product_id' => $data['product_id'],
-                'players'    => $data['players'],
+                'players' => $data['players'],
                 'created_by' => auth()->id() ?? null,
             ]);
         } catch (\Throwable $e) {
@@ -62,32 +59,29 @@ class TeamController extends Controller
             return back()->with('error', 'Could not save team. Please try again.');
         }
 
-        // Build players payload for ShopifyCartController:
-        // for each player we want: name, number, size, font, color, variant_id(optional)
+        // Build players payload
         $playersForShopify = [];
         foreach ($data['players'] as $p) {
             $playersForShopify[] = [
-                'name'       => $p['name'] ?? '',
-                'number'     => $p['number'] ?? '',
-                'size'       => $p['size'] ?? null,
-                'font'       => $p['font'] ?? '',
-                'color'      => $p['color'] ?? '',
+                'name' => $p['name'] ?? '',
+                'number' => $p['number'] ?? '',
+                'size' => $p['size'] ?? null,
+                'font' => $p['font'] ?? '',
+                'color' => $p['color'] ?? '',
                 'variant_id' => $p['variant_id'] ?? null,
             ];
         }
 
-        // Add helpful context: product shopify id if available
         $product = Product::find($data['product_id']);
         $shopifyProductId = $product->shopify_product_id ?? null;
 
         $shopifyPayload = [
             'product_id' => $data['product_id'],
-            'players'    => $playersForShopify,
+            'players' => $playersForShopify,
             'shopify_product_id' => $shopifyProductId ? (string)$shopifyProductId : null,
-            'team_id'    => $team->id,
+            'team_id' => $team->id,
         ];
 
-        // Call ShopifyCartController (which accepts players array)
         try {
             $shopifyController = app(ShopifyCartController::class);
             $resp = $shopifyController->addToCart(new Request($shopifyPayload));
@@ -104,27 +98,18 @@ class TeamController extends Controller
             } elseif ($resp instanceof Response) {
                 $content = $resp->getContent();
                 $maybe = @json_decode($content, true);
-                if (is_array($maybe)) {
-                    $checkoutUrl = $maybe['checkoutUrl'] ?? $maybe['checkout_url'] ?? null;
-                }
+                if (is_array($maybe)) $checkoutUrl = $maybe['checkoutUrl'] ?? $maybe['checkout_url'] ?? null;
             } elseif (is_array($resp)) {
                 $checkoutUrl = $resp['checkoutUrl'] ?? $resp['checkout_url'] ?? null;
-            } elseif (is_string($resp)) {
-                if (filter_var($resp, FILTER_VALIDATE_URL)) {
-                    $checkoutUrl = $resp;
-                } else {
-                    $maybe = @json_decode($resp, true);
-                    if (is_array($maybe)) {
-                        $checkoutUrl = $maybe['checkoutUrl'] ?? $maybe['checkout_url'] ?? null;
-                    }
-                }
+            } elseif (is_string($resp) && filter_var($resp, FILTER_VALIDATE_URL)) {
+                $checkoutUrl = $resp;
             }
 
             if ($request->wantsJson() || $request->ajax()) {
                 return response()->json([
                     'success' => true,
                     'team_id' => $team->id,
-                    'checkoutUrl' => $checkoutUrl
+                    'checkoutUrl' => $checkoutUrl,
                 ], 200);
             }
 
@@ -133,10 +118,9 @@ class TeamController extends Controller
             }
 
             return redirect()->route('team.show', $team->id)->with('success', 'Team saved. Proceed to cart manually.');
-
         } catch (\Throwable $e) {
             Log::error('Shopify addToCart failed: ' . $e->getMessage(), [
-                'trace'   => $e->getTraceAsString(),
+                'trace' => $e->getTraceAsString(),
                 'payload' => $shopifyPayload
             ]);
             if ($request->wantsJson() || $request->ajax()) {
