@@ -17,7 +17,7 @@ use App\Http\Controllers\StoreController;
 use App\Http\Controllers\ShopifyCartController;
 use App\Http\Controllers\PublicDesignerController;
 use App\Http\Controllers\TeamController;
-use App\Http\Controllers\AdminAuthController;
+use App\Http\Controllers\Admin\AdminAuthController;
 
 /*
 |--------------------------------------------------------------------------
@@ -86,6 +86,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
 Route::get('/admin/login', [AdminAuthController::class, 'showLoginForm'])->name('admin.login');
 Route::post('/admin/login', [AdminAuthController::class, 'login'])->name('admin.login.post');
 Route::post('/admin/logout', [AdminAuthController::class, 'logout'])->name('admin.logout');
+
+Route::get('/login', [AdminAuthController::class, 'showLoginForm'])->name('login');
 /*
 |--------------------------------------------------------------------------
 | Public API + Storefront routes
@@ -101,7 +103,7 @@ Route::post('/designer/upload-preview', [\App\Http\Controllers\ShopifyCartContro
 Route::post('/designer/add-to-cart', [\App\Http\Controllers\ShopifyCartController::class, 'addToCart'])
     ->name('designer.addtocart');
 Route::get('/team/create', [TeamController::class,'create'])->name('team.create');
-Route::post('/team/store', [\App\Http\Controllers\TeamController::class, 'store'])->name('team.store');
+Route::post('/team/store', [TeamController::class,'store'])->name('team.store');
 
 // Simple PDP (preview/test page)
 Route::get('/p/{handle}', [StoreController::class, 'show'])->name('store.product');
