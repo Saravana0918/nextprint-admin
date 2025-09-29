@@ -493,47 +493,100 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   // final validation before submit
-  form.addEventListener('submit', async function(evt) {
+// Replace existing form submit listener with this code:
+form.addEventListener('submit', async function(evt) {
   evt.preventDefault();
 
-  // collect players
-  const fd = new FormData(form);
-  const data = {};
-  fd.forEach((val, key) => {
-    const m = key.match(/^players\[(\d*)\]\[(\w+)\]$/);
-    if (m) {
-      const idx = m[1] || 0;
-      const field = m[2];
-      data.players = data.players || [];
-      data.players[idx] = data.players[idx] || {};
-      data.players[idx][field] = val;
-    } else {
-      data[key] = val;
-    }
+  // collect base fields
+  const productId = form.querySelector('input[name="product_id"]').value;
+  const shopifyProductIdEl = document.querySelector('input[name="shopify_product_id"]');
+  const shopifyProductId = shopifyProductIdEl ? shopifyProductIdEl.value : null;
+
+  // iterate rows and build players array explicitly
+  const players = [];
+  const rows = list.querySelectorAll('.player-row');
+  rows.forEach((row, idx) => {
+    const numEl = row.querySelector('.player-number');
+    const nameEl = row.querySelector('.player-name');
+    const sizeEl = row.querySelector('.player-size');
+    const fontEl = row.querySelector('.player-font');
+    const colorEl = row.querySelector('.player-color');
+    const variantEl = row.querySelector('.player-variant-id'); // optional if you add it
+
+    const name = nameEl ? (nameEl.value || '').toString().trim() : '';
+    const number = numEl ? (numEl.value || '').toString().trim() : '';
+    const size = sizeEl ? (sizeEl.value || '').toString().trim() : '';
+    const font = fontEl ? (fontEl.value || '').toString().trim() : '';
+    const color = colorEl ? (colorEl.value || '').toString().trim() : '';
+    const variant_id = variantEl ? (variantEl.value || null) : null;
+
+    // skip empty rows (optional)
+    if (!name && !number) return;
+
+    players.push({
+      name: name,
+      number: number,
+      size: size || null,
+      font: font || null,
+      color: color || null,
+      variant_id: variant_id || null
+    });
   });
 
+  if (players.length === 0) {
+    alert('Add at least one player.');
+    return;
+  }
+
+  const payload = {
+    product_id: parseInt(productId, 10),
+    shopify_product_id: shopifyProductId || null,
+    players: players
+  };
+
   try {
-    const res = await fetch(form.action, {
+    const resp = await fetch(form.action, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
         'X-CSRF-TOKEN': document.querySelector('input[name=_token]').value
       },
-      body: JSON.stringify(data)
+      body: JSON.stringify(payload)
     });
-    const json = await res.json();
-    if (json.checkoutUrl) {
-      window.location.href = json.checkoutUrl;
-    } else {
-      alert('No checkoutUrl returned.');
-      console.warn('Response:', json);
+
+    const json = await resp.json();
+
+    if (resp.ok && (json.checkoutUrl || json.checkout_url)) {
+      // redirect to checkout
+      window.location.href = json.checkoutUrl || json.checkout_url;
+      return;
     }
+
+    // handle known error structure from your TeamController
+    if (json.success === false || json.error) {
+      console.error('AddToCart server returned error', json);
+      alert(json.message || json.error || 'Could not add to Shopify cart.');
+      return;
+    }
+
+    // fallback: if server returned team id but no URL
+    if (json.team_id) {
+      alert('Team saved. Open cart in next step.');
+      // optionally open team show page
+      // window.location.href = '/team/' + json.team_id;
+      return;
+    }
+
+    // default fallback
+    console.warn('Unexpected server response', json);
+    alert('Unexpected response from server. See console.');
   } catch (err) {
-    console.error('AddToCart failed', err);
-    alert('Server error, please try again.');
+    console.error('AddToCart fetch failed', err);
+    alert('Network/server error. Check console.');
   }
 });
+
 
   /* ===== Mobile stage sizing helper ===== */
   function adjustStageForViewport() {
