@@ -11,6 +11,8 @@
 </head>
 <body class="bg-light">
 
+{{-- show header unless child view sets hide_header --}}
+@unless(View::hasSection('hide_header'))
 <nav class="navbar navbar-light bg-white border-bottom mb-4">
   <div class="container">
     <a class="navbar-brand" href="{{ route('admin.products') }}">NextPrint Admin</a>
@@ -20,6 +22,7 @@
     </div>
   </div>
 </nav>
+@endunless
 
 <main class="container mb-5">
   @yield('content')
