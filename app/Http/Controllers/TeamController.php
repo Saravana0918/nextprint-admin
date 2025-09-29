@@ -3,8 +3,9 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
-use App\Models\Product; // if needed
-use App\Models\Team;    // optional - if you persist
+use App\Models\Product; 
+use App\Models\Team;     
+use App\Http\Controllers\ShopifyCartController;
 
 class TeamController extends Controller
 {
@@ -39,23 +40,33 @@ public function store(Request $request)
         'players.*.color' => 'nullable|string|max:20',
     ]);
 
-    foreach ($data['players'] as &$p) {
-        $p['name'] = isset($p['name']) ? mb_strtoupper($p['name']) : null;
-        $p['number'] = isset($p['number']) ? preg_replace('/\D/','',$p['number']) : null;
-        $p['size'] = $p['size'] ?? null;
-        $p['font'] = $p['font'] ?? null;
-        $p['color'] = $p['color'] ?? null;
-    }
-    unset($p);
-
+    // optional: save to DB
     $team = \App\Models\Team::create([
         'product_id' => $data['product_id'],
         'players' => $data['players'],
         'created_by' => auth()->id(),
     ]);
 
-    return redirect()->route('team.create', ['product_id' => $data['product_id']])
-                     ->with('success', 'Team saved successfully.');
+    // 🟢 Call ShopifyCartController addToCart
+    $shopify = new \App\Http\Controllers\ShopifyCartController();
+    $req = new Request([
+        'product_id' => $data['product_id'],
+        'quantity' => 1, // team jersey as 1 line item
+        'name_text' => 'TEAM ORDER',
+        'number_text' => 'MULTI',
+        'font' => $data['players'][0]['font'] ?? '',
+        'color' => $data['players'][0]['color'] ?? '',
+        'preview_data' => null,
+    ]);
+    $resp = $shopify->addToCart($req);
+
+    $json = $resp->getData(true);
+    if (!empty($json['checkoutUrl'])) {
+        return redirect()->away($json['checkoutUrl']); // 🟢 direct to checkout
+    }
+
+    return back()->with('error', 'Could not add to Shopify cart.');
 }
+
 
 }
