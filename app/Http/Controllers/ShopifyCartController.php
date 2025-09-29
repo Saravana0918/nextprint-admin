@@ -223,32 +223,38 @@ GRAPHQL;
 $cart = data_get($data, 'data.cartCreate.cart');
 $checkoutUrl = data_get($cart, 'checkoutUrl') ?: data_get($cart, 'url') ?: null;
 
-// ---- START PATCH: fallback if Shopify didn't return checkoutUrl ----
+// FALLBACK: if cartCreate didn't return checkoutUrl, build a /cart/{variant}:{qty} URL
 if (empty($checkoutUrl)) {
-    // Log full response body for debugging (keeps root cause traceable)
-    Log::warning('designer: cartCreate returned no checkoutUrl', ['body' => $resp->body()]);
+    \Log::warning('designer: cartCreate_no_url_falling_back', ['variantId' => $variantId ?? null, 'productId' => $productId ?? null]);
 
-    // Build a simple fallback cart permalink using numeric variant id and quantity.
-    // We have $variantId (numeric) and $quantity earlier in the method.
-    // Ensure $variantId is numeric (if it is gid, try to extract the numeric id)
-    $numericVariantId = $variantId;
-    // If variant id looks like gid://shopify/ProductVariant/12345, extract last part
+    // try get numeric variant id if we have it (strip gid if present)
+    $numericVariantId = $variantId ?? null;
     if (is_string($numericVariantId) && str_contains($numericVariantId, '/')) {
         $parts = explode('/', $numericVariantId);
         $numericVariantId = end($parts);
     }
-    // Build fallback URL
-    $fallbackCheckout = "https://{$shop}/cart/{$numericVariantId}:{$quantity}";
 
-    Log::info('designer: using fallback cart url', ['fallback' => $fallbackCheckout, 'variant' => $numericVariantId, 'quantity' => $quantity]);
+    // if still empty try product_variants table
+    if (empty($numericVariantId) && \Illuminate\Support\Facades\Schema::hasTable('product_variants')) {
+        try {
+            $pv = \App\Models\ProductVariant::where('product_id', $productId)
+                  ->whereNotNull('shopify_variant_id')
+                  ->first();
+            if ($pv) $numericVariantId = $pv->shopify_variant_id;
+        } catch (\Throwable $e) {
+            \Log::warning('designer: fallback_lookup_failed', ['err' => $e->getMessage()]);
+        }
+    }
 
-    // Set checkoutUrl to fallback so front-end will redirect to it
-    $checkoutUrl = $fallbackCheckout;
+    if (!empty($numericVariantId) && !empty($shop = env('SHOPIFY_STORE'))) {
+        $fallback = "https://{$shop}/cart/{$numericVariantId}:{$quantity}";
+        \Log::info('designer: fallback_cart_url', ['fallback' => $fallback]);
+        return response()->json(['checkoutUrl' => $fallback]);
+    }
+
+    // final fallback: return error json (and log body)
+    return response()->json(['error'=>'no_checkout_url','body'=>$resp->body() ?? null], 500);
 }
-// ---- END PATCH ----
-
-// Return success JSON with checkoutUrl (either real or fallback)
-return response()->json(['success' => true, 'team_id' => $team->id ?? null, 'checkoutUrl' => $checkoutUrl]);
 
 
         } catch (\Throwable $e) {
