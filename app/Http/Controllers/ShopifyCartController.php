@@ -3,235 +3,135 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Http;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Response;
+use App\Models\Team;
+use App\Models\Product;
+use App\Http\Controllers\ShopifyCartController;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Schema;
-use App\Models\ProductVariant;
 
-class ShopifyCartController extends Controller
+class TeamController extends Controller
 {
-    /**
-     * Create a Shopify cart with one line per player (or fallback to single line).
-     * Expects payload:
-     *  - product_id (local numeric)
-     *  - shopify_product_id (string) optional but highly recommended
-     *  - players: [ { name, number, size, font, color, variant_id? } ]
-     *  - quantity (fallback for single-line)
-     */
-    public function addToCart(Request $request)
+    public function create(Request $request)
     {
-        $validated = $request->validate([
-            'product_id'           => 'required|integer',
-            'shopify_product_id'   => 'nullable|string',
-            'players'              => 'nullable|array',
-            'players.*.name'       => 'nullable|string|max:60',
-            'players.*.number'     => 'nullable|string|max:20',
-            'players.*.size'       => 'nullable|string|max:20',
-            'players.*.font'       => 'nullable|string|max:100',
-            'players.*.color'      => 'nullable|string|max:20',
-            'players.*.variant_id' => 'nullable',
-            'quantity'             => 'nullable|integer|min:1',
-            'preview_data'         => 'nullable|string', // base64 optional
-            'preview_url'          => 'nullable|url',
-        ]);
-
-        $productId = $validated['product_id'];
-        $shopifyProductId = $validated['shopify_product_id'] ?? null;
-        $players = $validated['players'] ?? null;
-        $fallbackQuantity = $validated['quantity'] ?? 1;
-
-        Log::info('designer: addToCart_called', [
-            'product_id' => $productId,
-            'players_count' => is_array($players) ? count($players) : 0,
-            'shopify_product_id' => $shopifyProductId,
-        ]);
-
-        // helper to resolve variant id (string numeric id)
-        $resolveVariant = function($productId, $size = null, $incomingVariant = null, $shopifyProductId = null) {
-            // prefer incoming variant id
-            if (!empty($incomingVariant)) return (string)$incomingVariant;
-
-            // try product_variants DB table if exists
-            if (!empty($size) && Schema::hasTable('product_variants')) {
-                try {
-                    $pv = ProductVariant::where('product_id', $productId)
-                        ->where(function($q) use ($size) {
-                            $q->where('option_value', $size)
-                              ->orWhere('option_value', strtoupper($size))
-                              ->orWhere('option_value', strtolower($size));
-                        })->whereNotNull('shopify_variant_id')->first();
-
-                    if ($pv && !empty($pv->shopify_variant_id)) return (string)$pv->shopify_variant_id;
-                } catch (\Throwable $e) {
-                    Log::warning('designer: product_variants_lookup_failed', ['err' => $e->getMessage()]);
-                }
-            }
-
-            // fallback: fetch from Shopify Admin API and pick a variant
-            if (!empty($shopifyProductId)) {
-                try {
-                    $shop = env('SHOPIFY_STORE');
-                    $adminToken = env('SHOPIFY_ADMIN_API_TOKEN');
-                    if ($shop && $adminToken) {
-                        $resp = Http::withHeaders([
-                            'X-Shopify-Access-Token' => $adminToken,
-                            'Content-Type' => 'application/json'
-                        ])->get("https://{$shop}/admin/api/2025-01/products/{$shopifyProductId}.json");
-
-                        if ($resp->successful() && !empty($resp->json('product'))) {
-                            $productData = $resp->json('product');
-                            $variants = $productData['variants'] ?? [];
-                            foreach ($variants as $v) {
-                                $opt1 = $v['option1'] ?? '';
-                                $title = $v['title'] ?? '';
-                                if ($size && (strcasecmp(trim($opt1), trim($size)) === 0 || stripos($title, $size) !== false)) {
-                                    return (string)$v['id'];
-                                }
-                            }
-                            // fallback to first variant
-                            if (!empty($variants)) return (string)$variants[0]['id'];
-                        }
-                    }
-                } catch (\Throwable $e) {
-                    Log::warning('designer: admin_fetch_failed', ['err' => $e->getMessage()]);
-                }
-            }
-
-            return null;
-        };
-
-        // Build lines for cartCreate
-        $lines = [];
-
-        if (is_array($players) && count($players) > 0) {
-            foreach ($players as $pl) {
-                $size = $pl['size'] ?? null;
-                $incomingVariant = $pl['variant_id'] ?? null;
-
-                $variantId = $resolveVariant($productId, $size, $incomingVariant, $shopifyProductId);
-
-                if (empty($variantId)) {
-                    // skip player with no variant (log)
-                    Log::warning('designer: no_variant_for_player', ['player' => $pl, 'product_id' => $productId]);
-                    continue;
-                }
-
-                $variantGid = 'gid://shopify/ProductVariant/' . (string)$variantId;
-
-                $attrs = [
-                    ['key' => 'Name', 'value' => ($pl['name'] ?? '')],
-                    ['key' => 'Number', 'value' => ($pl['number'] ?? '')],
-                    ['key' => 'Font', 'value' => ($pl['font'] ?? '')],
-                    ['key' => 'Color', 'value' => ($pl['color'] ?? '')],
-                ];
-
-                $lines[] = [
-                    'merchandiseId' => $variantGid,
-                    'quantity' => 1,
-                    'attributes' => array_map(fn($a) => ['key' => $a['key'], 'value' => $a['value']], $attrs),
-                ];
-            }
+        $productId = $request->query('product_id');
+        $product = null;
+        if ($productId) {
+            $product = Product::find($productId);
         }
 
-        // If no player lines resolved, fallback to single line
-        if (empty($lines)) {
-            $singleVariant = $resolveVariant($productId, $request->input('size', null), null, $shopifyProductId);
-            if (empty($singleVariant)) {
-                Log::error('designer: no_variant_any', ['product_id' => $productId]);
-                return response()->json(['error' => 'Could not determine any product variant (size).'], 422);
+        $prefill = [
+            'name'   => $request->query('prefill_name', ''),
+            'number' => $request->query('prefill_number', ''),
+            'font'   => $request->query('prefill_font', ''),
+            'color'  => $request->query('prefill_color', ''),
+            'size'   => $request->query('prefill_size', ''),
+        ];
+
+        return view('team.create', compact('product', 'prefill'));
+    }
+
+    public function store(Request $request)
+    {
+        $data = $request->validate([
+            'product_id'        => 'required|integer|exists:products,id',
+            'players'           => 'required|array|min:1',
+            'players.*.name'    => 'required|string|max:60',
+            'players.*.number'  => ['required','regex:/^\d{1,3}$/'],
+            'players.*.size'    => 'nullable|string|max:10',
+            'players.*.font'    => 'nullable|string|max:50',
+            'players.*.color'   => 'nullable|string|max:20',
+            'players.*.variant_id' => 'nullable',
+        ]);
+
+        // Save team
+        try {
+            $team = Team::create([
+                'product_id' => $data['product_id'],
+                'players'    => $data['players'],
+                'created_by' => auth()->id() ?? null,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Team create failed: '.$e->getMessage(), ['trace'=>$e->getTraceAsString()]);
+            if ($request->wantsJson() || $request->ajax()) {
+                return response()->json(['success'=>false,'message'=>'Could not save team.'],500);
             }
-            $lines[] = [
-                'merchandiseId' => 'gid://shopify/ProductVariant/' . (string)$singleVariant,
-                'quantity' => (int)$fallbackQuantity,
-                'attributes' => [
-                    ['key' => 'Name', 'value' => $request->input('name_text', '')],
-                    ['key' => 'Number', 'value' => $request->input('number_text', '')],
-                    ['key' => 'Font', 'value' => $request->input('font', '')],
-                    ['key' => 'Color', 'value' => $request->input('color', '')],
-                ],
+            return back()->with('error','Could not save team. Please try again.');
+        }
+
+        // Build players payload for Shopify
+        $playersForShopify = [];
+        foreach ($data['players'] as $p) {
+            $playersForShopify[] = [
+                'name'       => $p['name'] ?? '',
+                'number'     => $p['number'] ?? '',
+                'size'       => $p['size'] ?? null,
+                'font'       => $p['font'] ?? '',
+                'color'      => $p['color'] ?? '',
+                'variant_id' => $p['variant_id'] ?? null,
             ];
         }
 
-        // Build GraphQL mutation
-        $mutation = <<<'GRAPHQL'
-mutation cartCreate($input: CartInput!) {
-  cartCreate(input: $input) {
-    cart {
-      id
-      checkoutUrl
-      createdAt
-      updatedAt
-    }
-    userErrors {
-      field
-      message
-    }
-  }
-}
-GRAPHQL;
+        $product = Product::find($data['product_id']);
+        $shopifyProductId = $product->shopify_product_id ?? null;
 
-        $variables = ['input' => ['lines' => $lines]];
+        $shopifyPayload = [
+            'product_id' => $data['product_id'],
+            'players' => $playersForShopify,
+            'shopify_product_id' => $shopifyProductId ? (string)$shopifyProductId : null,
+            'team_id' => $team->id,
+        ];
 
-        // Storefront API call
-        $shop = env('SHOPIFY_STORE');
-        $storefrontToken = env('SHOPIFY_STOREFRONT_TOKEN');
-
-        if (empty($shop) || empty($storefrontToken)) {
-            Log::error('designer: storefront_token_missing', ['shop' => $shop]);
-            return response()->json(['error' => 'Storefront token or shop missing'], 500);
-        }
-
+        // Call ShopifyCartController
         try {
-            $endpoint = "https://{$shop}/api/2024-10/graphql.json";
-            Log::info('designer: cartCreate_request', ['endpoint' => $endpoint, 'variables' => $variables]);
+            $shopifyController = app(ShopifyCartController::class);
+            $resp = $shopifyController->addToCart(new Request($shopifyPayload));
 
-            $resp = Http::withHeaders([
-                'X-Shopify-Storefront-Access-Token' => $storefrontToken,
-                'Content-Type' => 'application/json',
-            ])->post($endpoint, [
-                'query' => $mutation,
-                'variables' => $variables,
-            ]);
+            $checkoutUrl = null;
 
-            Log::info('designer: cartCreate_response', ['status' => $resp->status(), 'body' => $resp->body()]);
-
-            if (!$resp->successful()) {
-                return response()->json(['error' => 'cartCreate_failed', 'status' => $resp->status(), 'body' => $resp->body()], 500);
+            if ($resp instanceof RedirectResponse) {
+                return $resp;
             }
 
-            $data = $resp->json();
-            $userErrors = data_get($data, 'data.cartCreate.userErrors', []);
-            if (!empty($userErrors)) {
-                Log::error('designer: cartCreate_userErrors', ['errors' => $userErrors, 'body' => $resp->body()]);
-                return response()->json(['error' => 'cartCreate_userErrors', 'details' => $userErrors, 'body' => $resp->body()], 500);
+            if ($resp instanceof JsonResponse) {
+                $json = $resp->getData(true);
+                $checkoutUrl = $json['checkoutUrl'] ?? $json['checkout_url'] ?? null;
+            } elseif ($resp instanceof Response) {
+                $content = $resp->getContent();
+                $maybe = @json_decode($content, true);
+                if (is_array($maybe)) {
+                    $checkoutUrl = $maybe['checkoutUrl'] ?? $maybe['checkout_url'] ?? null;
+                }
+            } elseif (is_array($resp)) {
+                $checkoutUrl = $resp['checkoutUrl'] ?? $resp['checkout_url'] ?? null;
+            } elseif (is_string($resp)) {
+                if (filter_var($resp, FILTER_VALIDATE_URL)) {
+                    $checkoutUrl = $resp;
+                } else {
+                    $maybe = @json_decode($resp, true);
+                    if (is_array($maybe)) {
+                        $checkoutUrl = $maybe['checkoutUrl'] ?? $maybe['checkout_url'] ?? null;
+                    }
+                }
             }
 
-            $cart = data_get($data, 'data.cartCreate.cart');
-            $checkoutUrl = data_get($cart, 'checkoutUrl') ?: null;
+            if ($request->wantsJson() || $request->ajax()) {
+                return response()->json(['success'=>true,'team_id'=>$team->id,'checkoutUrl'=>$checkoutUrl],200);
+            }
 
             if (!empty($checkoutUrl)) {
-                return response()->json(['checkoutUrl' => $checkoutUrl]);
+                return redirect()->away($checkoutUrl);
             }
 
-            // fallback: /cart/{variant}:{qty} (first line)
-            $firstLine = $lines[0] ?? null;
-            if ($firstLine) {
-                $gid = $firstLine['merchandiseId'];
-                $numeric = $gid;
-                if (is_string($numeric) && str_contains($numeric, '/')) {
-                    $parts = explode('/', $numeric);
-                    $numeric = end($parts);
-                }
-                if (!empty($numeric)) {
-                    $fallback = "https://{$shop}/cart/{$numeric}:{$firstLine['quantity']}";
-                    return response()->json(['checkoutUrl' => $fallback]);
-                }
-            }
+            return redirect()->route('team.show', $team->id)->with('success','Team saved. Proceed to cart manually.');
 
-            return response()->json(['error' => 'no_checkout_url', 'body' => $resp->body()], 500);
         } catch (\Throwable $e) {
-            Log::error('designer: cartCreate_exception', ['err' => $e->getMessage()]);
-            return response()->json(['error' => 'exception', 'msg' => $e->getMessage()], 500);
+            Log::error('Shopify addToCart failed: '.$e->getMessage(), ['trace'=>$e->getTraceAsString(),'payload'=>$shopifyPayload]);
+            if ($request->wantsJson() || $request->ajax()) {
+                return response()->json(['success'=>false,'message'=>'Could not add to Shopify cart.'],500);
+            }
+            return back()->with('error','Could not add to Shopify cart. Please try again.');
         }
     }
 }
