@@ -64,10 +64,10 @@
         <input type="hidden" name="product_id" value="{{ $product->id ?? '' }}">
 
         <div class="mb-3">
-          <button type="button" id="btn-add-row" class="btn btn-primary">ADD NEW</button>
-          <button type="submit" class="btn btn-success">Add To Cart</button>
-          <a href="{{ url()->previous() }}" class="btn btn-secondary btn-block">Back</a>
-        </div>
+        <button type="button" id="btn-add-row" class="btn btn-primary">ADD NEW</button>
+        <button type="submit" class="btn btn-success">Save Team</button>
+        <a href="{{ url()->previous() }}" class="btn btn-secondary btn-block">Back</a>
+      </div>
 
         <div id="players-list" class="mb-4">
           <!-- JS will insert rows here -->
