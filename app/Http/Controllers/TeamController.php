@@ -40,33 +40,45 @@ public function store(Request $request)
         'players.*.color' => 'nullable|string|max:20',
     ]);
 
-    // optional: save to DB
-    $team = \App\Models\Team::create([
-        'product_id' => $data['product_id'],
-        'players' => $data['players'],
-        'created_by' => auth()->id(),
-    ]);
+    // save team record (optional)
+    try {
+        Team::create([
+            'product_id' => $data['product_id'],
+            'players'    => $data['players'],
+            'created_by' => auth()->id() ?? null,
+        ]);
+    } catch (\Throwable $e) {
+        \Log::warning('team.save_failed', ['err'=>$e->getMessage()]);
+    }
 
-    // 🟢 Call ShopifyCartController addToCart
-    $shopify = new \App\Http\Controllers\ShopifyCartController();
+    // Build request for Shopify
+    $first = $data['players'][0] ?? [];
     $req = new Request([
-        'product_id' => $data['product_id'],
-        'quantity' => 1, // team jersey as 1 line item
-        'name_text' => 'TEAM ORDER',
-        'number_text' => 'MULTI',
-        'font' => $data['players'][0]['font'] ?? '',
-        'color' => $data['players'][0]['color'] ?? '',
+        'product_id'   => $data['product_id'],
+        'quantity'     => 1,
+        'name_text'    => implode(', ', array_map(fn($p) => $p['name'].'#'.$p['number'], $data['players'])),
+        'number_text'  => 'TEAM',
+        'font'         => $first['font'] ?? '',
+        'color'        => $first['color'] ?? '',
         'preview_data' => null,
     ]);
+
+    $shopify = app(ShopifyCartController::class);
     $resp = $shopify->addToCart($req);
 
-    $json = $resp->getData(true);
+    if ($resp instanceof \Illuminate\Http\JsonResponse) {
+        $json = $resp->getData(true);
+    } else {
+        $json = json_decode($resp->getContent(), true) ?? [];
+    }
+
     if (!empty($json['checkoutUrl'])) {
-        return redirect()->away($json['checkoutUrl']); // 🟢 direct to checkout
+        return redirect()->away($json['checkoutUrl']);
     }
 
     return back()->with('error', 'Could not add to Shopify cart.');
 }
+
 
 
 }
