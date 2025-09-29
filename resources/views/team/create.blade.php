@@ -1,4 +1,5 @@
 @extends('layouts.app')
+@section('hide_header', '1')    {{-- tell layout to hide header for this page --}}
 
 @section('content')
 <div class="container py-4">
