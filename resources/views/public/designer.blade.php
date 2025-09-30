@@ -213,7 +213,7 @@
                 <!-- wrapper kept simple so mobile mover JS can pick and move this exact input node -->
                 <div class="np-field-wrap number-input">
                   <input id="np-num" type="text" maxlength="3" inputmode="numeric"
-                        class="form-control text-center" placeholder="YOUR NUMBER">
+                        class="form-control text-center" placeholder="09">
                   <!-- helper text (desktop) -->
                   <div class="form-text small hide-on-mobile">Digits only. 1–3 digits.</div>
                   <!-- MAX label (visible on mobile via CSS) -->
@@ -449,7 +449,7 @@ document.getElementById('btn-add-team').addEventListener('click', function(e){
       }
       if (pvNum && numEl) {
         const numTxt = (numEl.value||'').replace(/\D/g,'');
-        pvNum.textContent = numTxt || 'NUMBER';
+        pvNum.textContent = numTxt || '09';
       }
       applyLayout();
     }
