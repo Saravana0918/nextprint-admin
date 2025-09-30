@@ -9,15 +9,15 @@ class ShopifyProduct extends Model
     protected $table = 'shopify_products';
 
     protected $fillable = [
-        'shopify_product_id',   // important
-        'name',                 // product title
+        'shopify_product_id',  
+        'name',                
         'handle',
         'vendor',
         'status',
         'image_url',
-        'price',                // add this
-        'min_price',            // keep this
-        'max_price',            // optional but good
+        'price',              
+        'min_price',          
+        'max_price',            
     ];
 
     protected $casts = [
