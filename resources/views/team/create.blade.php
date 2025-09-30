@@ -221,7 +221,7 @@ document.addEventListener('DOMContentLoaded', function() {
   const ovNum  = document.getElementById('overlay-number');
 
   // Slot positions (percent of stage height)
-  const nameSlot = { top_pct: 22,  height_pct: 8,  width_pct: 85 };
+  const nameSlot = { top_pct: 25,  height_pct: 8,  width_pct: 85 };
   const numSlot  = { top_pct: 54, height_pct: 12, width_pct: 70 };
 
   function computeStageRect() { return stage.getBoundingClientRect(); }
@@ -251,7 +251,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const topPx = Math.round((slot.top_pct/100) * rect.height);
     el.style.top = topPx + 'px';
     el.style.left = '50%';
-    el.style.transform = 'translateX(-50%)';
+    el.style.transform = 'translateX(-55%)';
     el.textContent = text || '';
     fitTextToBox(el, w, h, opts);
   }
