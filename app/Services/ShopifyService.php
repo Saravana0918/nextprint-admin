@@ -52,17 +52,15 @@ class ShopifyService
      * Uses REST products.json with cursor (page_info) pagination and
      * a case-insensitive tag match. Returns number of processed products.
      */
-    public function syncNextprintToLocal(): int
+public function syncNextprintToLocal(): int
 {
-    // collection name to look for (can set in .env as NEXTPRINT_COLLECTION)
     $collectionName = trim((string) env('NEXTPRINT_COLLECTION', 'Show in NextPrint'));
     if ($collectionName === '') {
         throw new \RuntimeException('NEXTPRINT_COLLECTION not set in .env');
     }
 
-    // helper to find collection id (search both custom_collections and smart_collections)
+    // find collection id
     $findCollectionId = function(string $name) {
-        // custom_collections
         $url = "{$this->base}/admin/api/{$this->version}/custom_collections.json";
         $resp = Http::withHeaders(['X-Shopify-Access-Token' => $this->token])->get($url, ['title' => $name]);
         $resp->throw();
@@ -71,7 +69,6 @@ class ShopifyService
             return (int) $data['custom_collections'][0]['id'];
         }
 
-        // smart_collections
         $url = "{$this->base}/admin/api/{$this->version}/smart_collections.json";
         $resp = Http::withHeaders(['X-Shopify-Access-Token' => $this->token])->get($url, ['title' => $name]);
         $resp->throw();
@@ -85,9 +82,41 @@ class ShopifyService
 
     $collectionId = $findCollectionId($collectionName);
     if (!$collectionId) {
-        // no collection found — nothing to sync
+        Log::info('SHOPIFY SERVICE - no collection id', ['collection' => $collectionName]);
         return 0;
     }
+
+    // price parse helper - robust for many shapes
+    $parsePrice = function($candidate) {
+        if ($candidate === null) return null;
+
+        // presentment_prices: [ ['price' => ['amount' => '123.45']], ... ]
+        if (is_array($candidate)) {
+            if (!empty($candidate[0]['price']['amount'])) {
+                return (float) $candidate[0]['price']['amount'];
+            }
+            if (!empty($candidate['price']['amount'])) {
+                return (float) $candidate['price']['amount'];
+            }
+            if (!empty($candidate['amount'])) {
+                // sometimes priceRangeV2-like shape
+                return (float) $candidate['amount'];
+            }
+            // nested GraphQL shape: priceRangeV2 => minVariantPrice => amount
+            if (!empty($candidate['minVariantPrice']['amount'])) {
+                return (float) $candidate['minVariantPrice']['amount'];
+            }
+        }
+
+        // string or numeric: remove currency symbols
+        if (is_string($candidate) || is_numeric($candidate)) {
+            $clean = preg_replace('/[^\d.\-]/', '', (string)$candidate);
+            if ($clean === '') return null;
+            return (float) $clean;
+        }
+
+        return null;
+    };
 
     $processed = 0;
     $perPage = 250;
@@ -96,9 +125,7 @@ class ShopifyService
 
     while (true) {
         $params = ['limit' => $perPage];
-        if ($pageInfo) {
-            $params['page_info'] = $pageInfo;
-        }
+        if ($pageInfo) $params['page_info'] = $pageInfo;
 
         $resp = Http::withHeaders(['X-Shopify-Access-Token' => $this->token])->get($baseUrl, $params);
         $resp->throw();
@@ -106,63 +133,129 @@ class ShopifyService
         $products = $data['products'] ?? [];
 
         foreach ($products as $product) {
-            // upsert product into local DB (adjust schema fields as needed)
-            // compute min price from variants (robust to different REST payload shapes)
+            try {
+                Log::info('SHOPIFY SYNC - product_raw', ['id' => $product['id'] ?? null, 'title' => $product['title'] ?? null]);
+
                 $variantPrices = [];
+
+                // If GraphQL-like priceRangeV2 is present in product (some earlier code may put it in 'priceRangeV2' when normalized)
+                if (!empty($product['priceRangeV2']) && is_array($product['priceRangeV2'])) {
+                    $minCandidate = $product['priceRangeV2']['minVariantPrice']['amount'] ?? null;
+                    $maxCandidate = $product['priceRangeV2']['maxVariantPrice']['amount'] ?? null;
+                    if ($minCandidate !== null) $variantPrices[] = (float) $minCandidate;
+                    if ($maxCandidate !== null) $variantPrices[] = (float) $maxCandidate;
+                }
+
+                // Primary: iterate variants and parse many shapes
                 if (!empty($product['variants']) && is_array($product['variants'])) {
                     foreach ($product['variants'] as $v) {
-                        // variant price can be in 'price', or 'price_cents', etc.
-                        if (!empty($v['price']) && is_numeric($v['price']) && (float)$v['price'] > 0) {
-                            $variantPrices[] = (float) $v['price'];
-                        } elseif (!empty($v['price_cents']) && (int)$v['price_cents'] > 0) {
-                            $variantPrices[] = (float)$v['price_cents'] / 100;
-                        } elseif (!empty($v['price_in_cents']) && (int)$v['price_in_cents'] > 0) {
-                            $variantPrices[] = (float)$v['price_in_cents'] / 100;
+                        // debug each variant shape lightly
+                        Log::info('SHOPIFY SYNC - variant_debug', [
+                            'product_id' => $product['id'] ?? null,
+                            'variant_id' => $v['id'] ?? null,
+                            'raw_variant_keys' => array_keys($v),
+                            'raw_price' => $v['price'] ?? ($v['presentment_prices'] ?? ($v['compare_at_price'] ?? null)),
+                        ]);
+
+                        // candidate locations
+                        $candidates = [
+                            $v['price'] ?? null,
+                            $v['presentment_prices'] ?? null,
+                            $v['compare_at_price'] ?? null,
+                            $v['price_in_cents'] ?? null,
+                            $v['price_cents'] ?? null,
+                            $v['price'][0]['amount'] ?? null,
+                        ];
+
+                        foreach ($candidates as $cand) {
+                            $p = $parsePrice($cand);
+                            if ($p !== null && $p > 0) {
+                                $variantPrices[] = $p;
+                                break; // found price for this variant
+                            }
                         }
                     }
                 }
 
-                // fallback: if price not in variants, try top-level (some REST shapes)
+                // Fallbacks: top-level product price
                 if (empty($variantPrices)) {
-                    if (!empty($product['variants'][0]['price'])) {
-                        $variantPrices[] = (float) $product['variants'][0]['price'];
-                    } elseif (!empty($product['price'])) {
-                        $variantPrices[] = (float) $product['price'];
+                    $fallbackCandidates = [
+                        $product['variants'][0]['price'] ?? null,
+                        $product['price'] ?? null,
+                        $product['raw']['priceRangeV2'] ?? null,
+                        $product['raw']['variants'][0]['price'] ?? null,
+                        $product['raw']['variants'][0]['presentment_prices'] ?? null,
+                    ];
+                    foreach ($fallbackCandidates as $fc) {
+                        $p = $parsePrice($fc);
+                        if ($p !== null && $p > 0) {
+                            $variantPrices[] = $p;
+                            break;
+                        }
                     }
                 }
 
-                $minPrice = !empty($variantPrices) ? min($variantPrices) : 0.00;
+                // compute min/max
+                $minPrice = null;
+                $maxPrice = null;
+                if (!empty($variantPrices)) {
+                    $minPrice = round(min($variantPrices), 2);
+                    $maxPrice = round(max($variantPrices), 2);
+                }
 
-                // now upsert product (store both price & min_price)
+                // choose primary price: minPrice if available, else first non-zero
+                $primaryPrice = $minPrice;
+                if ($primaryPrice === null && !empty($variantPrices)) {
+                    $primaryPrice = round($variantPrices[0], 2);
+                }
+
+                Log::info('SHOPIFY SYNC - price_result', [
+                    'product_id' => $product['id'] ?? null,
+                    'title' => $product['title'] ?? null,
+                    'variant_count' => count($product['variants'] ?? []),
+                    'found_prices' => $variantPrices,
+                    'min_price' => $minPrice,
+                    'max_price' => $maxPrice,
+                    'primary_price' => $primaryPrice,
+                ]);
+
+                // Upsert to local DB (use your Product model; adjust if you use ShopifyProduct)
                 \App\Models\Product::updateOrCreate(
-                    ['shopify_product_id' => $product['id']],
+                    ['shopify_product_id' => (string)($product['id'] ?? '')],
                     [
                         'name'      => $product['title'] ?? null,
-                        'price'     => $minPrice,      // displayed price (keep consistent)
-                        'min_price' => $minPrice,
+                        'price'     => $primaryPrice !== null ? $primaryPrice : null,
+                        'min_price' => $minPrice !== null ? $minPrice : null,
+                        'max_price' => $maxPrice !== null ? $maxPrice : null,
                         'vendor'    => $product['vendor'] ?? null,
                         'status'    => $product['status'] ?? 'active',
+                        'handle'    => $product['handle'] ?? null,
+                        'image_url' => $product['image']['src'] ?? ($product['images'][0]['src'] ?? null),
                     ]
                 );
 
-            $processed++;
+                $processed++;
+            } catch (\Throwable $e) {
+                Log::error('SHOPIFY SYNC - product_upsert_error', ['id' => $product['id'] ?? null, 'err' => $e->getMessage()]);
+                continue;
+            }
         }
 
-        // parse Link header for next page_info
+        // pagination next page_info
         $linkHeader = $resp->header('Link');
         $nextPageInfo = null;
         if ($linkHeader && preg_match('/<[^>]+[?&]page_info=([^&>]+)[^>]*>;\s*rel="next"/', $linkHeader, $m)) {
             $nextPageInfo = $m[1];
         }
 
-        if (!$nextPageInfo) {
-            break;
-        }
+        if (!$nextPageInfo) break;
         $pageInfo = $nextPageInfo;
     }
 
+    Log::info('SHOPIFY SYNC - complete', ['processed' => $processed, 'collection' => $collectionName]);
     return $processed;
 }
+
 
 /**
  * Return all products for a collection given its handle (REST).
