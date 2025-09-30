@@ -18,7 +18,7 @@
             <div id="overlay-name" style="
                 position:absolute;
                 left:50%;
-                transform:translateX(-50%);
+                transform:translateX(-55%);
                 font-weight:800;
                 font-family: 'Oswald', sans-serif;
                 color:#ffffff;
@@ -32,7 +32,7 @@
             <div id="overlay-number" style="
                 position:absolute;
                 left:50%;
-                transform:translateX(-50%);
+                transform:translateX(-55%);
                 font-weight:900;
                 font-family: 'Oswald', sans-serif;
                 color:#ffffff;
@@ -221,7 +221,7 @@ document.addEventListener('DOMContentLoaded', function() {
   const ovNum  = document.getElementById('overlay-number');
 
   // Slot positions (percent of stage height)
-  const nameSlot = { top_pct: 18,  height_pct: 8,  width_pct: 85 };
+  const nameSlot = { top_pct: 22,  height_pct: 8,  width_pct: 85 };
   const numSlot  = { top_pct: 54, height_pct: 12, width_pct: 70 };
 
   function computeStageRect() { return stage.getBoundingClientRect(); }
