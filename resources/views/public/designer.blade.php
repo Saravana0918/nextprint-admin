@@ -75,7 +75,19 @@
   /* 2) np-stage & image frame (visible pale border around t-shirt) */
   .np-stage { padding: 12px; background: transparent; box-sizing: border-box; border-radius: 10px;  z-index: 100; position: relative !important; }
   
-   #np-atc-btn.mobile-fixed { position: absolute !important; top: -40px !important; right: -25px !important; z-index: 99999 !important; width: auto !important; min-width: 110px !important; height: 40px !important; padding: 6px 12px !important; border-radius: 24px !important; box-shadow: 0 6px 18px rgba(0,0,0,0.25) !important; white-space: nowrap !important; }
+  #np-atc-btn.mobile-fixed {
+  position: fixed !important;
+  top: 12px !important;
+  right: 12px !important;
+  z-index: 99999 !important;
+  width: 140px !important;
+  height: 44px !important;
+  padding: 6px 12px !important;
+  border-radius: 28px !important;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.25) !important;
+  background: #0d6efd !important;
+  color: #fff !important;
+}
   #np-atc-btn.mobile-fixed-outside { position: fixed !important; top: 12px !important; right: 12px !important; z-index: 99999 !important; }
   /* style the base image to look like framed box */
   .np-stage img#np-base { display:block; width:100%; height:auto; border-radius:8px;   background-color:#f6f6f6; box-shadow: 0 6px 18px rgba(0,0,0,0.35); border: 3px solid rgba(255,255,255,0.12); position: relative; z-index: 14; }
@@ -127,7 +139,7 @@
   /* small utility */
   .mobile-display { display: none; }  
   .color-display  { color: #fff; }
-  .right-layout{ margin-top: -320px; }
+  .right-layout{ margin-top: -395px; }
     
   .np-stage.covering { pointer-events: none; -webkit-user-select: none; }
 
@@ -631,22 +643,17 @@ document.getElementById('btn-add-team').addEventListener('click', function(e){
   }
 
   function moveButtonToStage() {
-    const isMobile = window.innerWidth <= 767;
-    if (isMobile) {
-      if (btn.parentNode !== stage) {
-        stage.appendChild(btn);
-        btn.classList.remove('mobile-fixed-outside');
-        btn.classList.add('mobile-fixed');
-      }
-    } else {
-      // restore to original place
-      if (placeholder.parentNode) {
-        placeholder.parentNode.insertBefore(btn, placeholder.nextSibling);
-      }
-      btn.classList.remove('mobile-fixed');
-      btn.classList.remove('mobile-fixed-outside');
-    }
+  const isMobile = window.innerWidth <= 767;
+
+  if (isMobile) {
+    // Keep button in DOM (do not re-parent) - just add class that visually floats it
+    btn.classList.add('mobile-fixed');
+  } else {
+    // restore normal layout
+    btn.classList.remove('mobile-fixed');
   }
+}
+
 
   // Keep stage fixed when keyboard opens, so it doesn't jump off-screen
   function setupKeyboardHandler() {
