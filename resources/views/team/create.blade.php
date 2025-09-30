@@ -191,7 +191,7 @@
 
   /* overlay text sizing for mobile */
    #overlay-name { font-size: 22px !important; text-shadow: 0 2px 4px rgba(0,0,0,0.5) !important; }
-  #overlay-number { font-size: 38px !important; text-shadow: 0 2px 4px rgba(0,0,0,0.5) !important; }
+  #overlay-number { font-size: 22px !important; text-shadow: 0 2px 4px rgba(0,0,0,0.5) !important; }
 
   html, body { overflow-x: hidden; }
 }
