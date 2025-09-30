@@ -12,7 +12,12 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('products', function (Blueprint $table) {
-            //
+            if (!Schema::hasColumn('products', 'min_price')) {
+                $table->decimal('min_price', 10, 2)->nullable()->after('price');
+            }
+            if (!Schema::hasColumn('products', 'max_price')) {
+                $table->decimal('max_price', 10, 2)->nullable()->after('min_price');
+            }
         });
     }
 
@@ -22,7 +27,12 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('products', function (Blueprint $table) {
-            //
+            if (Schema::hasColumn('products', 'min_price')) {
+                $table->dropColumn('min_price');
+            }
+            if (Schema::hasColumn('products', 'max_price')) {
+                $table->dropColumn('max_price');
+            }
         });
     }
 };
