@@ -127,11 +127,6 @@
   /* 7) hide desktop-only bits with this class */
   .hide-on-mobile { display: none !important; }
 
-  /* 8) make Add to Cart visible */
-  #np-atc-btn { position: fixed !important; top: 12px !important;        /* distance from top — adjust */ right: 12px !important;      /* distance from right — adjust */ z-index: 99999 !important; width: 130px !important;     /* button width on mobile */ height: 44px !important; padding: 6px 12px !important;
-  border-radius: 28px !important; box-shadow: 0 6px 18px rgba(0,0,0,0.25) !important; font-weight: 700 !important; white-space: nowrap !important;
-}
-
   /* 9) mobile large overlay styles (apply via JS .mobile-style) */
   #np-prev-name.mobile-style { top: 18px !important; font-weight: 800 !important; font-size: clamp(18px, 5.6vw, 34px) !important; letter-spacing: 1.5px !important; }
   #np-prev-num.mobile-style { top: 52% !important; transform: translate(-50%,-50%) !important; font-weight: 900 !important; font-size: clamp(28px, 8.4vw, 56px) !important; }
@@ -145,10 +140,6 @@
 
   .np-stage.covering .np-overlay { pointer-events: none; }
 
-/* keep Add to Cart clickable even when stage pointer-events:none */
-#np-atc-btn {
-  /* default mobile styling you already have */
-}
 .np-stage.covering #np-atc-btn { pointer-events: auto !important; z-index: 999999 !important;}
 
 /* Ensure controls (swatches, font select) have higher stacking when needed */
