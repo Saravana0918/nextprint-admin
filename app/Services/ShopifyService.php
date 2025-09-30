@@ -168,6 +168,11 @@ class ShopifyService
                                 'variant_full' => $v
                             ]);
 
+                            Log::info('SHOPIFY SYNC - variant_full_dump', [
+                                'product_id' => $product['id'] ?? null,
+                                'variant' => $v
+                            ]);
+
                             // candidate locations to attempt parse
                             $candidates = [
                                 $v['price'] ?? null,
