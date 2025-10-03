@@ -129,9 +129,6 @@
         pointer-events: auto !important;
         z-index: 100020 !important;
       }
-      #np-controls {
-    display: none !important;
-  }
     }
 
     @media (min-width: 768px) {
