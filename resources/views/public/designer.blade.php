@@ -83,6 +83,10 @@
         border-radius: 12px;
       }
 
+      .mobile-layout{
+        margin-top : -330px;
+      }
+
       /* ensure inputs and native controls are above overlays */
       #np-name, #np-num, #np-font, #np-color, .np-swatch, #np-size, #np-qty {
         z-index: 100040 !important;
@@ -125,6 +129,9 @@
         pointer-events: auto !important;
         z-index: 100020 !important;
       }
+      #np-controls {
+    display: none !important;
+  }
     }
 
     @media (min-width: 768px) {
