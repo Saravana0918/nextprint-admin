@@ -281,84 +281,87 @@ GQL;
      * Given the product array returned by productsByCollectionHandle(), return min price or null
      */
     private function resolveMinPriceFromProductArray(array $product): ?float
-    {
-        // 1) priceRangeV2
-        if (!empty($product['priceRangeV2']['minVariantPrice']['amount']) && $this->isValidAmount($product['priceRangeV2']['minVariantPrice']['amount'])) {
-            return (float) $product['priceRangeV2']['minVariantPrice']['amount'];
-        }
+{
+    // 1) priceRangeV2
+    if (!empty($product['priceRangeV2']['minVariantPrice']['amount']) && $this->isValidAmount($product['priceRangeV2']['minVariantPrice']['amount'])) {
+        return (float) $product['priceRangeV2']['minVariantPrice']['amount'];
+    }
 
-        // 2) priceRange (older)
-        if (!empty($product['priceRange']['minVariantPrice']['amount']) && $this->isValidAmount($product['priceRange']['minVariantPrice']['amount'])) {
-            return (float) $product['priceRange']['minVariantPrice']['amount'];
-        }
+    // 2) priceRange (older)
+    if (!empty($product['priceRange']['minVariantPrice']['amount']) && $this->isValidAmount($product['priceRange']['minVariantPrice']['amount'])) {
+        return (float) $product['priceRange']['minVariantPrice']['amount'];
+    }
 
-        // 3) variants shapes (graphQL edges or nodes, or REST list)
-        $vals = [];
+    // 3) GraphQL variants edges/nodes
+    $vals = [];
+    if (!empty($product['variants'])) {
+        $variants = $product['variants'];
 
-        if (!empty($product['variants'])) {
-            $variants = $product['variants'];
-
-            // shape: edges -> node
-            if (!empty($variants['edges']) && is_array($variants['edges'])) {
-                foreach ($variants['edges'] as $edge) {
-                    $node = $edge['node'] ?? [];
-                    $price = $node['price'] ?? null;
-                    if (!$this->isValidAmount($price) && !empty($node['presentmentPrices']['edges'][0]['node']['price']['amount'])) {
-                        $price = $node['presentmentPrices']['edges'][0]['node']['price']['amount'];
-                    }
-                    if ($this->isValidAmount($price)) $vals[] = (float)$price;
+        // edges->node
+        if (!empty($variants['edges'])) {
+            foreach ($variants['edges'] as $edge) {
+                $node = $edge['node'] ?? [];
+                $price = $node['price'] ?? null;
+                if (!$this->isValidAmount($price) && !empty($node['presentmentPrices']['edges'][0]['node']['price']['amount'])) {
+                    $price = $node['presentmentPrices']['edges'][0]['node']['price']['amount'];
                 }
-            }
-
-            // shape: nodes array
-            if (!empty($variants['nodes']) && is_array($variants['nodes'])) {
-                foreach ($variants['nodes'] as $v) {
-                    $price = $v['price'] ?? null;
-                    if ($this->isValidAmount($price)) $vals[] = (float)$price;
-                }
-            }
-
-            // shape: numeric-indexed array (REST)
-            if (array_values($variants) === $variants) {
-                foreach ($variants as $v) {
-                    if (!is_array($v)) continue;
-                    $price = $v['price'] ?? ($v['node']['price'] ?? null);
-                    if ($this->isValidAmount($price)) $vals[] = (float)$price;
-                }
+                if ($this->isValidAmount($price)) $vals[] = (float)$price;
             }
         }
 
-        // 4) raw variants (when product['raw'] present)
-        if (!empty($product['raw']['variants']) && is_array($product['raw']['variants'])) {
-            foreach ($product['raw']['variants'] as $v) {
+        // nodes[]
+        if (!empty($variants['nodes'])) {
+            foreach ($variants['nodes'] as $v) {
                 $price = $v['price'] ?? null;
                 if ($this->isValidAmount($price)) $vals[] = (float)$price;
             }
         }
 
-        if (!empty($vals)) {
-            return min($vals);
-        }
-
-        // 5) REST fallback using product id
-        $productId = null;
-        if (!empty($product['id']) && is_string($product['id']) && str_contains($product['id'], 'gid://')) {
-            $productId = self::gidToId($product['id']);
-        } elseif (!empty($product['raw']['id'])) {
-            $productId = (int) $product['raw']['id'];
-        } elseif (!empty($product['id']) && is_numeric($product['id'])) {
-            $productId = (int) $product['id'];
-        }
-
-        if ($productId) {
-            $restPrice = $this->fetchPriceViaRest((int)$productId);
-            if ($this->isValidAmount($restPrice)) {
-                return (float)$restPrice;
+        // numeric array (REST)
+        if (array_values($variants) === $variants) {
+            foreach ($variants as $v) {
+                $price = $v['price'] ?? ($v['node']['price'] ?? null);
+                if ($this->isValidAmount($price)) $vals[] = (float)$price;
             }
         }
-
-        return null;
     }
+
+    // 4) raw variants (REST fallback)
+    if (!empty($product['raw']['variants'])) {
+        foreach ($product['raw']['variants'] as $v) {
+            $price = $v['price'] ?? null;
+
+            // 🔥 NEW fallback: presentment_prices
+            if (!$this->isValidAmount($price) && !empty($v['presentment_prices'][0]['price']['amount'])) {
+                $price = $v['presentment_prices'][0]['price']['amount'];
+            }
+
+            if ($this->isValidAmount($price)) $vals[] = (float)$price;
+        }
+    }
+
+    if (!empty($vals)) {
+        return min($vals);
+    }
+
+    // 5) REST call by productId
+    $productId = null;
+    if (!empty($product['id']) && str_contains($product['id'], 'gid://')) {
+        $productId = self::gidToId($product['id']);
+    } elseif (!empty($product['raw']['id'])) {
+        $productId = (int)$product['raw']['id'];
+    }
+
+    if ($productId) {
+        $restPrice = $this->fetchPriceViaRest((int)$productId);
+        if ($this->isValidAmount($restPrice)) {
+            return (float)$restPrice;
+        }
+    }
+
+    return null;
+}
+
 
     /**
      * syncNextprintToLocal - robust implementation using collection handle from env
