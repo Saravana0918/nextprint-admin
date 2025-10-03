@@ -233,54 +233,54 @@ GQL;
     /**
      * Return whether amount is usable
      */
-    private function isValidAmount($v): bool
-    {
-        if ($v === null) return false;
-        if (is_string($v)) {
-            $v = trim($v);
-            if ($v === '') return false;
-        }
-        return is_numeric($v);
+    // add to class: isValidAmount
+private function isValidAmount($v): bool
+{
+    if ($v === null) return false;
+    if (is_string($v)) {
+        $v = trim($v);
+        if ($v === '') return false;
     }
+    return is_numeric($v);
+}
 
-    /**
-     * Fetch product price via REST product endpoint as fallback
-     */
-    private function fetchPriceViaRest(int $productId)
-    {
-        try {
-            if (empty($this->base) || empty($this->token)) return null;
-            $url = "{$this->base}/admin/api/{$this->version}/products/{$productId}.json";
-            $res = Http::withHeaders([
-                'X-Shopify-Access-Token' => $this->token,
-                'Accept' => 'application/json',
-            ])->timeout(10)->get($url);
+// add to class: fetchPriceViaRest
+private function fetchPriceViaRest(int $productId)
+{
+    try {
+        if (empty($this->base) || empty($this->token)) return null;
+        $url = "{$this->base}/admin/api/{$this->version}/products/{$productId}.json";
+        $res = Http::withHeaders([
+            'X-Shopify-Access-Token' => $this->token,
+            'Accept' => 'application/json',
+        ])->timeout(15)->get($url);
 
-            if (!$res->ok()) {
-                Log::warning('fetchPriceViaRest:not-ok', ['productId' => $productId, 'status' => $res->status()]);
-                return null;
-            }
-
-            $j = $res->json();
-            $firstVariant = $j['product']['variants'][0] ?? null;
-            if (!$firstVariant) return null;
-
-            $price = $firstVariant['price'] ?? null;
-            // presentment_prices shape fallback
-            if (!$this->isValidAmount($price) && !empty($firstVariant['presentment_prices'][0]['price']['amount'])) {
-                $price = $firstVariant['presentment_prices'][0]['price']['amount'];
-            }
-            return $price;
-        } catch (\Throwable $e) {
-            Log::warning('fetchPriceViaRest:error', ['productId' => $productId, 'err' => $e->getMessage()]);
+        if (!$res->ok()) {
+            Log::warning('fetchPriceViaRest:not-ok', ['productId' => $productId, 'status' => $res->status()]);
             return null;
         }
-    }
 
-    /**
-     * Given the product array returned by productsByCollectionHandle(), return min price or null
-     */
-    private function resolveMinPriceFromProductArray(array $product): ?float
+        $j = $res->json();
+        $firstVariant = $j['product']['variants'][0] ?? null;
+        if (!$firstVariant) return null;
+
+        // common shapes
+        $price = $firstVariant['price'] ?? null;
+        if (!$this->isValidAmount($price) && !empty($firstVariant['presentment_prices'][0]['price']['amount'])) {
+            $price = $firstVariant['presentment_prices'][0]['price']['amount'];
+        }
+        if (!$this->isValidAmount($price) && !empty($firstVariant['presentment_prices'][0]['amount'])) {
+            $price = $firstVariant['presentment_prices'][0]['amount'];
+        }
+        return $price;
+    } catch (\Throwable $e) {
+        Log::warning('fetchPriceViaRest:error', ['productId' => $productId, 'err' => $e->getMessage()]);
+        return null;
+    }
+}
+
+// add to class: resolveMinPriceFromProductArray
+private function resolveMinPriceFromProductArray(array $product): ?float
 {
     // 1) priceRangeV2
     if (!empty($product['priceRangeV2']['minVariantPrice']['amount']) && $this->isValidAmount($product['priceRangeV2']['minVariantPrice']['amount'])) {
@@ -292,13 +292,13 @@ GQL;
         return (float) $product['priceRange']['minVariantPrice']['amount'];
     }
 
-    // 3) GraphQL variants edges/nodes
+    // 3) GraphQL variants edges/nodes + presentmentPrices
     $vals = [];
     if (!empty($product['variants'])) {
         $variants = $product['variants'];
 
-        // edges->node
-        if (!empty($variants['edges'])) {
+        // edges -> node
+        if (!empty($variants['edges']) && is_array($variants['edges'])) {
             foreach ($variants['edges'] as $edge) {
                 $node = $edge['node'] ?? [];
                 $price = $node['price'] ?? null;
@@ -310,32 +310,38 @@ GQL;
         }
 
         // nodes[]
-        if (!empty($variants['nodes'])) {
+        if (!empty($variants['nodes']) && is_array($variants['nodes'])) {
             foreach ($variants['nodes'] as $v) {
                 $price = $v['price'] ?? null;
                 if ($this->isValidAmount($price)) $vals[] = (float)$price;
             }
         }
 
-        // numeric array (REST)
+        // numeric-indexed array (REST-like variants inside product['variants'])
         if (array_values($variants) === $variants) {
             foreach ($variants as $v) {
+                if (!is_array($v)) continue;
                 $price = $v['price'] ?? ($v['node']['price'] ?? null);
                 if ($this->isValidAmount($price)) $vals[] = (float)$price;
+                // presentment prices nested in REST variant
+                if (!$this->isValidAmount($price) && !empty($v['presentment_prices'][0]['price']['amount'])) {
+                    $price = $v['presentment_prices'][0]['price']['amount'];
+                    if ($this->isValidAmount($price)) $vals[] = (float)$price;
+                }
             }
         }
     }
 
-    // 4) raw variants (REST fallback)
-    if (!empty($product['raw']['variants'])) {
+    // 4) raw variants (product['raw'])
+    if (!empty($product['raw']['variants']) && is_array($product['raw']['variants'])) {
         foreach ($product['raw']['variants'] as $v) {
             $price = $v['price'] ?? null;
-
-            // 🔥 NEW fallback: presentment_prices
             if (!$this->isValidAmount($price) && !empty($v['presentment_prices'][0]['price']['amount'])) {
                 $price = $v['presentment_prices'][0]['price']['amount'];
             }
-
+            if (!$this->isValidAmount($price) && !empty($v['presentment_prices'][0]['amount'])) {
+                $price = $v['presentment_prices'][0]['amount'];
+            }
             if ($this->isValidAmount($price)) $vals[] = (float)$price;
         }
     }
@@ -344,12 +350,14 @@ GQL;
         return min($vals);
     }
 
-    // 5) REST call by productId
+    // 5) fallback: REST fetch product by id
     $productId = null;
-    if (!empty($product['id']) && str_contains($product['id'], 'gid://')) {
+    if (!empty($product['id']) && is_string($product['id']) && str_contains($product['id'], 'gid://')) {
         $productId = self::gidToId($product['id']);
     } elseif (!empty($product['raw']['id'])) {
         $productId = (int)$product['raw']['id'];
+    } elseif (!empty($product['id']) && is_numeric($product['id'])) {
+        $productId = (int)$product['id'];
     }
 
     if ($productId) {
@@ -361,6 +369,7 @@ GQL;
 
     return null;
 }
+
 
 
     /**
