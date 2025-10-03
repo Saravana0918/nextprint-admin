@@ -31,7 +31,8 @@
 
     @media (max-width: 767px) {
       .np-stage { position: relative !important; }
-       .np-mobile-controls {
+
+  .np-mobile-controls {
     position: absolute;
     left: 50%;
     transform: translateX(-50%);
@@ -45,7 +46,8 @@
     /* top will be set by JS depending on stage size */
     pointer-events: auto; /* allow typing */
   }
-   .np-mobile-controls .mobile-input {
+
+  .np-mobile-controls .mobile-input {
     width: 100%;
     box-sizing: border-box;
     background: rgba(255,255,255,0.95);
@@ -59,7 +61,8 @@
     font-size: 16px;
     color: #222;
   }
-   .np-mobile-controls .mobile-num {
+
+  .np-mobile-controls .mobile-num {
     font-size: 28px;
     padding: 10px 12px;
   }
@@ -80,7 +83,9 @@
     padding: 4px 8px;
     border-radius: 12px;
   }
-   #np-name, #np-num, #np-font, #np-color, .np-swatch, #np-size, #np-qty {
+
+  /* ensure inputs and native controls are above overlays */
+  #np-name, #np-num, #np-font, #np-color, .np-swatch, #np-size, #np-qty {
     z-index: 100040 !important;
     position: relative !important;
   }
@@ -91,7 +96,6 @@
   /* small tweak to hugely increase font on mobile number overlay (optional) */
   .np-mobile-controls .mobile-num { letter-spacing: 2px; }
 }
-
       #np-atc-btn.mobile-fixed { position: fixed !important; top: 10px !important; right: 12px !important; z-index: 99999 !important; width: 109px !important; height: 40px !important; padding: 6px 12px !important; border-radius: 28px !important; background: #0d6efd !important; color: #fff !important; }
       #np-prev-name, #np-prev-num { z-index: 999999 !important; pointer-events: none !important; text-shadow: 0 3px 10px rgba(0,0,0,0.7) !important; }
       body { background-image: url('/images/stadium-bg.jpg'); background-size: cover; background-position: center center; background-repeat: no-repeat; min-height: 100vh; position: relative; margin-top: -70px; }
@@ -99,7 +103,6 @@
       .container, .row, .np-stage, header, main, footer { position: relative; z-index: 10; }
       #np-atc-btn { position: fixed !important; top: 12px !important; right: 12px !important; z-index: 99999 !important; width: 130px !important; height: 44px !important; padding: 6px 12px !important; border-radius: 28px !important; box-shadow: 0 6px 18px rgba(0,0,0,0.25) !important; font-weight: 700 !important; white-space: nowrap !important; }
       .mobile-display { display: none; }
-      .mobile-layout { margin-top : -330px;}
       .np-col input.form-control,
 .np-col select.form-select,
 .np-col textarea,
@@ -128,7 +131,6 @@
     }
     @media (min-width: 768px) {
       .vt-icons { display: none !important; }
-      
     }
     .col-md-3.np-col > #np-controls { padding: 16px !important; box-sizing: border-box; min-height: 360px; }
   </style>
@@ -174,7 +176,7 @@
     </div>
 
     <!-- purchase + team -->
-    <div class="col-md-3 np-col order-3 order-md-3 right-layout mobile-layout">
+    <div class="col-md-3 np-col order-3 order-md-3 right-layout">
       <h4 class="desktop-display">{{ $product->name ?? ($product->title ?? 'Product') }}</h4>
 
       <!-- form (hidden fields included) -->
@@ -559,8 +561,7 @@
   } else {
     mobileOverlaySetup();
   }
-
-  // also re-run when layoutSlots or fonts arrive late
+  
   window.addEventListener('load', ()=> setTimeout(mobileOverlaySetup, 200));
 })();
 </script>
