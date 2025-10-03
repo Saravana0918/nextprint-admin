@@ -8,43 +8,52 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 
   <style>
+    /* base fonts */
     .font-bebas{font-family:'Bebas Neue', Impact, 'Arial Black', sans-serif;}
     .font-anton{font-family:'Anton', Impact, 'Arial Black', sans-serif;}
     .font-oswald{font-family:'Oswald', Arial, sans-serif;}
     .font-impact{font-family:Impact, 'Arial Black', sans-serif;}
 
+    /* preview stage */
     .np-stage { position: relative; width: 100%; max-width: 534px; margin: 0 auto; background:#fff; border-radius:8px; padding:8px; min-height: 320px; box-sizing: border-box; }
     .np-stage img { width:100%; height:auto; border-radius:6px; display:block; }
-    .np-overlay { position:absolute; font-weight:700; text-transform:uppercase; letter-spacing:2px; white-space:nowrap; display:flex; align-items:center; justify-content:center; pointer-events:none; box-sizing:border-box; }
+    .np-overlay { position:absolute; font-weight:700; text-transform:uppercase; letter-spacing:2px; white-space:nowrap; display:flex; align-items:center; justify-content:center; pointer-events:none; }
 
     .np-swatch { width:28px; height:28px; border-radius:50%; border:1px solid #ccc; cursor:pointer; display:inline-block; }
     .np-swatch.active { outline: 2px solid rgba(0,0,0,0.08); box-shadow: 0 2px 6px rgba(0,0,0,0.06); }
+    .max-count{ display:none; }
 
     body { background-color : #929292; }
     .desktop-display{ color:white; font-family: "Roboto Condensed", sans-serif; font-weight: bold; }
     .body-padding{ padding-top: 100px; }
     .right-layout{ padding-top:350px; }
+    .hide-on-mobile { display: none !important; }
 
-    /* mobile tweaks */
     @media (max-width: 767px) {
+      .np-stage { padding: 12px; background: transparent; box-sizing: border-box; border-radius: 10px;  z-index: 100; position: relative !important; }
+      #np-atc-btn.mobile-fixed { position: fixed !important; top: 10px !important; right: 12px !important; z-index: 99999 !important; width: 109px !important; height: 40px !important; padding: 6px 12px !important; border-radius: 28px !important; background: #0d6efd !important; color: #fff !important; }
+      #np-prev-name, #np-prev-num { z-index: 999999 !important; pointer-events: none !important; text-shadow: 0 3px 10px rgba(0,0,0,0.7) !important; }
       body { background-image: url('/images/stadium-bg.jpg'); background-size: cover; background-position: center center; background-repeat: no-repeat; min-height: 100vh; position: relative; margin-top: -70px; }
       body::before { content: ""; position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 5; pointer-events: none; }
       .container, .row, .np-stage, header, main, footer { position: relative; z-index: 10; }
-      .np-stage { padding: 12px; background: transparent; box-sizing: border-box; border-radius: 10px; z-index: 100; position: relative !important; }
-      .np-stage img#np-base { display:block; width:100%; height:auto; border-radius:8px; background-color:#f6f6f6; box-shadow: 0 6px 18px rgba(0,0,0,0.35); border: 3px solid rgba(255,255,255,0.12); position: relative; z-index: 14; }
-      #np-atc-btn.mobile-fixed { position: fixed !important; top: 10px !important; right: 12px !important; z-index: 99999 !important; width: 109px !important; height: 40px !important; padding: 6px 12px !important; border-radius: 28px !important; background: #0d6efd !important; color: #fff !important; }
-      /* ensure overlays are visible above image */
-      #np-prev-name, #np-prev-num { z-index: 999999 !important; pointer-events: none !important; text-shadow: 0 3px 10px rgba(0,0,0,0.7) !important; color: #fff; }
+      #np-atc-btn { position: fixed !important; top: 12px !important; right: 12px !important; z-index: 99999 !important; width: 130px !important; height: 44px !important; padding: 6px 12px !important; border-radius: 28px !important; box-shadow: 0 6px 18px rgba(0,0,0,0.25) !important; font-weight: 700 !important; white-space: nowrap !important; }
+      .mobile-display { display: none; }
     }
+    @media (min-width: 768px) {
+      .vt-icons { display: none !important; }
+    }
+    .col-md-3.np-col > #np-controls { padding: 16px !important; box-sizing: border-box; min-height: 360px; }
   </style>
 </head>
 <body class="body-padding">
+
 @php
   $img = $product->image_url ?? ($product->preview_src ?? asset('images/placeholder.png'));
 @endphp
 
 <div class="container">
   <div class="row g-4">
+    <!-- preview -->
     <div class="col-md-6 np-col order-1 order-md-2">
       <div class="border rounded p-3">
         <div class="np-stage" id="np-stage">
@@ -56,6 +65,7 @@
       </div>
     </div>
 
+    <!-- controls -->
     <div class="col-md-3 np-col order-2 order-md-1" id="np-controls">
       <input id="np-name" type="text" maxlength="12" class="form-control mb-2 text-center" placeholder="YOUR NAME">
       <input id="np-num" type="text" maxlength="3" inputmode="numeric" class="form-control mb-2 text-center" placeholder="09">
@@ -65,26 +75,44 @@
         <option value="oswald">Oswald</option>
         <option value="impact">Impact</option>
       </select>
-
-      <div class="d-flex gap-2 align-items-center mb-2">
-        <button type="button" class="np-swatch" data-color="#FFFFFF" style="background:#FFFFFF"></button>
-        <button type="button" class="np-swatch" data-color="#000000" style="background:#000000"></button>
+      <div class="mb-2">
+        <button type="button" class="np-swatch" data-color="#FFFFFF" style="background:#FFF"></button>
+        <button type="button" class="np-swatch" data-color="#000000" style="background:#000"></button>
         <button type="button" class="np-swatch" data-color="#FFD700" style="background:#FFD700"></button>
         <button type="button" class="np-swatch" data-color="#FF0000" style="background:#FF0000"></button>
         <button type="button" class="np-swatch" data-color="#1E90FF" style="background:#1E90FF"></button>
       </div>
-      <input id="np-color" type="color" class="form-control form-control-color mt-1" value="#D4AF37">
+      <input id="np-color" type="color" class="form-control form-control-color mt-2" value="#D4AF37">
     </div>
 
+    <!-- purchase + team -->
     <div class="col-md-3 np-col order-3 order-md-3 right-layout">
       <h4 class="desktop-display">{{ $product->name ?? ($product->title ?? 'Product') }}</h4>
-      <select id="np-size" name="size" class="form-select mb-2" required>
-        <option value="">Select Size</option>
-        <option value="S">S</option><option value="M">M</option>
-        <option value="L">L</option><option value="XL">XL</option>
-      </select>
-      <input id="np-qty" name="quantity" type="number" min="1" value="1" class="form-control mb-2">
-      <button id="np-atc-btn" type="button" class="btn btn-primary">Add to Cart</button>
+
+      <!-- form (hidden fields included) -->
+      <form id="np-atc-form" method="post" action="{{ route('designer.addtocart') }}">
+        @csrf
+        <input type="hidden" name="name_text" id="np-name-hidden">
+        <input type="hidden" name="number_text" id="np-num-hidden">
+        <input type="hidden" name="font" id="np-font-hidden">
+        <input type="hidden" name="color" id="np-color-hidden">
+        <input type="hidden" name="preview_data" id="np-preview-hidden">
+        <input type="hidden" name="product_id" id="np-product-id" value="{{ $product->id ?? $product->local_id ?? '' }}">
+        <input type="hidden" name="shopify_product_id" id="np-shopify-product-id" value="{{ $product->shopify_product_id ?? $product->shopify_id ?? '' }}">
+        <input type="hidden" name="variant_id" id="np-variant-id" value="">
+        <div class="mb-2">
+          <select id="np-size" name="size" class="form-select" required>
+            <option value="">Select Size</option>
+            <option value="S">S</option><option value="M">M</option><option value="L">L</option><option value="XL">XL</option>
+          </select>
+        </div>
+        <div class="mb-2">
+          <input id="np-qty" name="quantity" type="number" min="1" value="1" class="form-control">
+        </div>
+
+        <button id="np-atc-btn" type="submit" class="btn btn-primary" disabled>Add to Cart</button>
+        <a href="#" class="btn btn-success" id="btn-add-team" style="margin-left:8px;">Add Team Players</a>
+      </form>
     </div>
   </div>
 </div>
@@ -93,77 +121,80 @@
 
 <script>
 (function(){
-  // short helpers
   const $ = id => document.getElementById(id);
-  const pvName = $('np-prev-name'), pvNum = $('np-prev-num'), baseImg = $('np-base'), stage = $('np-stage');
+
+  // elements
   const nameEl = $('np-name'), numEl = $('np-num'), fontEl = $('np-font'), colorEl = $('np-color');
-  const ctrls = $('np-controls'), btn = $('np-atc-btn');
+  const pvName = $('np-prev-name'), pvNum = $('np-prev-num'), baseImg = $('np-base'), stage = $('np-stage');
+  const btn = $('np-atc-btn'), form = $('np-atc-form'), addTeam = $('btn-add-team');
   const layout = (typeof window.layoutSlots === 'object' && window.layoutSlots !== null) ? window.layoutSlots : {};
 
-  // safety guards
-  if (!pvName || !pvNum || !baseImg || !stage || !nameEl || !numEl || !fontEl || !colorEl) {
-    console.warn('Designer: missing required DOM nodes. Aborting.');
-    return;
+  // validation regexes
+  const NAME_RE = /^[A-Za-z ]{1,12}$/, NUM_RE = /^\d{1,3}$/;
+
+  function applyFont(val){
+    const map = {bebas:'font-bebas', anton:'font-anton', oswald:'font-oswald', impact:'font-impact'};
+    const cls = map[val] || 'font-bebas';
+    [pvName, pvNum].forEach(el => { if(el) { el.className = 'np-overlay ' + cls; }});
   }
 
-  // compute image bounding relative to stage
-  function getRenderedImageRect() {
-    const imgRect = baseImg.getBoundingClientRect();
+  function computeStageSize(){
+    if (!baseImg || !stage) return null;
     const stageRect = stage.getBoundingClientRect();
+    const imgRect = baseImg.getBoundingClientRect();
+    const offsetLeft = Math.round(imgRect.left - stageRect.left);
+    const offsetTop  = Math.round(imgRect.top  - stageRect.top);
     return {
-      imgLeft: imgRect.left - stageRect.left,
-      imgTop: imgRect.top - stageRect.top,
-      imgWidth: Math.max(1, imgRect.width),
-      imgHeight: Math.max(1, imgRect.height),
-      stageWidth: Math.max(1, stageRect.width),
-      stageHeight: Math.max(1, stageRect.height)
+      offsetLeft, offsetTop,
+      imgW: Math.max(1,imgRect.width), imgH: Math.max(1,imgRect.height),
+      stageW: Math.max(1,stageRect.width), stageH: Math.max(1,stageRect.height)
     };
   }
 
-  // place overlay centered inside slot area (pixel-based)
-  function placeOverlay(el, slot, slotKey) {
-    if (!slot) return;
-    const r = getRenderedImageRect();
-    const leftPx = r.imgLeft + (slot.left_pct || 0) / 100 * r.imgWidth;
-    const topPx  = r.imgTop  + (slot.top_pct  || 0) / 100 * r.imgHeight;
-    const areaW  = Math.max(8, Math.round((slot.width_pct || 10)/100 * r.imgWidth));
-    const areaH  = Math.max(8, Math.round((slot.height_pct || 10)/100 * r.imgHeight));
+  function placeOverlay(el, slot, slotKey){
+    if(!el || !slot || !stage || !baseImg) return;
+    const s = computeStageSize();
+    if(!s) return;
 
-    // position: overlay center at (leftPx + areaW/2, topPx + areaH/2)
-    const centerX = Math.round(leftPx + areaW/2);
-    const centerY = Math.round(topPx + areaH/2);
+    const centerX = Math.round(s.offsetLeft + ((slot.left_pct||0)/100) * s.imgW + ((slot.width_pct||0)/200)*s.imgW);
+    const centerY = Math.round(s.offsetTop  + ((slot.top_pct||0)/100)  * s.imgH + ((slot.height_pct||0)/200)*s.imgH);
+    const areaWpx = Math.max(8, Math.round(((slot.width_pct||10)/100) * s.imgW));
+    const areaHpx = Math.max(8, Math.round(((slot.height_pct||10)/100) * s.imgH));
 
     el.style.position = 'absolute';
     el.style.left = centerX + 'px';
     el.style.top  = centerY + 'px';
-    el.style.width = areaW + 'px';
-    el.style.height = areaH + 'px';
+    el.style.width = areaWpx + 'px';
+    el.style.height = areaHpx + 'px';
     el.style.transform = 'translate(-50%,-50%) rotate(' + ((slot.rotation||0)) + 'deg)';
     el.style.display = 'flex';
     el.style.alignItems = 'center';
     el.style.justifyContent = 'center';
     el.style.boxSizing = 'border-box';
     el.style.padding = '0 4px';
+    el.style.whiteSpace = 'nowrap';
     el.style.overflow = 'hidden';
     el.style.pointerEvents = 'none';
     el.style.zIndex = (slotKey === 'number' ? 60 : 50);
 
-    // compute font size (balanced by area height and by width chars)
+    // font-size calculation
     const text = (el.textContent || '').toString().trim() || 'TEXT';
     const chars = Math.max(1, text.length);
     const isMobile = window.innerWidth <= 767;
-    const heightCandidate = Math.floor(areaH * (slotKey === 'number' ? (isMobile ? 1.05 : 1.0) : 1.0));
+    const heightFactorName = 1.00;
+    const heightFactorNumber = isMobile ? 1.05 : 1.00;
+    const heightCandidate = Math.floor(areaHpx * (slotKey === 'number' ? heightFactorNumber : heightFactorName));
     const avgCharRatio = 0.48;
-    const widthCap = Math.floor((areaW * 0.95) / (chars * avgCharRatio));
-    let fontSize = Math.floor(Math.min(heightCandidate, widthCap));
-    const maxAllowed = Math.max(12, Math.floor(r.stageWidth * (isMobile ? 0.45 : 0.32)));
+    const widthCap = Math.floor((areaWpx * 0.95) / (chars * avgCharRatio));
+    let numericShrink = 1.0;
+    if (slotKey === 'number') numericShrink = isMobile ? 1.0 : 0.98;
+    let fontSize = Math.floor(Math.min(heightCandidate, widthCap) * numericShrink);
+    const maxAllowed = Math.max(14, Math.floor(s.stageW * (isMobile ? 0.45 : 0.32)));
     fontSize = Math.max(8, Math.min(fontSize, maxAllowed));
-    fontSize = Math.floor(fontSize * 1.05);
+    fontSize = Math.floor(fontSize * 1.10);
     el.style.fontSize = fontSize + 'px';
     el.style.lineHeight = '1';
     el.style.fontWeight = '700';
-
-    // final shrink loop if overflow
     let attempts = 0;
     while (el.scrollWidth > el.clientWidth && fontSize > 7 && attempts < 30) {
       fontSize = Math.max(7, Math.floor(fontSize * 0.92));
@@ -172,66 +203,126 @@
     }
   }
 
-  function applyLayout() {
-    if (layout && layout.name) placeOverlay(pvName, layout.name, 'name');
-    if (layout && layout.number) placeOverlay(pvNum, layout.number, 'number');
+  function applyLayout(){
+    if (!baseImg || !baseImg.complete) return;
+    if (layout && layout.name) placeOverlay(pvName, layout.name, 'name'); else { /* fallback center */ pvName.style.left='50%'; pvName.style.top='50%'; pvName.style.transform='translate(-50%,-150%)'; }
+    if (layout && layout.number) placeOverlay(pvNum, layout.number, 'number'); else { pvNum.style.left='50%'; pvNum.style.top='60%'; pvNum.style.transform='translate(-50%,-50%)'; }
   }
 
-  function applyFont(val) {
-    const map = {bebas:'font-bebas', anton:'font-anton', oswald:'font-oswald', impact:'font-impact'};
-    const cls = map[val] || 'font-bebas';
-    pvName.className = 'np-overlay ' + cls;
-    pvNum.className  = 'np-overlay ' + cls;
-  }
-
-  function syncPreview() {
-    pvName.textContent = (nameEl.value || 'NAME').toUpperCase();
-    pvNum.textContent  = (numEl.value || '09').replace(/\D/g,'');
+  function syncPreview(){
+    if (pvName && nameEl) pvName.textContent = (nameEl.value||'NAME').toUpperCase();
+    if (pvNum && numEl) pvNum.textContent = (numEl.value||'09').replace(/\D/g,'');
     applyLayout();
   }
 
-  // wiring
-  nameEl.addEventListener('input', ()=> { syncPreview(); });
-  numEl.addEventListener('input', e => { e.target.value = e.target.value.replace(/\D/g,'').slice(0,3); syncPreview(); });
-  fontEl.addEventListener('change', ()=> { applyFont(fontEl.value); syncPreview(); });
-  colorEl.addEventListener('input', ()=> { pvName.style.color = colorEl.value; pvNum.style.color = colorEl.value; });
+  function syncHidden(){
+    const n = $('np-name-hidden'), nm = $('np-num-hidden'), f=$('np-font-hidden'), c=$('np-color-hidden');
+    if(n) n.value = (nameEl ? (nameEl.value||'') : '').toUpperCase().trim();
+    if(nm) nm.value = (numEl ? (numEl.value||'') : '').replace(/\D/g,'').trim();
+    if(f) f.value = fontEl ? fontEl.value : '';
+    if(c) c.value = colorEl ? colorEl.value : '';
+    // variant mapping left as-is (if you have window.variantMap)
+    const size = $('np-size')?.value || '';
+    if (window.variantMap && size) { $('np-variant-id').value = window.variantMap[size] || ''; }
+  }
+
+  // event wiring (safe checks)
+  if (nameEl) nameEl.addEventListener('input', ()=>{ syncPreview(); syncHidden(); if(btn) btn.disabled = !(NAME_RE.test(nameEl.value) && NUM_RE.test(numEl?.value||'') && !!$('np-size')?.value); });
+  if (numEl) numEl.addEventListener('input', e=>{ e.target.value = e.target.value.replace(/\D/g,'').slice(0,3); syncPreview(); syncHidden(); if(btn) btn.disabled = !(NAME_RE.test(nameEl.value) && NUM_RE.test(numEl.value) && !!$('np-size')?.value); });
+  if (fontEl) fontEl.addEventListener('change', ()=>{ applyFont(fontEl.value); syncHidden(); });
+  if (colorEl) colorEl.addEventListener('input', ()=>{ if(pvName) pvName.style.color = colorEl.value; if(pvNum) pvNum.style.color = colorEl.value; syncHidden(); });
 
   document.querySelectorAll('.np-swatch').forEach(b=>{
     b.addEventListener('click', ()=>{
       document.querySelectorAll('.np-swatch').forEach(x=>x.classList.remove('active'));
       b.classList.add('active');
-      colorEl.value = b.dataset.color;
-      pvName.style.color = b.dataset.color;
-      pvNum.style.color = b.dataset.color;
+      if (colorEl) colorEl.value = b.dataset.color;
+      if (pvName) pvName.style.color = b.dataset.color;
+      if (pvNum) pvNum.style.color = b.dataset.color;
+      syncHidden();
     });
   });
 
-  // make sure layout runs after image & fonts ready
+  // Add Team button navigation (safe)
+  if (addTeam) {
+    addTeam.addEventListener('click', function(e){
+      e.preventDefault();
+      const params = new URLSearchParams();
+      const productId = $('np-product-id')?.value || '';
+      if (productId) params.set('product_id', productId);
+      if (nameEl?.value) params.set('prefill_name', nameEl.value);
+      if (numEl?.value) params.set('prefill_number', numEl.value);
+      if (fontEl?.value) params.set('prefill_font', fontEl.value);
+      if (colorEl?.value) params.set('prefill_color', colorEl.value);
+      if ($('np-size')?.value) params.set('prefill_size', $('np-size').value);
+      const base = "{{ route('team.create') }}"; // keep in blade context
+      window.location.href = base + '?' + params.toString();
+    });
+  }
+
+  // Enable add-to-cart only when valid
+  $('np-size')?.addEventListener('change', ()=> { if(btn) btn.disabled = !(NAME_RE.test(nameEl.value||'') && NUM_RE.test(numEl.value||'') && !!$('np-size').value); });
+
+  // init
+  applyFont(fontEl?.value || 'bebas');
+  if (pvName && colorEl) pvName.style.color = colorEl.value;
+  if (pvNum && colorEl) pvNum.style.color = colorEl.value;
+  syncPreview();
+  syncHidden();
+
+  // layout application after image load and on resize/orientation
   baseImg.addEventListener('load', ()=> setTimeout(applyLayout, 80));
-  window.addEventListener('resize', debounce(()=> applyLayout(), 120));
+  window.addEventListener('resize', ()=> setTimeout(applyLayout, 80));
   window.addEventListener('orientationchange', ()=> setTimeout(applyLayout, 200));
   document.fonts?.ready.then(()=> setTimeout(applyLayout, 120));
 
-  // small debounce helper
-  function debounce(fn, wait){ let t; return function(){ clearTimeout(t); t = setTimeout(fn, wait); }; }
-
-  // initial state
-  applyFont(fontEl.value || 'bebas');
-  pvName.style.color = colorEl.value || '#D4AF37';
-  pvNum.style.color  = colorEl.value || '#D4AF37';
-  syncPreview();
-
-  // mobile add-to-cart float handler (keeps button visible)
+  // mobile add-to-cart visual handling (move/fix button)
   function moveButtonToStage() {
-    if (!btn) return;
     const isMobile = window.innerWidth <= 767;
-    if (isMobile) btn.classList.add('mobile-fixed'); else btn.classList.remove('mobile-fixed');
+    if (btn) {
+      if (isMobile) btn.classList.add('mobile-fixed'); else btn.classList.remove('mobile-fixed');
+    }
   }
   window.addEventListener('load', moveButtonToStage);
-  window.addEventListener('resize', debounce(moveButtonToStage, 120));
-  window.addEventListener('orientationchange', ()=> setTimeout(moveButtonToStage, 200));
+  window.addEventListener('resize', moveButtonToStage);
+  window.addEventListener('orientationchange', ()=> setTimeout(moveButtonToStage,150));
+
+  // form submit: capture preview with html2canvas and POST (if you want JSON response)
+  form?.addEventListener('submit', async function(evt){
+    evt.preventDefault();
+    // basic validations
+    const size = $('np-size')?.value || '';
+    if (!size) { alert('Please select a size.'); return; }
+    if (!(NAME_RE.test(nameEl.value||'') && NUM_RE.test(numEl.value||''))) { alert('Please enter valid Name and Number'); return; }
+
+    // sync hidden fields
+    syncHidden();
+
+    // show busy state
+    if (btn) { btn.disabled = true; btn.textContent = 'Preparing...'; }
+
+    try {
+      const canvas = await html2canvas(stage, { useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1 });
+      const dataUrl = canvas.toDataURL('image/png');
+      $('np-preview-hidden').value = dataUrl;
+
+      // submit via fetch
+      const fd = new FormData(form);
+      const token = document.querySelector('input[name="_token"]')?.value || '';
+      const resp = await fetch(form.action, { method: 'POST', body: fd, credentials: 'same-origin', headers: { 'X-CSRF-TOKEN': token, 'Accept':'application/json' } });
+      if (resp.redirected) { window.location.href = resp.url; return; }
+      const data = await resp.json().catch(()=>null);
+      if (!resp.ok) { alert((data && (data.error||data.message)) || 'Add to cart failed'); return; }
+      if (data && data.checkoutUrl) { window.location.href = data.checkoutUrl; return; }
+      // fallback: if server returned a checkout url in `redirect` or similar, handle accordingly
+      alert('Added to cart. Proceed to checkout.');
+    } catch (err) { console.error(err); alert('Something went wrong'); }
+    finally { if (btn) { btn.disabled = false; btn.textContent = 'Add to Cart'; } }
+  });
+
 })();
 </script>
 
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 </body>
 </html>
