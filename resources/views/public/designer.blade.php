@@ -38,6 +38,7 @@
       .container, .row, .np-stage, header, main, footer { position: relative; z-index: 10; }
       #np-atc-btn { position: fixed !important; top: 12px !important; right: 12px !important; z-index: 99999 !important; width: 130px !important; height: 44px !important; padding: 6px 12px !important; border-radius: 28px !important; box-shadow: 0 6px 18px rgba(0,0,0,0.25) !important; font-weight: 700 !important; white-space: nowrap !important; }
       .mobile-display { display: none; }
+      .mobile-layout { margin-top : -330px;}
     }
     @media (min-width: 768px) {
       .vt-icons { display: none !important; }
@@ -86,7 +87,7 @@
     </div>
 
     <!-- purchase + team -->
-    <div class="col-md-3 np-col order-3 order-md-3 right-layout">
+    <div class="col-md-3 np-col order-3 order-md-3 right-layout mobile-layout">
       <h4 class="desktop-display">{{ $product->name ?? ($product->title ?? 'Product') }}</h4>
 
       <!-- form (hidden fields included) -->
