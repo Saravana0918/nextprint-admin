@@ -60,6 +60,9 @@
 
       /* Add-to-cart floating button */
       #np-atc-btn { position: fixed !important; top: 12px !important; right: 12px !important; z-index: 100050 !important; width: 130px !important; height: 44px !important; border-radius: 28px !important; box-shadow: 0 6px 18px rgba(0,0,0,0.25) !important; font-weight: 700 !important; }
+      .mobile-layout{
+        margin-top : -330px;
+      }
     }
     @media (min-width: 768px) {
       .vt-icons { display: none !important; }
@@ -67,6 +70,7 @@
 
     /* accessibility focus styles */
     input:focus, select:focus { outline: 3px solid rgba(13,110,253,0.12); }
+    .desktop-display{ color : white ;}
 
   </style>
 </head>
@@ -112,7 +116,7 @@
     </div>
 
     <!-- purchase + team -->
-    <div class="col-md-3 np-col order-3 order-md-3 right-layout">
+    <div class="col-md-3 np-col order-3 order-md-3 right-layout mobile-layout">
       <h4 class="desktop-display">{{ $product->name ?? ($product->title ?? 'Product') }}</h4>
 
       <form id="np-atc-form" method="post" action="{{ route('designer.addtocart') }}">
