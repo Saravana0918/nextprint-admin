@@ -1,5 +1,3 @@
-
-
 <!doctype html>
 <html lang="en">
 <head>
@@ -31,79 +29,77 @@
     .right-layout{ padding-top:350px; }
     .hide-on-mobile { display: none !important; }
 
+    /* MOBILE */
     @media (max-width: 767px) {
       .np-stage { position: relative !important; }
 
-  .np-mobile-controls {
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 92%;
-    max-width: 420px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    align-items: center;
-    z-index: 100030;
-    /* top will be set by JS depending on stage size */
-    pointer-events: auto; /* allow typing */
-  }
+      .np-mobile-controls {
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 92%;
+        max-width: 420px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        align-items: center;
+        z-index: 100030;
+        pointer-events: auto;
+      }
 
-  .np-mobile-controls .mobile-input {
-    width: 100%;
-    box-sizing: border-box;
-    background: rgba(255,255,255,0.95);
-    border: none;
-    border-radius: 6px;
-    padding: 10px 12px;
-    font-weight: 700;
-    text-transform: uppercase;
-    text-align: center;
-    letter-spacing: 1px;
-    font-size: 16px;
-    color: #222;
-  }
+      .np-mobile-controls .mobile-input {
+        width: 100%;
+        box-sizing: border-box;
+        background: rgba(255,255,255,0.95);
+        border: none;
+        border-radius: 6px;
+        padding: 10px 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        text-align: center;
+        letter-spacing: 1px;
+        font-size: 16px;
+        color: #222;
+      }
 
-  .np-mobile-controls .mobile-num {
-    font-size: 28px;
-    padding: 10px 12px;
-  }
+      .np-mobile-controls .mobile-num {
+        font-size: 28px;
+        padding: 10px 12px;
+      }
 
-  /* small MAX badges on right inside same container */
-  .np-mobile-controls .max-row {
-    width: 100%;
-    display:flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 8px;
-  }
-  .np-mobile-controls .max-count {
-    font-size: 12px;
-    font-weight: 800;
-    color: rgba(255,255,255,0.95);
-    background: rgba(0,0,0,0.35);
-    padding: 4px 8px;
-    border-radius: 12px;
-  }
+      .np-mobile-controls .max-row {
+        width: 100%;
+        display:flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+      }
+      .np-mobile-controls .max-count {
+        font-size: 12px;
+        font-weight: 800;
+        color: rgba(255,255,255,0.95);
+        background: rgba(0,0,0,0.35);
+        padding: 4px 8px;
+        border-radius: 12px;
+      }
 
-  /* ensure inputs and native controls are above overlays */
-  #np-name, #np-num, #np-font, #np-color, .np-swatch, #np-size, #np-qty {
-    z-index: 100040 !important;
-    position: relative !important;
-  }
+      /* ensure inputs and native controls are above overlays */
+      #np-name, #np-num, #np-font, #np-color, .np-swatch, #np-size, #np-qty {
+        z-index: 100040 !important;
+        position: relative !important;
+      }
 
-  /* keep original stage overlays non-interactive */
-  .np-stage .np-overlay { pointer-events: none !important; }
+      /* keep original stage overlays non-interactive */
+      .np-stage .np-overlay { pointer-events: none !important; }
 
-  /* small tweak to hugely increase font on mobile number overlay (optional) */
-  .np-mobile-controls .mobile-num { letter-spacing: 2px; }
-}
       #np-atc-btn.mobile-fixed { position: fixed !important; top: 10px !important; right: 12px !important; z-index: 99999 !important; width: 109px !important; height: 40px !important; padding: 6px 12px !important; border-radius: 28px !important; background: #0d6efd !important; color: #fff !important; }
-      #np-prev-name, #np-prev-num { z-index: 999999 !important; pointer-events: none !important; text-shadow: 0 3px 10px rgba(0,0,0,0.7) !important; }
+
       body { background-image: url('/images/stadium-bg.jpg'); background-size: cover; background-position: center center; background-repeat: no-repeat; min-height: 100vh; position: relative; margin-top: -70px; }
       body::before { content: ""; position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 5; pointer-events: none; }
       .container, .row, .np-stage, header, main, footer { position: relative; z-index: 10; }
+
       #np-atc-btn { position: fixed !important; top: 12px !important; right: 12px !important; z-index: 99999 !important; width: 130px !important; height: 44px !important; padding: 6px 12px !important; border-radius: 28px !important; box-shadow: 0 6px 18px rgba(0,0,0,0.25) !important; font-weight: 700 !important; white-space: nowrap !important; }
+
       .mobile-display { display: none; }
       .np-col input.form-control,
       .np-col select.form-select,
@@ -115,20 +111,22 @@
         z-index: 100010 !important;
         pointer-events: auto !important;
       }
-        .np-stage,
-        .np-stage::after,
-        .np-stage.covering,
-        .np-stage .np-overlay {
-          pointer-events: none !important;
-        }
 
-        /* Keep the floating Add-to-Cart clickable above everything */
-        #np-atc-btn.mobile-fixed,
-        #np-atc-btn {
-          pointer-events: auto !important;
-          z-index: 100020 !important;
-        }
+      .np-stage,
+      .np-stage::after,
+      .np-stage.covering,
+      .np-stage .np-overlay {
+        pointer-events: none !important;
+      }
+
+      /* Keep the floating Add-to-Cart clickable above everything */
+      #np-atc-btn.mobile-fixed,
+      #np-atc-btn {
+        pointer-events: auto !important;
+        z-index: 100020 !important;
+      }
     }
+
     @media (min-width: 768px) {
       .vt-icons { display: none !important; }
     }
@@ -176,7 +174,7 @@
     </div>
 
     <!-- purchase + team -->
-    <div class="col-md-3 np-col order-3 order-md-3 right-layout">
+    <div class="col-md-3 np-col order-3 order-md-3 right-layout mobile-layout">
       <h4 class="desktop-display">{{ $product->name ?? ($product->title ?? 'Product') }}</h4>
 
       <!-- form (hidden fields included) -->
@@ -295,7 +293,7 @@
 
   function applyLayout(){
     if (!baseImg || !baseImg.complete) return;
-    if (layout && layout.name) placeOverlay(pvName, layout.name, 'name'); else { /* fallback center */ pvName.style.left='50%'; pvName.style.top='50%'; pvName.style.transform='translate(-50%,-150%)'; }
+    if (layout && layout.name) placeOverlay(pvName, layout.name, 'name'); else { pvName.style.left='50%'; pvName.style.top='50%'; pvName.style.transform='translate(-50%,-150%)'; }
     if (layout && layout.number) placeOverlay(pvNum, layout.number, 'number'); else { pvNum.style.left='50%'; pvNum.style.top='60%'; pvNum.style.transform='translate(-50%,-50%)'; }
   }
 
@@ -311,7 +309,6 @@
     if(nm) nm.value = (numEl ? (numEl.value||'') : '').replace(/\D/g,'').trim();
     if(f) f.value = fontEl ? fontEl.value : '';
     if(c) c.value = colorEl ? colorEl.value : '';
-    // variant mapping left as-is (if you have window.variantMap)
     const size = $('np-size')?.value || '';
     if (window.variantMap && size) { $('np-variant-id').value = window.variantMap[size] || ''; }
   }
@@ -345,7 +342,7 @@
       if (fontEl?.value) params.set('prefill_font', fontEl.value);
       if (colorEl?.value) params.set('prefill_color', colorEl.value);
       if ($('np-size')?.value) params.set('prefill_size', $('np-size').value);
-      const base = "{{ route('team.create') }}"; // keep in blade context
+      const base = "{{ route('team.create') }}";
       window.location.href = base + '?' + params.toString();
     });
   }
@@ -361,7 +358,7 @@
   syncHidden();
 
   // layout application after image load and on resize/orientation
-  baseImg.addEventListener('load', ()=> setTimeout(applyLayout, 80));
+  if (baseImg) baseImg.addEventListener('load', ()=> setTimeout(applyLayout, 80));
   window.addEventListener('resize', ()=> setTimeout(applyLayout, 80));
   window.addEventListener('orientationchange', ()=> setTimeout(applyLayout, 200));
   document.fonts?.ready.then(()=> setTimeout(applyLayout, 120));
@@ -378,56 +375,47 @@
   window.addEventListener('orientationchange', ()=> setTimeout(moveButtonToStage,150));
 
   // form submit: capture preview with html2canvas and POST (if you want JSON response)
-  form?.addEventListener('submit', async function(evt){
-    evt.preventDefault();
-    // basic validations
-    const size = $('np-size')?.value || '';
-    if (!size) { alert('Please select a size.'); return; }
-    if (!(NAME_RE.test(nameEl.value||'') && NUM_RE.test(numEl.value||''))) { alert('Please enter valid Name and Number'); return; }
-
-    // sync hidden fields
-    syncHidden();
-
-    // show busy state
-    if (btn) { btn.disabled = true; btn.textContent = 'Preparing...'; }
-
-    try {
-      const canvas = await html2canvas(stage, { useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1 });
-      const dataUrl = canvas.toDataURL('image/png');
-      $('np-preview-hidden').value = dataUrl;
-
-      // submit via fetch
-      const fd = new FormData(form);
-      const token = document.querySelector('input[name="_token"]')?.value || '';
-      const resp = await fetch(form.action, { method: 'POST', body: fd, credentials: 'same-origin', headers: { 'X-CSRF-TOKEN': token, 'Accept':'application/json' } });
-      if (resp.redirected) { window.location.href = resp.url; return; }
-      const data = await resp.json().catch(()=>null);
-      if (!resp.ok) { alert((data && (data.error||data.message)) || 'Add to cart failed'); return; }
-      if (data && data.checkoutUrl) { window.location.href = data.checkoutUrl; return; }
-      // fallback: if server returned a checkout url in `redirect` or similar, handle accordingly
-      alert('Added to cart. Proceed to checkout.');
-    } catch (err) { console.error(err); alert('Something went wrong'); }
-    finally { if (btn) { btn.disabled = false; btn.textContent = 'Add to Cart'; } }
-  });
+  if (form) {
+    form.addEventListener('submit', async function(evt){
+      evt.preventDefault();
+      const size = $('np-size')?.value || '';
+      if (!size) { alert('Please select a size.'); return; }
+      if (!(NAME_RE.test(nameEl.value||'') && NUM_RE.test(numEl.value||''))) { alert('Please enter valid Name and Number'); return; }
+      syncHidden();
+      if (btn) { btn.disabled = true; btn.textContent = 'Preparing...'; }
+      try {
+        const canvas = await html2canvas(stage, { useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1 });
+        const dataUrl = canvas.toDataURL('image/png');
+        $('np-preview-hidden').value = dataUrl;
+        const fd = new FormData(form);
+        const token = document.querySelector('input[name="_token"]')?.value || '';
+        const resp = await fetch(form.action, { method: 'POST', body: fd, credentials: 'same-origin', headers: { 'X-CSRF-TOKEN': token, 'Accept':'application/json' } });
+        if (resp.redirected) { window.location.href = resp.url; return; }
+        const data = await resp.json().catch(()=>null);
+        if (!resp.ok) { alert((data && (data.error||data.message)) || 'Add to cart failed'); return; }
+        if (data && data.checkoutUrl) { window.location.href = data.checkoutUrl; return; }
+        alert('Added to cart.');
+      } catch (err) { console.error(err); alert('Something went wrong'); }
+      finally { if (btn) { btn.disabled = false; btn.textContent = 'Add to Cart'; } }
+    });
+  }
 
 })();
 </script>
+
 <script>
 (function(){
+  // Create mobile floating inputs inside the stage so keyboard + typing works on phones
   function mobileOverlaySetup() {
     if (window.innerWidth > 767) return; // only mobile
     const stage = document.getElementById('np-stage');
     if (!stage) return;
+    if (document.querySelector('.np-mobile-controls')) return; // already mounted
 
-    // prevent duplicate
-    if (document.querySelector('.np-mobile-controls')) return;
-
-    // create container
     const cont = document.createElement('div');
     cont.className = 'np-mobile-controls';
     cont.setAttribute('aria-hidden','false');
 
-    // create name input (syncs to #np-name)
     const nameInput = document.createElement('input');
     nameInput.type = 'text';
     nameInput.id = 'np-mobile-name';
@@ -438,7 +426,6 @@
     nameInput.autocomplete = 'off';
     nameInput.spellcheck = false;
 
-    // create number input
     const numInput = document.createElement('input');
     numInput.type = 'text';
     numInput.id = 'np-mobile-num';
@@ -447,59 +434,45 @@
     numInput.maxLength = 3;
     numInput.className = 'mobile-input mobile-num';
 
-    // row with max badges (right side)
     const maxRow = document.createElement('div');
     maxRow.className = 'max-row';
-    const spacer = document.createElement('div');
-    spacer.style.flex = '1';
-    const maxName = document.createElement('div');
-    maxName.className = 'max-count';
-    maxName.textContent = 'MAX. 12';
-    const maxNum = document.createElement('div');
-    maxNum.className = 'max-count';
-    maxNum.textContent = 'MAX. 3';
-    maxRow.appendChild(spacer);
-    maxRow.appendChild(maxName);
-    maxRow.appendChild(maxNum);
+    const spacer = document.createElement('div'); spacer.style.flex = '1';
+    const maxName = document.createElement('div'); maxName.className = 'max-count'; maxName.textContent = 'MAX. 12';
+    const maxNum  = document.createElement('div'); maxNum.className = 'max-count'; maxNum.textContent = 'MAX. 3';
+    maxRow.appendChild(spacer); maxRow.appendChild(maxName); maxRow.appendChild(maxNum);
 
     cont.appendChild(nameInput);
     cont.appendChild(numInput);
     cont.appendChild(maxRow);
-
-    // add to stage
     stage.appendChild(cont);
 
-    // find original hidden/original inputs to sync with
+    // sync elements
     const origName = document.getElementById('np-name');
     const origNum  = document.getElementById('np-num');
-    // if originals not present, create hidden fields for form submit
+
+    // if originals not present create hidden copies (rare)
     if(!origName) {
-      const h = document.createElement('input');
-      h.type='hidden'; h.id='np-name'; h.name='name_text'; document.body.appendChild(h);
+      const h = document.createElement('input'); h.type='hidden'; h.id='np-name'; h.name='name_text'; document.body.appendChild(h);
     }
     if(!origNum) {
-      const h2 = document.createElement('input');
-      h2.type='hidden'; h2.id='np-num'; h2.name='number_text'; document.body.appendChild(h2);
+      const h2 = document.createElement('input'); h2.type='hidden'; h2.id='np-num'; h2.name='number_text'; document.body.appendChild(h2);
     }
 
-    // populate mobile inputs from originals if available
     const sourceName = document.getElementById('np-name');
     const sourceNum  = document.getElementById('np-num');
+
     if (sourceName && sourceName.value) nameInput.value = sourceName.value;
     if (sourceNum && sourceNum.value) numInput.value = sourceNum.value;
 
-    // keep keypress numeric only for numInput
     numInput.addEventListener('input', e => {
       const v = e.target.value.replace(/\D/g,'').slice(0,3);
       e.target.value = v;
       if (sourceNum) sourceNum.value = v;
-      // also update the visible overlay (if present)
       const pvNum = document.getElementById('np-prev-num');
       if (pvNum) pvNum.textContent = v || '09';
     });
 
     nameInput.addEventListener('input', e => {
-      // uppercase, allow spaces and A-Z
       const v = e.target.value.toUpperCase().replace(/[^A-Z ]/g,'').slice(0,12);
       e.target.value = v;
       if (sourceName) sourceName.value = v;
@@ -507,21 +480,18 @@
       if (pvName) pvName.textContent = v || 'NAME';
     });
 
-    // when mobile inputs focus, ensure stage won't jump off-screen (visualViewport handler)
+    // Position controls roughly relative to stage — keep them visible when keyboard opens
     function keepStageVisibleOnKeyboard() {
       if (!window.visualViewport) return;
-      // compute ideal top so controls appear around mid-stage
       const setPos = () => {
         const sRect = stage.getBoundingClientRect();
-        // prefer place controls at about 60% of stage height (tweak if needed)
+        // place controls at about 60% of stage height
         const topPx = Math.max(8, Math.round(sRect.height * 0.60));
         cont.style.top = topPx + 'px';
       };
       setPos();
-      // on viewport resize (keyboard) maintain stage fixed and recalc
       window.visualViewport.addEventListener('resize', () => {
         setPos();
-        // keep stage fixed if keyboard open (small viewport)
         const vhRatio = window.visualViewport.height / window.innerHeight;
         if (vhRatio < 0.75) {
           stage.style.position = 'fixed';
@@ -535,36 +505,30 @@
           stage.style.transform = '';
         }
       });
-      // also recalc on orientationchange / resize
       window.addEventListener('resize', setPos);
       window.addEventListener('orientationchange', () => setTimeout(setPos,150));
     }
     keepStageVisibleOnKeyboard();
 
-    // ensure overlay preview updates as well (if your preview uses #np-prev-name/num)
+    // set preview initially
     const pvName = document.getElementById('np-prev-name');
-    const pvNum = document.getElementById('np-prev-num');
+    const pvNum  = document.getElementById('np-prev-num');
     if (pvName) pvName.textContent = (nameInput.value || 'NAME');
-    if (pvNum)  pvNum.textContent  = (numInput.value || '09');
+    if (pvNum)  pvNum.textContent  = (numInput.value  || '09');
 
-    // ensure clicking the floating inputs focuses the native keyboard
-    nameInput.addEventListener('focus', ()=>{ /* no-op */ });
-    numInput.addEventListener('focus', ()=>{ /* no-op */ });
-
-    // Accessibility: move focus to name on mount
+    // focus name on mount
     setTimeout(()=> nameInput.focus(), 250);
   } // mobileOverlaySetup
 
-  // init on DOM ready
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', mobileOverlaySetup);
   } else {
     mobileOverlaySetup();
   }
-
   window.addEventListener('load', ()=> setTimeout(mobileOverlaySetup, 200));
 })();
 </script>
+
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 </body>
 </html>
