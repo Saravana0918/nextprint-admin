@@ -15,9 +15,9 @@
     .font-impact{font-family:Impact, 'Arial Black', sans-serif;}
 
     /* preview stage */
-    .np-stage { position: relative; width: 100%; max-width: 534px; margin: 0 auto; background:#fff; border-radius:8px; padding:8px; min-height: 320px; }
+    .np-stage { position: relative; width: 100%; max-width: 534px; margin: 0 auto; background:#fff; border-radius:8px; padding:8px; min-height: 320px; box-sizing: border-box; }
     .np-stage img { width:100%; height:auto; border-radius:6px; display:block; }
-    .np-overlay { position:absolute; color:#D4AF37; font-weight:700; text-transform:uppercase; letter-spacing:2px; white-space:nowrap; text-shadow:0 2px 6px rgba(0,0,0,0.35); display:flex; align-items:center; justify-content:center; pointer-events:none; }
+    .np-overlay { position:absolute; color:#D4AF37; font-weight:700; text-transform:uppercase; letter-spacing:2px; white-space:nowrap; text-shadow:0 2px 6px rgba(0,0,0,0.35); display:flex; align-items:center; justify-content:center; pointer-events:none; box-sizing: border-box; }
 
     .np-swatch { width:28px; height:28px; border-radius:50%; border:1px solid #ccc; cursor:pointer; display:inline-block; }
     .np-swatch.active { outline: 2px solid rgba(0,0,0,0.08); box-shadow: 0 2px 6px rgba(0,0,0,0.06); }
@@ -257,7 +257,6 @@
     <!-- right purchase column -->
     <div class="col-md-3 np-col order-3 order-md-3 right-layout">
       <h4 class="mobile-display desktop-display">{{ $product->name ?? ($product->title ?? 'Product') }}</h4>
-     <!-- <div class="text mb-3 mobile-display desktop-display">Price: {{ $product->vendor ?? '—' }} • ₹ {{ number_format((float)($displayPrice ?? ($product->min_price ?? 0)), 2) }}</div> -->
 
       <form id="np-atc-form" method="post" action="{{ route('designer.addtocart') }}">
         @csrf
@@ -336,6 +335,7 @@ document.getElementById('btn-add-team').addEventListener('click', function(e){
     const nameEl = $('np-name'), numEl = $('np-num'), fontEl = $('np-font'), colorEl = $('np-color');
     const pvName = $('np-prev-name'), pvNum = $('np-prev-num'), baseImg = $('np-base'), stage = $('np-stage');
     const ctrls = $('np-controls'), note = $('np-note'), status = $('np-status'), btn = $('np-atc-btn');
+    // make layout global to this init scope
     const layout = (typeof window.layoutSlots === 'object' && window.layoutSlots !== null) ? window.layoutSlots : {};
 
     const NAME_RE = /^[A-Za-z ]{1,12}$/, NUM_RE = /^\d{1,3}$/;
@@ -363,81 +363,101 @@ document.getElementById('btn-add-team').addEventListener('click', function(e){
       if (pvNum) pvNum.classList.add(c);
     }
 
+    // Robust compute using rendered bounding rects
     function computeStageSize(){
-      const imgW = (baseImg && baseImg.naturalWidth) ? baseImg.naturalWidth : (baseImg? baseImg.width : stage.clientWidth);
-      const imgH = (baseImg && baseImg.naturalHeight) ? baseImg.naturalHeight : (baseImg? baseImg.clientHeight : stage.clientWidth);
-      const stageW = stage.clientWidth || 300;
-      const stageH = imgW ? Math.round((imgH * stageW)/imgW) : (baseImg? baseImg.clientHeight : 300);
-      return {imgW, imgH, stageW, stageH};
+      const imgRect = (baseImg && baseImg.getBoundingClientRect) ? baseImg.getBoundingClientRect() : null;
+      const stageRect = (stage && stage.getBoundingClientRect) ? stage.getBoundingClientRect() : null;
+
+      const imgW = imgRect ? imgRect.width : (baseImg && (baseImg.naturalWidth || baseImg.width) ? (baseImg.naturalWidth || baseImg.width) : stage.clientWidth);
+      const imgH = imgRect ? imgRect.height : (baseImg && (baseImg.naturalHeight || baseImg.height) ? (baseImg.naturalHeight || baseImg.height) : stage.clientHeight);
+
+      const stageW = stageRect ? stageRect.width : (stage.clientWidth || 300);
+      const stageH = stageRect ? stageRect.height : (stage.clientHeight || 300);
+
+      return { imgW, imgH, stageW, stageH, imgRect, stageRect };
     }
 
+    // place overlay using pixel values derived from stage rect so CSS transforms / scaling do not break placement
     function placeOverlay(el, slot, slotKey){
-  if(!el || !slot || !stage) return;
-  el.style.position = 'absolute';
-  el.style.left = (slot.left_pct||0) + '%';
-  el.style.top  = (slot.top_pct||0) + '%';
-  el.style.width = (slot.width_pct||10) + '%';
-  el.style.height = (slot.height_pct||10) + '%';
-  el.style.display = 'flex';
-  el.style.alignItems = 'center';
-  el.style.justifyContent = 'center';
-  el.style.boxSizing = 'border-box';
-  el.style.padding = '0 4px';
-  el.style.transform = 'rotate(' + ((slot.rotation||0)) + 'deg)';
-  el.style.whiteSpace = 'nowrap';
-  el.style.overflow = 'hidden';
-  el.style.pointerEvents = 'none';
-  el.style.zIndex = (slotKey === 'number' ? 60 : 50);
+      if(!el || !slot || !stage) return;
+      // ensure stage is reference box
+      stage.style.position = stage.style.position || 'relative';
 
-  const {imgW, imgH, stageW, stageH} = computeStageSize();
-  const areaWpx = Math.max(8, Math.round(((slot.width_pct || 10)/100) * stageW));
-  const areaHpx = Math.max(8, Math.round(((slot.height_pct || 10)/100) * stageH));
+      el.style.position = 'absolute';
+      el.style.boxSizing = 'border-box';
+      el.style.padding = '0 4px';
+      el.style.whiteSpace = 'nowrap';
+      el.style.overflow = 'hidden';
+      el.style.pointerEvents = 'none';
+      el.style.zIndex = (slotKey === 'number' ? 60 : 50);
 
-  const text = (el.textContent || '').toString().trim() || 'TEXT';
-  const chars = Math.max(1, text.length);
+      const { imgW, imgH, stageW, stageH } = computeStageSize();
 
-  const isMobile = window.innerWidth <= 767;
+      // convert percentages to px inside the stage
+      const leftPx = Math.round(((slot.left_pct || 0) / 100) * stageW);
+      const topPx  = Math.round(((slot.top_pct  || 0) / 100) * stageH);
+      const widthPx = Math.max(8, Math.round(((slot.width_pct || 10) / 100) * stageW));
+      const heightPx = Math.max(8, Math.round(((slot.height_pct || 10) / 100) * stageH));
 
-  // Increase these to get larger text:
-  const heightFactorName = 1.00;    // was 0.86 — raise to make name taller
-  const heightFactorNumber = isMobile ? 1.05 : 1.00; // slightly bigger numbers on mobile
+      el.style.left = leftPx + 'px';
+      el.style.top  = topPx + 'px';
+      el.style.width = widthPx + 'px';
+      el.style.height = heightPx + 'px';
+      el.style.display = 'flex';
+      el.style.alignItems = 'center';
+      el.style.justifyContent = 'center';
+      el.style.transform = 'rotate(' + ((slot.rotation||0)) + 'deg)';
 
-  const heightCandidate = Math.floor(areaHpx * (slotKey === 'number' ? heightFactorNumber : heightFactorName));
+      const text = (el.textContent || '').toString().trim() || 'TEXT';
+      const chars = Math.max(1, text.length);
+      const isMobile = window.innerWidth <= 767;
 
-  // Assume characters take a bit less horizontal space (allow bigger font)
-  const avgCharRatio = 0.48; // was 0.55, lowering this increases font allowed by width
-  const widthCap = Math.floor((areaWpx * 0.95) / (chars * avgCharRatio));
+      const heightFactorName = 1.00;
+      const heightFactorNumber = isMobile ? 1.05 : 1.00;
+      const heightCandidate = Math.floor(heightPx * (slotKey === 'number' ? heightFactorNumber : heightFactorName));
 
-  // slight boost for numbers on desktop
-  let numericShrink = 1.0;
-  if (slotKey === 'number') numericShrink = isMobile ? 1.0 : 0.98;
+      const avgCharRatio = 0.48;
+      const widthCap = Math.floor((widthPx * 0.95) / (chars * avgCharRatio));
+      let numericShrink = (slotKey === 'number') ? (isMobile ? 1.0 : 0.98) : 1.0;
 
-  // compute font size and allow bigger maximum relative to stage width
-  let fontSize = Math.floor(Math.min(heightCandidate, widthCap) * numericShrink);
+      let fontSize = Math.floor(Math.min(heightCandidate, widthCap) * numericShrink);
+      const maxAllowed = Math.max(14, Math.floor(stageW * (isMobile ? 0.45 : 0.32)));
+      fontSize = Math.max(7, Math.min(fontSize, maxAllowed));
+      fontSize = Math.floor(fontSize * 1.10);
 
-  // raise maxAllowed so name/number can grow more: increase multiplier (0.32 -> 0.38 etc)
-  const maxAllowed = Math.max(14, Math.floor(stageW * (isMobile ? 0.45 : 0.32)));
+      el.style.fontSize = fontSize + 'px';
+      el.style.lineHeight = '1';
+      el.style.fontWeight = '700';
 
-  fontSize = Math.max(8, Math.min(fontSize, maxAllowed));
+      let attempts = 0;
+      while (el.scrollWidth > el.clientWidth && fontSize > 7 && attempts < 30) {
+        fontSize = Math.max(7, Math.floor(fontSize * 0.92));
+        el.style.fontSize = fontSize + 'px';
+        attempts++;
+      }
+    }
 
-  // final nudge multiplier to make overlays a bit larger overall (tweak 1.0 -> 1.2)
-  fontSize = Math.floor(fontSize * 1.10);
-
-  el.style.fontSize = fontSize + 'px';
-  el.style.lineHeight = '1';
-  el.style.fontWeight = '700';
-
-  let attempts = 0;
-  while (el.scrollWidth > el.clientWidth && fontSize > 7 && attempts < 30) {
-    fontSize = Math.max(7, Math.floor(fontSize * 0.92));
-    el.style.fontSize = fontSize + 'px';
-    attempts++;
-  }
-}
-
+    // applyLayout waits for image decode/load; uses placeOverlay
     function applyLayout(){
       if (!baseImg) return;
-      if (!baseImg.complete || !baseImg.naturalWidth) return;
+      if (!baseImg.complete || baseImg.naturalWidth === 0) {
+        if (baseImg.decode) {
+          baseImg.decode().then(()=> {
+            if (layout.name) placeOverlay(pvName, layout.name, 'name');
+            if (layout.number) placeOverlay(pvNum, layout.number, 'number');
+          }).catch(()=> {
+            setTimeout(()=>{ if (layout.name) placeOverlay(pvName, layout.name, 'name'); if (layout.number) placeOverlay(pvNum, layout.number, 'number'); }, 250);
+          });
+          return;
+        } else {
+          baseImg.addEventListener('load', () => {
+            if (layout.name) placeOverlay(pvName, layout.name, 'name');
+            if (layout.number) placeOverlay(pvNum, layout.number, 'number');
+          }, { once: true });
+          return;
+        }
+      }
+
       if (layout.name) placeOverlay(pvName, layout.name, 'name');
       if (layout.number) placeOverlay(pvNum, layout.number, 'number');
     }
@@ -482,8 +502,16 @@ document.getElementById('btn-add-team').addEventListener('click', function(e){
     if (pvNum && colorEl) pvNum.style.color = colorEl.value;
     syncPreview(); syncHidden();
 
+    // ensure layout applied once image loaded or decoded
     if (baseImg) baseImg.addEventListener('load', applyLayout);
+    // re-run layout on resize/orientation and after fonts are ready
     window.addEventListener('resize', applyLayout);
+    window.addEventListener('orientationchange', ()=> setTimeout(applyLayout, 200));
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(()=> setTimeout(applyLayout, 120));
+    }
+
+    // small timeouts to catch late loads
     setTimeout(applyLayout, 200);
     setTimeout(applyLayout, 800);
 
@@ -639,43 +667,34 @@ document.getElementById('btn-add-team').addEventListener('click', function(e){
   }
 
   function moveButtonToStage() {
-  const isMobile = window.innerWidth <= 767;
-
-  if (isMobile) {
-    // Keep button in DOM (do not re-parent) - just add class that visually floats it
-    btn.classList.add('mobile-fixed');
-  } else {
-    // restore normal layout
-    btn.classList.remove('mobile-fixed');
+    const isMobile = window.innerWidth <= 767;
+    if (isMobile) {
+      btn.classList.add('mobile-fixed');
+    } else {
+      btn.classList.remove('mobile-fixed');
+    }
   }
-}
 
-
-  // Keep stage fixed when keyboard opens, so it doesn't jump off-screen
+  // Keep stage stable when keyboard opens — do not change stage width drastically
   function setupKeyboardHandler() {
     if (!window.visualViewport) return;
     let lastHeight = window.visualViewport.height;
     window.visualViewport.addEventListener('resize', () => {
       const vH = window.visualViewport.height;
       const vhRatio = vH / window.innerHeight;
-      // when keyboard opens, visualViewport.height shrinks heavily (< ~0.7)
+      // when keyboard opens, visualViewport.height shrinks heavily (< ~0.75)
       if (vhRatio < 0.75) {
-        // keyboard opened
-        // keep stage position relative to viewport so button stays with stage
         stage.style.position = 'fixed';
-        // place stage near top so input still visible
         stage.style.top = '60px';
         stage.style.left = '50%';
         stage.style.transform = 'translateX(-50%)';
-        stage.style.width = '100%';
-        stage.style.maxWidth = '420px';
+        // Do NOT change width here; keep same max-width
       } else {
         // keyboard closed — restore
         stage.style.position = '';
         stage.style.top = '';
         stage.style.left = '';
         stage.style.transform = '';
-        stage.style.maxWidth = '';
       }
       lastHeight = vH;
     });
