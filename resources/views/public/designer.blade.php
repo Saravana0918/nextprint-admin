@@ -30,7 +30,68 @@
     .hide-on-mobile { display: none !important; }
 
     @media (max-width: 767px) {
-      .np-stage { padding: 12px; background: transparent; box-sizing: border-box; border-radius: 10px;  z-index: 100; position: relative !important; }
+      .np-stage { position: relative !important; }
+       .np-mobile-controls {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 92%;
+    max-width: 420px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: center;
+    z-index: 100030;
+    /* top will be set by JS depending on stage size */
+    pointer-events: auto; /* allow typing */
+  }
+   .np-mobile-controls .mobile-input {
+    width: 100%;
+    box-sizing: border-box;
+    background: rgba(255,255,255,0.95);
+    border: none;
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    text-align: center;
+    letter-spacing: 1px;
+    font-size: 16px;
+    color: #222;
+  }
+   .np-mobile-controls .mobile-num {
+    font-size: 28px;
+    padding: 10px 12px;
+  }
+
+  /* small MAX badges on right inside same container */
+  .np-mobile-controls .max-row {
+    width: 100%;
+    display:flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+  .np-mobile-controls .max-count {
+    font-size: 12px;
+    font-weight: 800;
+    color: rgba(255,255,255,0.95);
+    background: rgba(0,0,0,0.35);
+    padding: 4px 8px;
+    border-radius: 12px;
+  }
+   #np-name, #np-num, #np-font, #np-color, .np-swatch, #np-size, #np-qty {
+    z-index: 100040 !important;
+    position: relative !important;
+  }
+
+  /* keep original stage overlays non-interactive */
+  .np-stage .np-overlay { pointer-events: none !important; }
+
+  /* small tweak to hugely increase font on mobile number overlay (optional) */
+  .np-mobile-controls .mobile-num { letter-spacing: 2px; }
+}
+
       #np-atc-btn.mobile-fixed { position: fixed !important; top: 10px !important; right: 12px !important; z-index: 99999 !important; width: 109px !important; height: 40px !important; padding: 6px 12px !important; border-radius: 28px !important; background: #0d6efd !important; color: #fff !important; }
       #np-prev-name, #np-prev-num { z-index: 999999 !important; pointer-events: none !important; text-shadow: 0 3px 10px rgba(0,0,0,0.7) !important; }
       body { background-image: url('/images/stadium-bg.jpg'); background-size: cover; background-position: center center; background-repeat: no-repeat; min-height: 100vh; position: relative; margin-top: -70px; }
@@ -349,7 +410,160 @@
 
 })();
 </script>
+<script>
+(function(){
+  function mobileOverlaySetup() {
+    if (window.innerWidth > 767) return; // only mobile
+    const stage = document.getElementById('np-stage');
+    if (!stage) return;
 
+    // prevent duplicate
+    if (document.querySelector('.np-mobile-controls')) return;
+
+    // create container
+    const cont = document.createElement('div');
+    cont.className = 'np-mobile-controls';
+    cont.setAttribute('aria-hidden','false');
+
+    // create name input (syncs to #np-name)
+    const nameInput = document.createElement('input');
+    nameInput.type = 'text';
+    nameInput.id = 'np-mobile-name';
+    nameInput.placeholder = 'YOUR NAME';
+    nameInput.maxLength = 12;
+    nameInput.className = 'mobile-input';
+    nameInput.autocapitalize = 'characters';
+    nameInput.autocomplete = 'off';
+    nameInput.spellcheck = false;
+
+    // create number input
+    const numInput = document.createElement('input');
+    numInput.type = 'text';
+    numInput.id = 'np-mobile-num';
+    numInput.placeholder = '09';
+    numInput.inputMode = 'numeric';
+    numInput.maxLength = 3;
+    numInput.className = 'mobile-input mobile-num';
+
+    // row with max badges (right side)
+    const maxRow = document.createElement('div');
+    maxRow.className = 'max-row';
+    const spacer = document.createElement('div');
+    spacer.style.flex = '1';
+    const maxName = document.createElement('div');
+    maxName.className = 'max-count';
+    maxName.textContent = 'MAX. 12';
+    const maxNum = document.createElement('div');
+    maxNum.className = 'max-count';
+    maxNum.textContent = 'MAX. 3';
+    maxRow.appendChild(spacer);
+    maxRow.appendChild(maxName);
+    maxRow.appendChild(maxNum);
+
+    cont.appendChild(nameInput);
+    cont.appendChild(numInput);
+    cont.appendChild(maxRow);
+
+    // add to stage
+    stage.appendChild(cont);
+
+    // find original hidden/original inputs to sync with
+    const origName = document.getElementById('np-name');
+    const origNum  = document.getElementById('np-num');
+    // if originals not present, create hidden fields for form submit
+    if(!origName) {
+      const h = document.createElement('input');
+      h.type='hidden'; h.id='np-name'; h.name='name_text'; document.body.appendChild(h);
+    }
+    if(!origNum) {
+      const h2 = document.createElement('input');
+      h2.type='hidden'; h2.id='np-num'; h2.name='number_text'; document.body.appendChild(h2);
+    }
+
+    // populate mobile inputs from originals if available
+    const sourceName = document.getElementById('np-name');
+    const sourceNum  = document.getElementById('np-num');
+    if (sourceName && sourceName.value) nameInput.value = sourceName.value;
+    if (sourceNum && sourceNum.value) numInput.value = sourceNum.value;
+
+    // keep keypress numeric only for numInput
+    numInput.addEventListener('input', e => {
+      const v = e.target.value.replace(/\D/g,'').slice(0,3);
+      e.target.value = v;
+      if (sourceNum) sourceNum.value = v;
+      // also update the visible overlay (if present)
+      const pvNum = document.getElementById('np-prev-num');
+      if (pvNum) pvNum.textContent = v || '09';
+    });
+
+    nameInput.addEventListener('input', e => {
+      // uppercase, allow spaces and A-Z
+      const v = e.target.value.toUpperCase().replace(/[^A-Z ]/g,'').slice(0,12);
+      e.target.value = v;
+      if (sourceName) sourceName.value = v;
+      const pvName = document.getElementById('np-prev-name');
+      if (pvName) pvName.textContent = v || 'NAME';
+    });
+
+    // when mobile inputs focus, ensure stage won't jump off-screen (visualViewport handler)
+    function keepStageVisibleOnKeyboard() {
+      if (!window.visualViewport) return;
+      // compute ideal top so controls appear around mid-stage
+      const setPos = () => {
+        const sRect = stage.getBoundingClientRect();
+        // prefer place controls at about 60% of stage height (tweak if needed)
+        const topPx = Math.max(8, Math.round(sRect.height * 0.60));
+        cont.style.top = topPx + 'px';
+      };
+      setPos();
+      // on viewport resize (keyboard) maintain stage fixed and recalc
+      window.visualViewport.addEventListener('resize', () => {
+        setPos();
+        // keep stage fixed if keyboard open (small viewport)
+        const vhRatio = window.visualViewport.height / window.innerHeight;
+        if (vhRatio < 0.75) {
+          stage.style.position = 'fixed';
+          stage.style.top = '12px';
+          stage.style.left = '50%';
+          stage.style.transform = 'translateX(-50%)';
+        } else {
+          stage.style.position = '';
+          stage.style.top = '';
+          stage.style.left = '';
+          stage.style.transform = '';
+        }
+      });
+      // also recalc on orientationchange / resize
+      window.addEventListener('resize', setPos);
+      window.addEventListener('orientationchange', () => setTimeout(setPos,150));
+    }
+    keepStageVisibleOnKeyboard();
+
+    // ensure overlay preview updates as well (if your preview uses #np-prev-name/num)
+    const pvName = document.getElementById('np-prev-name');
+    const pvNum = document.getElementById('np-prev-num');
+    if (pvName) pvName.textContent = (nameInput.value || 'NAME');
+    if (pvNum)  pvNum.textContent  = (numInput.value || '09');
+
+    // ensure clicking the floating inputs focuses the native keyboard
+    nameInput.addEventListener('focus', ()=>{ /* no-op */ });
+    numInput.addEventListener('focus', ()=>{ /* no-op */ });
+
+    // Accessibility: move focus to name on mount
+    setTimeout(()=> nameInput.focus(), 250);
+  } // mobileOverlaySetup
+
+  // init on DOM ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', mobileOverlaySetup);
+  } else {
+    mobileOverlaySetup();
+  }
+
+  // also re-run when layoutSlots or fonts arrive late
+  window.addEventListener('load', ()=> setTimeout(mobileOverlaySetup, 200));
+})();
+</script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 </body>
 </html>
