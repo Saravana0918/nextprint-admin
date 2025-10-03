@@ -88,6 +88,12 @@
   background: #0d6efd !important;
   color: #fff !important;
 }
+#np-prev-name.mobile-centered,
+#np-prev-num.mobile-centered {
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  width: 90% !important;
+}
   #np-atc-btn.mobile-fixed-outside { position: fixed !important; top: 12px !important; right: 12px !important; z-index: 99999 !important; }
   /* style the base image to look like framed box */
   .np-stage img#np-base { display:block; width:100%; height:auto; border-radius:8px;   background-color:#f6f6f6; box-shadow: 0 6px 18px rgba(0,0,0,0.35); border: 3px solid rgba(255,255,255,0.12); position: relative; z-index: 14; }
@@ -98,7 +104,16 @@
   .np-mobile-head { display: block !important; position: absolute; top: 8px; left: 14px; right: 14px; z-index: 22; color: #fff; text-shadow: 0 3px 8px rgba(0,0,0,0.7); font-weight: 700; font-size: 13px; text-transform: uppercase; pointer-events: none; }
 
   /* 4) overlays (name & number) default centered */
-  #np-prev-name, #np-prev-num { z-index: 24; position: absolute; left: 50% !important; transform: translateX(-50%) !important; width: 90% !important; text-align: center !important; color: #fff; text-shadow: 0 3px 8px rgba(0,0,0,0.7); pointer-events: none; }
+  #np-prev-name,
+  #np-prev-num {
+  z-index: 24;
+  position: absolute;
+  /* left/top/width/height/transform will be set by JS via inline styles */
+  text-align: center !important;
+  color: #fff;
+  text-shadow: 0 3px 8px rgba(0,0,0,0.7);
+  pointer-events: none;
+}
 
   /* 5) INPUTS: name & number styles (underline only, centered, MAX tag on right) */
   .np-field-wrap.name-input,
@@ -379,88 +394,93 @@ document.getElementById('btn-add-team').addEventListener('click', function(e){
 
     // place overlay using pixel values derived from stage rect so CSS transforms / scaling do not break placement
     function placeOverlay(el, slot, slotKey){
-      if(!el || !slot || !stage) return;
-      // ensure stage is reference box
-      stage.style.position = stage.style.position || 'relative';
+  if(!el || !slot || !stage) return;
 
-      el.style.position = 'absolute';
-      el.style.boxSizing = 'border-box';
-      el.style.padding = '0 4px';
-      el.style.whiteSpace = 'nowrap';
-      el.style.overflow = 'hidden';
-      el.style.pointerEvents = 'none';
-      el.style.zIndex = (slotKey === 'number' ? 60 : 50);
+  // remove center fallback class first
+  el.classList.remove('mobile-centered');
 
-      const { imgW, imgH, stageW, stageH } = computeStageSize();
+  // set core positioning — JS will control left/top/width/height
+  el.style.position = 'absolute';
+  el.style.left = ((slot.left_pct||0)) + '%';
+  el.style.top  = ((slot.top_pct||0)) + '%';
+  el.style.width = ((slot.width_pct||10)) + '%';
+  el.style.height = ((slot.height_pct||10)) + '%';
+  el.style.display = 'flex';
+  el.style.alignItems = 'center';
+  el.style.justifyContent = 'center';
+  el.style.boxSizing = 'border-box';
+  el.style.padding = '0 4px';
+  el.style.transform = 'rotate(' + ((slot.rotation||0)) + 'deg)';
+  el.style.whiteSpace = 'nowrap';
+  el.style.overflow = 'hidden';
+  el.style.pointerEvents = 'none';
+  el.style.zIndex = (slotKey === 'number' ? 60 : 50);
 
-      // convert percentages to px inside the stage
-      const leftPx = Math.round(((slot.left_pct || 0) / 100) * stageW);
-      const topPx  = Math.round(((slot.top_pct  || 0) / 100) * stageH);
-      const widthPx = Math.max(8, Math.round(((slot.width_pct || 10) / 100) * stageW));
-      const heightPx = Math.max(8, Math.round(((slot.height_pct || 10) / 100) * stageH));
+  const {imgW, imgH, stageW, stageH} = computeStageSize();
 
-      el.style.left = leftPx + 'px';
-      el.style.top  = topPx + 'px';
-      el.style.width = widthPx + 'px';
-      el.style.height = heightPx + 'px';
-      el.style.display = 'flex';
-      el.style.alignItems = 'center';
-      el.style.justifyContent = 'center';
-      el.style.transform = 'rotate(' + ((slot.rotation||0)) + 'deg)';
+  // convert percentages into pixel areas for font sizing
+  const areaWpx = Math.max(8, Math.round(((slot.width_pct || 10)/100) * stageW));
+  const areaHpx = Math.max(8, Math.round(((slot.height_pct || 10)/100) * stageH));
 
-      const text = (el.textContent || '').toString().trim() || 'TEXT';
-      const chars = Math.max(1, text.length);
-      const isMobile = window.innerWidth <= 767;
+  const text = (el.textContent || '').toString().trim() || 'TEXT';
+  const chars = Math.max(1, text.length);
 
-      const heightFactorName = 1.00;
-      const heightFactorNumber = isMobile ? 1.05 : 1.00;
-      const heightCandidate = Math.floor(heightPx * (slotKey === 'number' ? heightFactorNumber : heightFactorName));
+  const isMobile = window.innerWidth <= 767;
 
-      const avgCharRatio = 0.48;
-      const widthCap = Math.floor((widthPx * 0.95) / (chars * avgCharRatio));
-      let numericShrink = (slotKey === 'number') ? (isMobile ? 1.0 : 0.98) : 1.0;
+  const heightFactorName = 1.00;
+  const heightFactorNumber = isMobile ? 1.05 : 1.00;
 
-      let fontSize = Math.floor(Math.min(heightCandidate, widthCap) * numericShrink);
-      const maxAllowed = Math.max(14, Math.floor(stageW * (isMobile ? 0.45 : 0.32)));
-      fontSize = Math.max(7, Math.min(fontSize, maxAllowed));
-      fontSize = Math.floor(fontSize * 1.10);
+  const heightCandidate = Math.floor(areaHpx * (slotKey === 'number' ? heightFactorNumber : heightFactorName));
 
-      el.style.fontSize = fontSize + 'px';
-      el.style.lineHeight = '1';
-      el.style.fontWeight = '700';
+  const avgCharRatio = 0.48;
+  const widthCap = Math.floor((areaWpx * 0.95) / (chars * avgCharRatio));
 
-      let attempts = 0;
-      while (el.scrollWidth > el.clientWidth && fontSize > 7 && attempts < 30) {
-        fontSize = Math.max(7, Math.floor(fontSize * 0.92));
-        el.style.fontSize = fontSize + 'px';
-        attempts++;
-      }
-    }
+  let numericShrink = 1.0;
+  if (slotKey === 'number') numericShrink = isMobile ? 1.0 : 0.98;
 
-    // applyLayout waits for image decode/load; uses placeOverlay
-    function applyLayout(){
-      if (!baseImg) return;
-      if (!baseImg.complete || baseImg.naturalWidth === 0) {
-        if (baseImg.decode) {
-          baseImg.decode().then(()=> {
-            if (layout.name) placeOverlay(pvName, layout.name, 'name');
-            if (layout.number) placeOverlay(pvNum, layout.number, 'number');
-          }).catch(()=> {
-            setTimeout(()=>{ if (layout.name) placeOverlay(pvName, layout.name, 'name'); if (layout.number) placeOverlay(pvNum, layout.number, 'number'); }, 250);
-          });
-          return;
-        } else {
-          baseImg.addEventListener('load', () => {
-            if (layout.name) placeOverlay(pvName, layout.name, 'name');
-            if (layout.number) placeOverlay(pvNum, layout.number, 'number');
-          }, { once: true });
-          return;
-        }
-      }
+  let fontSize = Math.floor(Math.min(heightCandidate, widthCap) * numericShrink);
 
-      if (layout.name) placeOverlay(pvName, layout.name, 'name');
-      if (layout.number) placeOverlay(pvNum, layout.number, 'number');
-    }
+  const maxAllowed = Math.max(14, Math.floor(stageW * (isMobile ? 0.45 : 0.32)));
+  fontSize = Math.max(8, Math.min(fontSize, maxAllowed));
+  fontSize = Math.floor(fontSize * 1.10);
+
+  el.style.fontSize = fontSize + 'px';
+  el.style.lineHeight = '1';
+  el.style.fontWeight = '700';
+
+  let attempts = 0;
+  while (el.scrollWidth > el.clientWidth && fontSize > 7 && attempts < 30) {
+    fontSize = Math.max(7, Math.floor(fontSize * 0.92));
+    el.style.fontSize = fontSize + 'px';
+    attempts++;
+  }
+
+  // if for some reason slot is empty or has invalid top/left and we're on mobile,
+  // keep overlay centered (fallback). You can remove this if you don't want fallback.
+  if (isMobile && (typeof slot.left_pct === 'undefined' || typeof slot.top_pct === 'undefined')) {
+    el.classList.add('mobile-centered');
+  }
+}
+
+function applyLayout(){
+  if (!baseImg) return;
+  if (!baseImg.complete || !baseImg.naturalWidth) return;
+
+  // layout may contain name/number info from server (layoutSlots)
+  if (layout && layout.name) {
+    placeOverlay(pvName, layout.name, 'name');
+  } else {
+    // fallback: center on desktop only
+    pvName.classList.add('mobile-centered');
+  }
+
+  if (layout && layout.number) {
+    placeOverlay(pvNum, layout.number, 'number');
+  } else {
+    pvNum.classList.add('mobile-centered');
+  }
+}
+
 
     function syncPreview(){
       if (pvName && nameEl) {
