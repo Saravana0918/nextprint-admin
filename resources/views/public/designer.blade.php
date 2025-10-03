@@ -104,15 +104,17 @@
   .np-mobile-head { display: block !important; position: absolute; top: 8px; left: 14px; right: 14px; z-index: 22; color: #fff; text-shadow: 0 3px 8px rgba(0,0,0,0.7); font-weight: 700; font-size: 13px; text-transform: uppercase; pointer-events: none; }
 
   /* 4) overlays (name & number) default centered */
-  #np-prev-name,
-  #np-prev-num {
+  #np-prev-name, #np-prev-num {
   z-index: 24;
   position: absolute;
-  /* left/top/width/height/transform will be set by JS via inline styles */
-  text-align: center !important;
+  /* left/top will be set by JS using percentages from layoutSlots */
+  width: auto;
+  max-width: 95%;
+  text-align: center;
   color: #fff;
   text-shadow: 0 3px 8px rgba(0,0,0,0.7);
   pointer-events: none;
+  transform-origin: left top; /* less surprises when JS applies rotations */
 }
 
   /* 5) INPUTS: name & number styles (underline only, centered, MAX tag on right) */
@@ -396,70 +398,87 @@ document.getElementById('btn-add-team').addEventListener('click', function(e){
     function placeOverlay(el, slot, slotKey){
   if(!el || !slot || !stage) return;
 
-  // remove center fallback class first
-  el.classList.remove('mobile-centered');
+  // compute stage size
+  const {imgW, imgH, stageW, stageH} = computeStageSize();
 
-  // set core positioning — JS will control left/top/width/height
+  // fallback width/height percentages
+  const leftPct = (typeof slot.left_pct !== 'undefined') ? slot.left_pct : 50;
+  const topPct  = (typeof slot.top_pct !== 'undefined') ? slot.top_pct : 50;
+  const widthPct  = (typeof slot.width_pct !== 'undefined') ? slot.width_pct : 20;
+  const heightPct = (typeof slot.height_pct !== 'undefined') ? slot.height_pct : 10;
+
+  // compute pixel area
+  const areaWpx = Math.max(8, Math.round((widthPct/100) * stageW));
+  const areaHpx = Math.max(8, Math.round((heightPct/100) * stageH));
+
+  // set sizing box (we will position the overlay roughly centered in that area)
   el.style.position = 'absolute';
-  el.style.left = ((slot.left_pct||0)) + '%';
-  el.style.top  = ((slot.top_pct||0)) + '%';
-  el.style.width = ((slot.width_pct||10)) + '%';
-  el.style.height = ((slot.height_pct||10)) + '%';
+  el.style.boxSizing = 'border-box';
+  el.style.padding = '0 6px';
   el.style.display = 'flex';
   el.style.alignItems = 'center';
   el.style.justifyContent = 'center';
-  el.style.boxSizing = 'border-box';
-  el.style.padding = '0 4px';
-  el.style.transform = 'rotate(' + ((slot.rotation||0)) + 'deg)';
-  el.style.whiteSpace = 'nowrap';
   el.style.overflow = 'hidden';
   el.style.pointerEvents = 'none';
   el.style.zIndex = (slotKey === 'number' ? 60 : 50);
 
-  const {imgW, imgH, stageW, stageH} = computeStageSize();
-
-  // convert percentages into pixel areas for font sizing
-  const areaWpx = Math.max(8, Math.round(((slot.width_pct || 10)/100) * stageW));
-  const areaHpx = Math.max(8, Math.round(((slot.height_pct || 10)/100) * stageH));
-
-  const text = (el.textContent || '').toString().trim() || 'TEXT';
+  // compute font size to fit area
+  const text = (el.textContent || '').toString().trim() || (slotKey === 'number' ? '09' : 'NAME');
   const chars = Math.max(1, text.length);
-
   const isMobile = window.innerWidth <= 767;
 
-  const heightFactorName = 1.00;
-  const heightFactorNumber = isMobile ? 1.05 : 1.00;
-
+  const heightFactorName = 1.0;
+  const heightFactorNumber = isMobile ? 1.05 : 1.0;
   const heightCandidate = Math.floor(areaHpx * (slotKey === 'number' ? heightFactorNumber : heightFactorName));
-
   const avgCharRatio = 0.48;
   const widthCap = Math.floor((areaWpx * 0.95) / (chars * avgCharRatio));
 
-  let numericShrink = 1.0;
-  if (slotKey === 'number') numericShrink = isMobile ? 1.0 : 0.98;
-
-  let fontSize = Math.floor(Math.min(heightCandidate, widthCap) * numericShrink);
-
+  let fontSize = Math.floor(Math.min(heightCandidate, widthCap));
   const maxAllowed = Math.max(14, Math.floor(stageW * (isMobile ? 0.45 : 0.32)));
   fontSize = Math.max(8, Math.min(fontSize, maxAllowed));
-  fontSize = Math.floor(fontSize * 1.10);
+  fontSize = Math.floor(fontSize * 1.08);
 
   el.style.fontSize = fontSize + 'px';
   el.style.lineHeight = '1';
   el.style.fontWeight = '700';
 
+  // After font applied, we might need to shrink to avoid wrap/overflow
   let attempts = 0;
-  while (el.scrollWidth > el.clientWidth && fontSize > 7 && attempts < 30) {
+  while (el.scrollWidth > areaWpx && fontSize > 7 && attempts < 30) {
     fontSize = Math.max(7, Math.floor(fontSize * 0.92));
     el.style.fontSize = fontSize + 'px';
     attempts++;
   }
 
-  // if for some reason slot is empty or has invalid top/left and we're on mobile,
-  // keep overlay centered (fallback). You can remove this if you don't want fallback.
-  if (isMobile && (typeof slot.left_pct === 'undefined' || typeof slot.top_pct === 'undefined')) {
-    el.classList.add('mobile-centered');
-  }
+  // Now compute pixel coordinates for left/top relative to stage
+  const centerXpx = Math.round((leftPct/100) * stageW);
+  const centerYpx = Math.round((topPct/100) * stageH);
+
+  // place overlay centered at computed center (adjust by element size)
+  // ensure el is measured (force reflow)
+  const elW = Math.max( Math.min(areaWpx, el.scrollWidth || areaWpx), 8 );
+  const elH = Math.max( Math.min(areaHpx, el.scrollHeight || areaHpx), 8 );
+
+  // compute top-left
+  let pxLeft = Math.round(centerXpx - (elW / 2));
+  let pxTop  = Math.round(centerYpx - (elH / 2));
+
+  // clamp inside stage box
+  pxLeft = Math.max(0, Math.min(stageW - elW, pxLeft));
+  pxTop  = Math.max(0, Math.min(stageH - elH, pxTop));
+
+  // convert to percentage relative to stage (so CSS absolute positioning with % works reliably)
+  const leftPercentForCSS = (pxLeft / stageW) * 100;
+  const topPercentForCSS  = (pxTop  / stageH) * 100;
+
+  el.style.left = leftPercentForCSS + '%';
+  el.style.top  = topPercentForCSS + '%';
+  el.style.width = (elW) + 'px';
+  el.style.height = (elH) + 'px';
+
+  // rotation if any
+  if (slot.rotation) el.style.transform = 'rotate(' + (slot.rotation) + 'deg)';
+  else el.style.transform = 'none';
 }
 
 function applyLayout(){
