@@ -14,12 +14,13 @@ class ShopifyService
 
     public function __construct()
     {
-        $this->base    = rtrim('https://' . trim((string) env('SHOPIFY_STORE', '')), '/');
-        $this->token   = trim((string) env('SHOPIFY_ADMIN_API_TOKEN', ''));
+        // SHOPIFY_STORE expected like "yoursite.myshopify.com" (without protocol)
+        $store = trim((string) env('SHOPIFY_STORE', ''));
+        $this->base = $store ? rtrim('https://' . $store, '/') : '';
+        $this->token = trim((string) env('SHOPIFY_ADMIN_API_TOKEN', ''));
         $this->version = env('SHOPIFY_API_VERSION', '2024-10');
 
         if (empty($this->base) || empty($this->token)) {
-            // Fail early so developer sees the misconfig
             Log::warning('SHOPIFY SERVICE - missing env keys', [
                 'base' => $this->base,
                 'token_set' => !empty($this->token),
@@ -27,18 +28,20 @@ class ShopifyService
         }
     }
 
+    /**
+     * Generic GraphQL call
+     */
     private function gql(string $query, array $variables = []): array
     {
         $url = "{$this->base}/admin/api/{$this->version}/graphql.json";
 
         $resp = Http::withHeaders([
-                    'X-Shopify-Access-Token' => $this->token,
-                    'Accept' => 'application/json',
-                ])
-                ->post($url, [
-                    'query'     => $query,
-                    'variables' => $variables,
-                ]);
+            'X-Shopify-Access-Token' => $this->token,
+            'Accept' => 'application/json',
+        ])->post($url, [
+            'query' => $query,
+            'variables' => $variables,
+        ]);
 
         $resp->throw();
 
@@ -61,11 +64,21 @@ class ShopifyService
     }
 
     /**
-     * productsByCollectionHandle - existing function (kept & slightly adapted)
+     * Slugify a name to a handle
+     */
+    private function slugify(string $s): string
+    {
+        $s = mb_strtolower($s);
+        $s = preg_replace('/[^a-z0-9]+/i', '-', $s);
+        $s = trim($s, '-');
+        return $s;
+    }
+
+    /**
+     * productsByCollectionHandle - prefers GraphQL; falls back to REST if needed
      */
     public function productsByCollectionHandle(string $handle, int $perPage = 250): array
     {
-        // GraphQL query (preferred)
         $gql = <<<'GQL'
 query collectionProducts($handle: String!, $first: Int!) {
   collectionByHandle(handle: $handle) {
@@ -81,15 +94,20 @@ query collectionProducts($handle: String!, $first: Int!) {
           vendor
           tags
           images(first: 10) {
-            edges { node { url } }
+            edges { node { url originalSrc } }
           }
-          featuredImage { url }
+          featuredImage { url originalSrc }
           priceRangeV2 {
             minVariantPrice { amount currencyCode }
             maxVariantPrice { amount currencyCode }
           }
+          priceRange {
+            minVariantPrice { amount currencyCode }
+            maxVariantPrice { amount currencyCode }
+          }
           variants(first: 50) {
-            edges { node { id price } }
+            edges { node { id price presentmentPrices(first:1) { edges { node { price { amount currencyCode } } } } } }
+            nodes { id price }
           }
         }
       }
@@ -106,13 +124,16 @@ GQL;
                 foreach ($data['collectionByHandle']['products']['edges'] as $edge) {
                     $node = $edge['node'] ?? [];
                     $images = [];
+
                     if (!empty($node['images']['edges'])) {
                         foreach ($node['images']['edges'] as $ie) {
-                            $url = $ie['node']['url'] ?? null;
+                            $url = $ie['node']['originalSrc'] ?? $ie['node']['url'] ?? null;
                             if ($url) $images[] = ['src' => $url];
                         }
                     }
-                    if (empty($images) && !empty($node['featuredImage']['url'])) {
+                    if (empty($images) && !empty($node['featuredImage']['originalSrc'])) {
+                        $images[] = ['src' => $node['featuredImage']['originalSrc']];
+                    } elseif (empty($images) && !empty($node['featuredImage']['url'])) {
                         $images[] = ['src' => $node['featuredImage']['url']];
                     }
 
@@ -123,8 +144,9 @@ GQL;
                         'vendor' => $node['vendor'] ?? null,
                         'tags' => $node['tags'] ?? [],
                         'images' => $images,
-                        'image' => ['src' => $images[0]['src'] ?? ($node['featuredImage']['url'] ?? null)],
+                        'image' => ['src' => $images[0]['src'] ?? ($node['featuredImage']['originalSrc'] ?? ($node['featuredImage']['url'] ?? null))],
                         'priceRangeV2' => $node['priceRangeV2'] ?? null,
+                        'priceRange' => $node['priceRange'] ?? null,
                         'variants' => $node['variants'] ?? null,
                         'raw' => $node,
                     ];
@@ -138,7 +160,7 @@ GQL;
             Log::warning('SHOPIFY SERVICE - graphql error', ['handle' => $handle, 'error' => $e->getMessage()]);
         }
 
-        // REST fallback (try by collection handle via listing collections and matching handle)
+        // REST fallback: find collection id by handle and fetch products
         try {
             $colTypes = ['custom_collections', 'smart_collections'];
             $collectionId = null;
@@ -209,7 +231,138 @@ GQL;
     }
 
     /**
+     * Return whether amount is usable
+     */
+    private function isValidAmount($v): bool
+    {
+        if ($v === null) return false;
+        if (is_string($v)) {
+            $v = trim($v);
+            if ($v === '') return false;
+        }
+        return is_numeric($v);
+    }
+
+    /**
+     * Fetch product price via REST product endpoint as fallback
+     */
+    private function fetchPriceViaRest(int $productId)
+    {
+        try {
+            if (empty($this->base) || empty($this->token)) return null;
+            $url = "{$this->base}/admin/api/{$this->version}/products/{$productId}.json";
+            $res = Http::withHeaders([
+                'X-Shopify-Access-Token' => $this->token,
+                'Accept' => 'application/json',
+            ])->timeout(10)->get($url);
+
+            if (!$res->ok()) {
+                Log::warning('fetchPriceViaRest:not-ok', ['productId' => $productId, 'status' => $res->status()]);
+                return null;
+            }
+
+            $j = $res->json();
+            $firstVariant = $j['product']['variants'][0] ?? null;
+            if (!$firstVariant) return null;
+
+            $price = $firstVariant['price'] ?? null;
+            // presentment_prices shape fallback
+            if (!$this->isValidAmount($price) && !empty($firstVariant['presentment_prices'][0]['price']['amount'])) {
+                $price = $firstVariant['presentment_prices'][0]['price']['amount'];
+            }
+            return $price;
+        } catch (\Throwable $e) {
+            Log::warning('fetchPriceViaRest:error', ['productId' => $productId, 'err' => $e->getMessage()]);
+            return null;
+        }
+    }
+
+    /**
+     * Given the product array returned by productsByCollectionHandle(), return min price or null
+     */
+    private function resolveMinPriceFromProductArray(array $product): ?float
+    {
+        // 1) priceRangeV2
+        if (!empty($product['priceRangeV2']['minVariantPrice']['amount']) && $this->isValidAmount($product['priceRangeV2']['minVariantPrice']['amount'])) {
+            return (float) $product['priceRangeV2']['minVariantPrice']['amount'];
+        }
+
+        // 2) priceRange (older)
+        if (!empty($product['priceRange']['minVariantPrice']['amount']) && $this->isValidAmount($product['priceRange']['minVariantPrice']['amount'])) {
+            return (float) $product['priceRange']['minVariantPrice']['amount'];
+        }
+
+        // 3) variants shapes (graphQL edges or nodes, or REST list)
+        $vals = [];
+
+        if (!empty($product['variants'])) {
+            $variants = $product['variants'];
+
+            // shape: edges -> node
+            if (!empty($variants['edges']) && is_array($variants['edges'])) {
+                foreach ($variants['edges'] as $edge) {
+                    $node = $edge['node'] ?? [];
+                    $price = $node['price'] ?? null;
+                    if (!$this->isValidAmount($price) && !empty($node['presentmentPrices']['edges'][0]['node']['price']['amount'])) {
+                        $price = $node['presentmentPrices']['edges'][0]['node']['price']['amount'];
+                    }
+                    if ($this->isValidAmount($price)) $vals[] = (float)$price;
+                }
+            }
+
+            // shape: nodes array
+            if (!empty($variants['nodes']) && is_array($variants['nodes'])) {
+                foreach ($variants['nodes'] as $v) {
+                    $price = $v['price'] ?? null;
+                    if ($this->isValidAmount($price)) $vals[] = (float)$price;
+                }
+            }
+
+            // shape: numeric-indexed array (REST)
+            if (array_values($variants) === $variants) {
+                foreach ($variants as $v) {
+                    if (!is_array($v)) continue;
+                    $price = $v['price'] ?? ($v['node']['price'] ?? null);
+                    if ($this->isValidAmount($price)) $vals[] = (float)$price;
+                }
+            }
+        }
+
+        // 4) raw variants (when product['raw'] present)
+        if (!empty($product['raw']['variants']) && is_array($product['raw']['variants'])) {
+            foreach ($product['raw']['variants'] as $v) {
+                $price = $v['price'] ?? null;
+                if ($this->isValidAmount($price)) $vals[] = (float)$price;
+            }
+        }
+
+        if (!empty($vals)) {
+            return min($vals);
+        }
+
+        // 5) REST fallback using product id
+        $productId = null;
+        if (!empty($product['id']) && is_string($product['id']) && str_contains($product['id'], 'gid://')) {
+            $productId = self::gidToId($product['id']);
+        } elseif (!empty($product['raw']['id'])) {
+            $productId = (int) $product['raw']['id'];
+        } elseif (!empty($product['id']) && is_numeric($product['id'])) {
+            $productId = (int) $product['id'];
+        }
+
+        if ($productId) {
+            $restPrice = $this->fetchPriceViaRest((int)$productId);
+            if ($this->isValidAmount($restPrice)) {
+                return (float)$restPrice;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * syncNextprintToLocal - robust implementation using collection handle from env
+     * returns number processed
      */
     public function syncNextprintToLocal(): int
     {
@@ -222,13 +375,11 @@ GQL;
             return 0;
         }
 
-        // If handle provided — use productsByCollectionHandle (GraphQL preferred)
         if ($collectionHandle !== '') {
             $items = $this->productsByCollectionHandle($collectionHandle, 250);
         } else {
-            // No handle provided: attempt to find collection id by title (existing REST code) and then call REST products endpoint
+            // try slugified name as handle
             $items = $this->productsByCollectionHandle($this->slugify($collectionName), 250);
-            // Note: slugify is used because handles are slugified titles. If not found, productsByCollectionHandle will fallback to REST search.
         }
 
         if (empty($items)) {
@@ -239,74 +390,50 @@ GQL;
         $processed = 0;
         foreach ($items as $product) {
             try {
-                // Convert gid to numeric if present
+                // determine numeric shopify id if possible
                 $shopifyId = null;
                 if (!empty($product['id']) && is_string($product['id']) && str_contains($product['id'], 'gid://')) {
                     $shopifyId = self::gidToId($product['id']);
                 } elseif (!empty($product['raw']['id'])) {
                     $shopifyId = (int)$product['raw']['id'];
-                } elseif (!empty($product['raw']['id']) && is_numeric($product['raw']['id'])) {
-                    $shopifyId = (int) $product['raw']['id'];
+                } elseif (!empty($product['id']) && is_numeric($product['id'])) {
+                    $shopifyId = (int)$product['id'];
                 }
 
-                // Determine min price robustly
-                $variantPrices = [];
-                if (!empty($product['raw']['variants']) && is_array($product['raw']['variants'])) {
-                    foreach ($product['raw']['variants'] as $v) {
-                        // GraphQL variants may come under edges->node
-                        if (isset($v['edges'])) {
-                            foreach ($v['edges'] as $edge) {
-                                $node = $edge['node'] ?? [];
-                                if (!empty($node['price'])) $variantPrices[] = (float)$node['price'];
-                            }
-                        } elseif (!empty($v['price'])) {
-                            if (is_numeric($v['price'])) $variantPrices[] = (float)$v['price'];
-                        } elseif (!empty($v['node']['price'])) {
-                            if (is_numeric($v['node']['price'])) $variantPrices[] = (float)$v['node']['price'];
-                        }
-                    }
-                }
-                // priceRangeV2 fallback (GraphQL)
-                if (empty($variantPrices) && !empty($product['priceRangeV2']['minVariantPrice']['amount'])) {
-                    $variantPrices[] = (float) $product['priceRangeV2']['minVariantPrice']['amount'];
-                }
-                // raw top-level price fallback
-                if (empty($variantPrices) && !empty($product['raw']['variants'][0]['price'])) {
-                    $variantPrices[] = (float) $product['raw']['variants'][0]['price'];
+                // Resolve price robustly
+                $minPrice = $this->resolveMinPriceFromProductArray($product);
+
+                if ($minPrice === null) {
+                    Log::warning('syncNextprintToLocal: price not found', [
+                        'title' => $product['title'] ?? null,
+                        'id' => $product['id'] ?? ($product['raw']['id'] ?? null),
+                        // small sample only so logs don't explode
+                        'sample_raw' => is_array($product['raw']) ? array_slice($product['raw'], 0, 8) : null
+                    ]);
                 }
 
-                $minPrice = (!empty($variantPrices) ? min($variantPrices) : 0.00);
-
-                // upsert into local DB
+                // Upsert into local DB (adjust fields if your products table differs)
                 if ($shopifyId) {
                     Product::updateOrCreate(
-                        ['shopify_product_id' => $shopifyId],
+                        ['shopify_product_id' => (string)$shopifyId],
                         [
                             'name' => $product['title'] ?? ($product['raw']['title'] ?? null),
-                            'price' => $minPrice,
-                            'min_price' => $minPrice,
+                            'price' => $minPrice !== null ? number_format($minPrice, 2, '.', '') : null,
+                            'min_price' => $minPrice !== null ? number_format($minPrice, 2, '.', '') : null,
                             'vendor' => $product['vendor'] ?? ($product['raw']['vendor'] ?? null),
-                            'status' => $product['raw']['status'] ?? 'active',
+                            'image' => $product['image']['src'] ?? ($product['raw']['image']['src'] ?? null),
                         ]
                     );
                     $processed++;
                 } else {
-                    Log::warning('SHOPIFY SERVICE - product missing shopify id, skipping', ['product' => $product]);
+                    Log::warning('SHOPIFY SERVICE - product missing shopify id, skipping', ['product' => $product['title'] ?? $product]);
                 }
             } catch (\Throwable $e) {
-                Log::error('SHOPIFY SERVICE - error upserting product', ['error' => $e->getMessage(), 'product' => $product]);
+                Log::error('SHOPIFY SERVICE - error upserting product', ['error' => $e->getMessage(), 'product' => $product['title'] ?? null]);
             }
         }
 
         Log::info('SHOPIFY SERVICE - sync completed', ['processed' => $processed]);
         return $processed;
-    }
-
-    private function slugify(string $s): string
-    {
-        $s = mb_strtolower($s);
-        $s = preg_replace('/[^a-z0-9]+/i', '-', $s);
-        $s = trim($s, '-');
-        return $s;
     }
 }
