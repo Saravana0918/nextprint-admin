@@ -258,22 +258,22 @@
     <div class="col-md-3 np-col order-3 order-md-3 right-layout">
       <h4 class="mb-1 mobile-display desktop-display">{{ $product->name ?? ($product->title ?? 'Product') }}</h4>
       @php
-          $priceVal = null;
-          if (!empty($displayPrice) && is_numeric($displayPrice)) {
-            $priceVal = (float) $displayPrice;
-          } elseif (isset($product->min_price) && $product->min_price !== null && is_numeric($product->min_price)) {
-            $priceVal = (float) $product->min_price;
-          }
-        @endphp
+  $priceVal = null;
+  if (!empty($displayPrice) && is_numeric($displayPrice)) {
+    $priceVal = (float) $displayPrice;
+  } elseif (isset($product->min_price) && $product->min_price !== null && is_numeric($product->min_price)) {
+    $priceVal = (float) $product->min_price;
+  }
+@endphp
 
-        <div class="text mb-3 mobile-display desktop-display">
-          Price: {{ $product->vendor ?? '—' }} • 
-          @if ($priceVal !== null && $priceVal > 0)
-            ₹ {{ number_format($priceVal, 2) }}
-          @else
-            — <!-- price not available locally -->
-          @endif
-        </div>
+<div class="text mb-3 mobile-display desktop-display">
+  Price: {{ $product->vendor ?? '—' }} • 
+  @if ($priceVal !== null && $priceVal > 0)
+    ₹ {{ number_format($priceVal, 2) }}
+  @else
+    — <!-- price not available locally -->
+  @endif
+</div>
 
       <form id="np-atc-form" method="post" action="{{ route('designer.addtocart') }}">
         @csrf
