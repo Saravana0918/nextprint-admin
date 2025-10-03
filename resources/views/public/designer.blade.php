@@ -1,3 +1,5 @@
+
+
 <!doctype html>
 <html lang="en">
 <head>
@@ -104,30 +106,28 @@
       #np-atc-btn { position: fixed !important; top: 12px !important; right: 12px !important; z-index: 99999 !important; width: 130px !important; height: 44px !important; padding: 6px 12px !important; border-radius: 28px !important; box-shadow: 0 6px 18px rgba(0,0,0,0.25) !important; font-weight: 700 !important; white-space: nowrap !important; }
       .mobile-display { display: none; }
       .np-col input.form-control,
-.np-col select.form-select,
-.np-col textarea,
-.np-col .np-swatch,
-#np-name, #np-num, #np-font, #np-color, #np-size, #np-qty,
-#np-atc-btn, #btn-add-team {
-  position: relative !important;
-  z-index: 100010 !important;
-  pointer-events: auto !important;
-}
+      .np-col select.form-select,
+      .np-col textarea,
+      .np-col .np-swatch,
+      #np-name, #np-num, #np-font, #np-color, #np-size, #np-qty,
+      #np-atc-btn, #btn-add-team {
+        position: relative !important;
+        z-index: 100010 !important;
+        pointer-events: auto !important;
+      }
+        .np-stage,
+        .np-stage::after,
+        .np-stage.covering,
+        .np-stage .np-overlay {
+          pointer-events: none !important;
+        }
 
-/* Make stage overlays non-interactive so UI controls remain clickable */
-.np-stage,
-.np-stage::after,
-.np-stage.covering,
-.np-stage .np-overlay {
-  pointer-events: none !important;
-}
-
-/* Keep the floating Add-to-Cart clickable above everything */
-#np-atc-btn.mobile-fixed,
-#np-atc-btn {
-  pointer-events: auto !important;
-  z-index: 100020 !important;
-}
+        /* Keep the floating Add-to-Cart clickable above everything */
+        #np-atc-btn.mobile-fixed,
+        #np-atc-btn {
+          pointer-events: auto !important;
+          z-index: 100020 !important;
+        }
     }
     @media (min-width: 768px) {
       .vt-icons { display: none !important; }
@@ -561,7 +561,7 @@
   } else {
     mobileOverlaySetup();
   }
-  
+
   window.addEventListener('load', ()=> setTimeout(mobileOverlaySetup, 200));
 })();
 </script>
