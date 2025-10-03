@@ -46,7 +46,7 @@
 
           <!-- product meta below -->
           <h5 class="card-title mt-3">{{ $product->name }}</h5>
-          <p class="text-muted">Price: ₹ {{ number_format($product->min_price ?? 0, 2) }}</p>
+        <!--  <p class="text-muted">Price: ₹ {{ number_format($product->min_price ?? 0, 2) }}</p>-->
         </div>
       </div>
     </div>
