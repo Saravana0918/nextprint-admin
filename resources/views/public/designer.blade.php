@@ -380,75 +380,92 @@ document.getElementById('btn-add-team').addEventListener('click', function(e){
       if (pvNum) pvNum.classList.add(c);
     }
 
-    // Robust compute using rendered bounding rects
+        // ---------- REPLACEMENT FUNCTIONS: computeStageSize() & placeOverlay() ----------
     function computeStageSize(){
-      const imgRect = (baseImg && baseImg.getBoundingClientRect) ? baseImg.getBoundingClientRect() : null;
-      const stageRect = (stage && stage.getBoundingClientRect) ? stage.getBoundingClientRect() : null;
+      // return bounding rects for stage and base image so we can position overlays relative to the image
+      const stageRect = stage.getBoundingClientRect();
+      const imgRect = baseImg.getBoundingClientRect();
 
-      const imgW = imgRect ? imgRect.width : (baseImg && (baseImg.naturalWidth || baseImg.width) ? (baseImg.naturalWidth || baseImg.width) : stage.clientWidth);
-      const imgH = imgRect ? imgRect.height : (baseImg && (baseImg.naturalHeight || baseImg.height) ? (baseImg.naturalHeight || baseImg.height) : stage.clientHeight);
+      // image inside stage may have padding/border — compute offset of image relative to stage
+      const offsetLeft = Math.round(imgRect.left - stageRect.left);
+      const offsetTop  = Math.round(imgRect.top  - stageRect.top);
 
-      const stageW = stageRect ? stageRect.width : (stage.clientWidth || 300);
-      const stageH = stageRect ? stageRect.height : (stage.clientHeight || 300);
+      // use displayed (CSS) sizes, not naturalWidth (naturalWidth used only if you need ratio)
+      const imgW = Math.max(1, imgRect.width);
+      const imgH = Math.max(1, imgRect.height);
+      const stageW = Math.max(1, stageRect.width);
+      const stageH = Math.max(1, stageRect.height);
 
-      return { imgW, imgH, stageW, stageH, imgRect, stageRect };
+      return { imgRect, stageRect, offsetLeft, offsetTop, imgW, imgH, stageW, stageH };
     }
 
-    // place overlay using pixel values derived from stage rect so CSS transforms / scaling do not break placement
     function placeOverlay(el, slot, slotKey){
-  if(!el || !slot || !stage) return;
+      if(!el || !slot || !stage || !baseImg) return;
 
-  // compute stage size
-  const {imgW, imgH, stageW, stageH} = computeStageSize();
+      // compute sizes relative to displayed image area
+      const s = computeStageSize();
 
-  // fallback width/height percentages
-  const leftPct = (typeof slot.left_pct !== 'undefined') ? slot.left_pct : 50;
-  const topPct  = (typeof slot.top_pct !== 'undefined') ? slot.top_pct : 50;
-  const widthPct  = (typeof slot.width_pct !== 'undefined') ? slot.width_pct : 20;
-  const heightPct = (typeof slot.height_pct !== 'undefined') ? slot.height_pct : 10;
+      // compute the center position (in pixels) inside the stage where the overlay should be centered
+      // slot.left_pct and slot.top_pct are percentages relative to the image (0-100)
+      const centerX = Math.round(s.offsetLeft + ( (slot.left_pct || 0) / 100 ) * s.imgW + ((slot.width_pct || 0)/200)*s.imgW);
+      const centerY = Math.round(s.offsetTop  + ( (slot.top_pct  || 0) / 100 ) * s.imgH + ((slot.height_pct || 0)/200)*s.imgH);
 
-  // compute pixel area
-  const areaWpx = Math.max(8, Math.round((widthPct/100) * stageW));
-  const areaHpx = Math.max(8, Math.round((heightPct/100) * stageH));
+      // compute overlay box pixel width/height (based on image area)
+      const areaWpx = Math.max(8, Math.round(((slot.width_pct || 10)/100) * s.imgW));
+      const areaHpx = Math.max(8,  Math.round(((slot.height_pct || 10)/100) * s.imgH));
 
-  // set sizing box (we will position the overlay roughly centered in that area)
-  el.style.position = 'absolute';
-  el.style.boxSizing = 'border-box';
-  el.style.padding = '0 6px';
-  el.style.display = 'flex';
-  el.style.alignItems = 'center';
-  el.style.justifyContent = 'center';
-  el.style.overflow = 'hidden';
-  el.style.pointerEvents = 'none';
-  el.style.zIndex = (slotKey === 'number' ? 60 : 50);
+      // position overlay as centered at (centerX, centerY) in the stage coordinates
+      el.style.position = 'absolute';
+      el.style.left = centerX + 'px';
+      el.style.top  = centerY + 'px';
+      el.style.width = areaWpx + 'px';
+      el.style.height = areaHpx + 'px';
 
-  // compute font size to fit area
-  const text = (el.textContent || '').toString().trim() || (slotKey === 'number' ? '09' : 'NAME');
-  const chars = Math.max(1, text.length);
-  const isMobile = window.innerWidth <= 767;
+      // center via transform (so left/top is center)
+      el.style.transform = 'translate(-50%,-50%) rotate(' + ((slot.rotation||0)) + 'deg)';
 
-  const heightFactorName = 1.0;
-  const heightFactorNumber = isMobile ? 1.05 : 1.0;
-  const heightCandidate = Math.floor(areaHpx * (slotKey === 'number' ? heightFactorNumber : heightFactorName));
-  const avgCharRatio = 0.48;
-  const widthCap = Math.floor((areaWpx * 0.95) / (chars * avgCharRatio));
+      el.style.display = 'flex';
+      el.style.alignItems = 'center';
+      el.style.justifyContent = 'center';
+      el.style.boxSizing = 'border-box';
+      el.style.padding = '0 4px';
+      el.style.whiteSpace = 'nowrap';
+      el.style.overflow = 'hidden';
+      el.style.pointerEvents = 'none';
+      el.style.zIndex = (slotKey === 'number' ? 60 : 50);
 
-  let fontSize = Math.floor(Math.min(heightCandidate, widthCap));
-  const maxAllowed = Math.max(14, Math.floor(stageW * (isMobile ? 0.45 : 0.32)));
-  fontSize = Math.max(8, Math.min(fontSize, maxAllowed));
-  fontSize = Math.floor(fontSize * 1.08);
+      // compute font sizing similar to previous algorithm but using areaWpx/areaHpx
+      const text = (el.textContent || '').toString().trim() || 'TEXT';
+      const chars = Math.max(1, text.length);
+      const isMobile = window.innerWidth <= 767;
 
-  el.style.fontSize = fontSize + 'px';
-  el.style.lineHeight = '1';
-  el.style.fontWeight = '700';
+      const heightFactorName = 1.00;
+      const heightFactorNumber = isMobile ? 1.05 : 1.00;
+      const heightCandidate = Math.floor(areaHpx * (slotKey === 'number' ? heightFactorNumber : heightFactorName));
 
-  // After font applied, we might need to shrink to avoid wrap/overflow
-  let attempts = 0;
-  while (el.scrollWidth > areaWpx && fontSize > 7 && attempts < 30) {
-    fontSize = Math.max(7, Math.floor(fontSize * 0.92));
-    el.style.fontSize = fontSize + 'px';
-    attempts++;
-  }
+      const avgCharRatio = 0.48;
+      const widthCap = Math.floor((areaWpx * 0.95) / (chars * avgCharRatio));
+      let numericShrink = 1.0;
+      if (slotKey === 'number') numericShrink = isMobile ? 1.0 : 0.98;
+
+      let fontSize = Math.floor(Math.min(heightCandidate, widthCap) * numericShrink);
+      const maxAllowed = Math.max(14, Math.floor(s.stageW * (isMobile ? 0.45 : 0.32)));
+      fontSize = Math.max(8, Math.min(fontSize, maxAllowed));
+      fontSize = Math.floor(fontSize * 1.10);
+
+      el.style.fontSize = fontSize + 'px';
+      el.style.lineHeight = '1';
+      el.style.fontWeight = '700';
+
+      // make sure it doesn't overflow
+      let attempts = 0;
+      while (el.scrollWidth > el.clientWidth && fontSize > 7 && attempts < 30) {
+        fontSize = Math.max(7, Math.floor(fontSize * 0.92));
+        el.style.fontSize = fontSize + 'px';
+        attempts++;
+      }
+    }
+
 
   // Now compute pixel coordinates for left/top relative to stage
   const centerXpx = Math.round((leftPct/100) * stageW);
