@@ -256,7 +256,7 @@
 
     <!-- right purchase column -->
     <div class="col-md-3 np-col order-3 order-md-3 right-layout">
-      <h4 class="mb-1 mobile-display desktop-display">{{ $product->name ?? ($product->title ?? 'Product') }}</h4>
+      <h4 class="mobile-display desktop-display">{{ $product->name ?? ($product->title ?? 'Product') }}</h4>
      <!-- <div class="text mb-3 mobile-display desktop-display">Price: {{ $product->vendor ?? '—' }} • ₹ {{ number_format((float)($displayPrice ?? ($product->min_price ?? 0)), 2) }}</div> -->
 
       <form id="np-atc-form" method="post" action="{{ route('designer.addtocart') }}">
