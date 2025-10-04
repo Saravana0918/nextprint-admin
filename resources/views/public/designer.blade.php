@@ -139,7 +139,7 @@
           <input id="np-qty" name="quantity" type="number" min="1" value="1" class="form-control">
         </div>
 
-        <button id="np-atc-btn" type="submit" class="btn btn-primary" disabled>Add to Cart</button>
+        <button id="np-atc-btn" type="submit" class="btn btn-primary">Add to Cart</button>
         <a href="#" class="btn btn-success" id="btn-add-team" style="margin-left:8px;">Add Team Players</a>
       </form>
     </div>
