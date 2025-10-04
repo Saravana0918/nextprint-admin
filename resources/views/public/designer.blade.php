@@ -280,22 +280,37 @@
   }
 
   // add team button
-  if (addTeam) addTeam.addEventListener('click', function(e){ e.preventDefault();
-    const params = new URLSearchParams();
-    params.set('product_id', productId);
-    params.set('prefill_name', nameEl.value || '');
-    params.set('prefill_number', numEl.value || '');
-    params.set('prefill_font', fontEl.value || '');
-    params.set('prefill_color', colorEl.value || '');
-    params.set('prefill_size', document.getElementById('np-size')?.value || '');
+  if (addTeam) {
+  addTeam.addEventListener('click', function(e) {
+    e.preventDefault();
 
-    // pass layoutSlots (if available)
-    if (window.layoutSlots && Object.keys(window.layoutSlots).length) {
-      params.set('layoutSlots', encodeURIComponent(JSON.stringify(window.layoutSlots)));
+    // read product id reliably from hidden input
+    const productIdInput = document.getElementById('np-product-id');
+    const productId = productIdInput ? productIdInput.value : null;
+
+    const params = new URLSearchParams();
+    if (productId) params.set('product_id', productId);
+    if (nameEl?.value) params.set('prefill_name', nameEl.value);
+    if (numEl?.value) params.set('prefill_number', numEl.value.replace(/\D/g,'')); // numeric only
+    if (fontEl?.value) params.set('prefill_font', fontEl.value);
+    if (colorEl?.value) params.set('prefill_color', encodeURIComponent(colorEl.value));
+    const sizeVal = document.getElementById('np-size')?.value || '';
+    if (sizeVal) params.set('prefill_size', sizeVal);
+
+    // optionally pass layoutSlots for exact placement (useful for testing)
+    try {
+      if (window.layoutSlots && Object.keys(window.layoutSlots || {}).length) {
+        params.set('layoutSlots', encodeURIComponent(JSON.stringify(window.layoutSlots)));
+      }
+    } catch (err) {
+      console.warn('layoutSlots encode failed', err);
     }
 
-    window.location.href = "{{ route('team.create') }}?" + params.toString();
+    // redirect
+    const base = "{{ route('team.create') }}";
+    window.location.href = base + (params.toString() ? ('?' + params.toString()) : '');
   });
+}
 
   // init
   applyFont(fontEl?.value || 'bebas');
