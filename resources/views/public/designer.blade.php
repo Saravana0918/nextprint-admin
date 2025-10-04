@@ -147,7 +147,36 @@
 </div>
 
 <script> window.layoutSlots = {!! json_encode($layoutSlots ?? [], JSON_NUMERIC_CHECK) !!}; window.personalizationSupported = {{ !empty($layoutSlots) ? 'true' : 'false' }}; </script>
+<script>
+/* add this near the top of your existing script (once) */
+function toGidIfNeeded(v){
+  if(!v) return '';
+  v = v.toString().trim();
+  if(v.startsWith('gid://')) return v;
+  return 'gid://shopify/ProductVariant/' + v;
+}
 
+function ensureVariantGid() {
+  // take mapping from window.variantMap (if present) otherwise from hidden field
+  const size = (document.getElementById('np-size')?.value || '').toString();
+  let mapped = '';
+  if (window.variantMap && size) {
+    mapped = window.variantMap[size] || window.variantMap[size.toUpperCase()] || '';
+  }
+  const hidden = document.getElementById('np-variant-id');
+  if(!mapped && hidden) mapped = hidden.value || '';
+  const gid = toGidIfNeeded(mapped);
+  if(hidden) hidden.value = gid;
+  return gid;
+}
+
+function debugVariant() {
+  console.log('variantMap:', window.variantMap);
+  console.log('np-variant-id (hidden):', document.getElementById('np-variant-id')?.value);
+  console.log('shopify_product_id:', document.getElementById('np-shopify-product-id')?.value);
+}
+
+</script>
 <script>
 (function(){
   const $ = id => document.getElementById(id);
@@ -313,6 +342,8 @@
     if (!size) { alert('Please select a size.'); return; }
     if (!(NAME_RE.test(nameEl.value||'') && NUM_RE.test(numEl.value||''))) { alert('Please enter valid Name and Number'); return; }
     syncHidden();
+    ensureVariantGid();
+    console.log('DEBUG before submit - variant_id =', document.getElementById('np-variant-id')?.value);
     if (btn) { btn.disabled = true; btn.textContent = 'Preparing...'; }
     try {
       const canvas = await html2canvas(stage, { useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1 });
