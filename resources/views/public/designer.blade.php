@@ -146,10 +146,12 @@
   </div>
 </div>
 
-<script> window.layoutSlots = {!! json_encode($layoutSlots ?? [], JSON_NUMERIC_CHECK) !!}; window.personalizationSupported = {{ !empty($layoutSlots) ? 'true' : 'false' }}; </script>
 <script>
-  // TEMP: hardcoded variant map — replace with dynamic values from DB later
-  // Keys must match the <select> option values (case-sensitive or use uppercase lookup)
+  // keep layoutSlots exposure (existing)
+  window.layoutSlots = {!! json_encode($layoutSlots ?? [], JSON_NUMERIC_CHECK) !!};
+  window.personalizationSupported = {{ !empty($layoutSlots) ? 'true' : 'false' }};
+
+  // TEMP: hardcoded variant map — replace with server-side values later
   window.variantMap = {
     "S": "45229263061188",
     "M": "45229263093956",
@@ -158,9 +160,11 @@
     "2XL": "45229263192260",
     "3XL": "45229263225028"
   };
-  // Also expose shopify product id numeric if needed elsewhere
-  window.shopifyProductNumericId = "{{ $product->shopify_product_id ?? $product->shopify_id ?? '' }}";
+
+  // storefront public URL (use env var or the actual storefront domain)
+  window.shopfrontUrl = "{{ env('SHOPIFY_STORE_FRONT_URL', 'https://nextprint.in') }}";
 </script>
+
 <script>
 (function(){
   const $ = id => document.getElementById(id);
@@ -168,6 +172,7 @@
   const nameEl  = $('np-name'), numEl = $('np-num'), fontEl = $('np-font'), colorEl = $('np-color');
   const pvName  = $('np-prev-name'), pvNum = $('np-prev-num'), baseImg = $('np-base'), stage = $('np-stage');
   const btn = $('np-atc-btn'), form = $('np-atc-form'), addTeam = $('btn-add-team');
+  const sizeEl = $('np-size');
   const layout = (typeof window.layoutSlots === 'object' && window.layoutSlots !== null) ? window.layoutSlots : {};
 
   const NAME_RE = /^[A-Za-z ]{1,12}$/, NUM_RE = /^\d{1,3}$/;
@@ -194,7 +199,6 @@
     if(!el || !slot) return;
     const s = computeStageSize();
     if(!s) return;
-
     const centerX = Math.round(s.offsetLeft + ((slot.left_pct||0)/100) * s.imgW + ((slot.width_pct||0)/200)*s.imgW);
     const centerY = Math.round(s.offsetTop  + ((slot.top_pct||0)/100)  * s.imgH + ((slot.height_pct||0)/200)*s.imgH);
     const areaWpx = Math.max(8, Math.round(((slot.width_pct||10)/100) * s.imgW));
@@ -216,7 +220,6 @@
     el.style.pointerEvents = 'none';
     el.style.zIndex = (slotKey === 'number' ? 60 : 50);
 
-    // font-size calc
     const text = (el.textContent || '').toString().trim() || (slotKey === 'number' ? '09' : 'NAME');
     const chars = Math.max(1, text.length);
     const isMobile = window.innerWidth <= 767;
@@ -234,7 +237,6 @@
     el.style.lineHeight = '1';
     el.style.fontWeight = '700';
 
-    // shrink if overflow
     let attempts = 0;
     while (el.scrollWidth > el.clientWidth && fontSize > 7 && attempts < 30) {
       fontSize = Math.max(7, Math.floor(fontSize * 0.92));
@@ -263,19 +265,24 @@
     if (nm) nm.value = (numEl ? (numEl.value||'') : '').replace(/\D/g,'').trim();
     if (f) f.value = fontEl ? fontEl.value : '';
     if (c) c.value = colorEl ? colorEl.value : '';
+
     const size = $('np-size')?.value || '';
     if (window.variantMap && size) {
-  const k = (size || '').toString();
-  $('np-variant-id').value = window.variantMap[k] || window.variantMap[k.toUpperCase()] || window.variantMap[k.toLowerCase()] || '';
+      const k = (size || '').toString();
+      $('np-variant-id').value = window.variantMap[k] || window.variantMap[k.toUpperCase()] || window.variantMap[k.toLowerCase()] || '';
+    } else {
+      // clear variant id if no mapping
+      if ($('np-variant-id')) $('np-variant-id').value = '';
     }
   }
 
-  // events
+  // events: inputs
   if (nameEl) nameEl.addEventListener('input', ()=>{ syncPreview(); syncHidden(); updateATCState(); });
   if (numEl) numEl.addEventListener('input', e=>{ e.target.value = e.target.value.replace(/\D/g,'').slice(0,3); syncPreview(); syncHidden(); updateATCState(); });
   if (fontEl) fontEl.addEventListener('change', ()=>{ applyFont(fontEl.value); syncHidden(); syncPreview(); });
   if (colorEl) colorEl.addEventListener('input', ()=>{ if(pvName) pvName.style.color = colorEl.value; if(pvNum) pvNum.style.color = colorEl.value; syncHidden(); });
 
+  // swatches
   document.querySelectorAll('.np-swatch').forEach(b=>{
     b.addEventListener('click', ()=>{
       document.querySelectorAll('.np-swatch').forEach(x=>x.classList.remove('active'));
@@ -288,43 +295,49 @@
   });
 
   function updateATCState(){
-  if (!btn) return;
-  // Always enable the Add to Cart button. Final validation still runs on submit.
-  btn.disabled = false;
-}
+    if (!btn) return;
+    btn.disabled = false;
+  }
+
+  // size change listener (ensure variant id is always populated)
+  if (sizeEl) {
+    sizeEl.addEventListener('change', function(){
+      const sizeVal = (sizeEl.value || '').toString();
+      if (window.variantMap) {
+        const k = sizeVal;
+        const variant = window.variantMap[k] || window.variantMap[k.toUpperCase()] || window.variantMap[k.toLowerCase()] || '';
+        if (document.getElementById('np-variant-id')) document.getElementById('np-variant-id').value = variant;
+      }
+      syncHidden();
+      syncPreview();
+    });
+    // also call once to populate initial value
+    try { sizeEl.dispatchEvent(new Event('change')); } catch(e) {}
+  }
 
   // add team button
   if (addTeam) {
-  addTeam.addEventListener('click', function(e) {
-    e.preventDefault();
-
-    // read product id reliably from hidden input
-    const productIdInput = document.getElementById('np-product-id');
-    const productId = productIdInput ? productIdInput.value : null;
-
-    const params = new URLSearchParams();
-    if (productId) params.set('product_id', productId);
-    if (nameEl?.value) params.set('prefill_name', nameEl.value);
-    if (numEl?.value) params.set('prefill_number', numEl.value.replace(/\D/g,'')); // numeric only
-    if (fontEl?.value) params.set('prefill_font', fontEl.value);
-    if (colorEl?.value) params.set('prefill_color', encodeURIComponent(colorEl.value));
-    const sizeVal = document.getElementById('np-size')?.value || '';
-    if (sizeVal) params.set('prefill_size', sizeVal);
-
-    // optionally pass layoutSlots for exact placement (useful for testing)
-    try {
-      if (window.layoutSlots && Object.keys(window.layoutSlots || {}).length) {
-        params.set('layoutSlots', encodeURIComponent(JSON.stringify(window.layoutSlots)));
-      }
-    } catch (err) {
-      console.warn('layoutSlots encode failed', err);
-    }
-
-    // redirect
-    const base = "{{ route('team.create') }}";
-    window.location.href = base + (params.toString() ? ('?' + params.toString()) : '');
-  });
-}
+    addTeam.addEventListener('click', function(e) {
+      e.preventDefault();
+      const productIdInput = document.getElementById('np-product-id');
+      const productId = productIdInput ? productIdInput.value : null;
+      const params = new URLSearchParams();
+      if (productId) params.set('product_id', productId);
+      if (nameEl?.value) params.set('prefill_name', nameEl.value);
+      if (numEl?.value) params.set('prefill_number', numEl.value.replace(/\D/g,'')); 
+      if (fontEl?.value) params.set('prefill_font', fontEl.value);
+      if (colorEl?.value) params.set('prefill_color', encodeURIComponent(colorEl.value));
+      const sizeVal = document.getElementById('np-size')?.value || '';
+      if (sizeVal) params.set('prefill_size', sizeVal);
+      try {
+        if (window.layoutSlots && Object.keys(window.layoutSlots || {}).length) {
+          params.set('layoutSlots', encodeURIComponent(JSON.stringify(window.layoutSlots)));
+        }
+      } catch (err) { console.warn('layoutSlots encode failed', err); }
+      const base = "{{ route('team.create') }}";
+      window.location.href = base + (params.toString() ? ('?' + params.toString()) : '');
+    });
+  }
 
   // init
   applyFont(fontEl?.value || 'bebas');
@@ -334,91 +347,86 @@
   syncHidden();
   updateATCState();
 
-  // apply layout after image loaded + on resize + after fonts ready
   baseImg.addEventListener('load', ()=> setTimeout(applyLayout, 80));
   window.addEventListener('resize', ()=> setTimeout(applyLayout, 80));
   window.addEventListener('orientationchange', ()=> setTimeout(applyLayout, 200));
   document.fonts?.ready.then(()=> setTimeout(applyLayout, 120));
 
-  // submit handler (html2canvas)
-  // ===== Replace existing form submit handler with this block =====
-form?.addEventListener('submit', async function(evt){
-  evt.preventDefault();
+  // submit handler (posts to storefront /cart/add and redirects to storefront cart)
+  form?.addEventListener('submit', async function(evt){
+    evt.preventDefault();
 
-  const size = $('np-size')?.value || '';
-  if (!size) { alert('Please select a size.'); return; }
-  if (!/^[A-Za-z ]{1,12}$/.test(nameEl.value||'') || !/^\d{1,3}$/.test(numEl.value||'')) { alert('Please enter valid Name and Number'); return; }
+    const size = $('np-size')?.value || '';
+    if (!size) { alert('Please select a size.'); return; }
+    if (!NAME_RE.test(nameEl.value||'') || !NUM_RE.test(numEl.value||'')) { alert('Please enter valid Name and Number'); return; }
 
-  syncHidden(); // updates hidden inputs and np-variant-id
+    syncHidden(); // ensures np-variant-id is populated
 
-  // ensure variant numeric id present
-  const variantId = (document.getElementById('np-variant-id') || { value: '' }).value;
-  if (!variantId || !/^\d+$/.test(variantId)) {
-    alert('Variant not selected or invalid. Please re-select size.');
-    return;
-  }
+    const variantId = (document.getElementById('np-variant-id') || { value: '' }).value;
+    if (!variantId || !/^\d+$/.test(variantId)) {
+      alert('Variant not selected or invalid. Please re-select size.');
+      return;
+    }
 
-  if (btn) { btn.disabled = true; btn.textContent = 'Adding...'; }
+    if (btn) { btn.disabled = true; btn.textContent = 'Adding...'; }
 
-  try {
-    // capture preview image (optional)
     try {
-      const canvas = await html2canvas(stage, { useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1 });
-      const dataUrl = canvas.toDataURL('image/png');
-      $('np-preview-hidden').value = dataUrl;
-    } catch(e) {
-      console.warn('html2canvas failed, continuing without preview:', e);
+      try {
+        const canvas = await html2canvas(stage, { useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1 });
+        const dataUrl = canvas.toDataURL('image/png');
+        $('np-preview-hidden').value = dataUrl;
+      } catch(e) {
+        console.warn('html2canvas failed, continuing without preview:', e);
+      }
+
+      const properties = {
+        'Name': $('np-name-hidden')?.value || '',
+        'Number': $('np-num-hidden')?.value || '',
+        'Font': $('np-font-hidden')?.value || '',
+        'Color': $('np-color-hidden')?.value || ''
+      };
+
+      const qty = Math.max(1, parseInt($('np-qty')?.value || '1', 10));
+      const bodyArr = [];
+      bodyArr.push('id=' + encodeURIComponent(variantId));
+      bodyArr.push('quantity=' + encodeURIComponent(qty));
+      for (const k in properties) {
+        bodyArr.push('properties[' + encodeURIComponent(k) + ']=' + encodeURIComponent(properties[k]));
+      }
+      const body = bodyArr.join('&');
+
+      // POST to storefront cart add (same-origin)
+      const resp = await fetch('/cart/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body,
+        credentials: 'same-origin'
+      });
+
+      // Redirect to storefront cart permalink (always use shopfrontUrl)
+      const shopfront = (window.shopfrontUrl || '').replace(/\/+$/,'');
+      const redirectUrl = shopfront + '/cart/' + variantId + ':' + qty;
+
+      // If response OK, go to storefront cart; otherwise still try permalink
+      if (resp && resp.ok) {
+        window.location.href = redirectUrl;
+        return;
+      } else {
+        window.location.href = redirectUrl;
+        return;
+      }
+    } catch (err) {
+      console.error('Add to cart error', err);
+      alert('Something went wrong adding to cart.');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Add to Cart'; }
     }
+  });
 
-    // build properties to send as line item properties
-    const properties = {
-      'Name': $('np-name-hidden')?.value || '',
-      'Number': $('np-num-hidden')?.value || '',
-      'Font': $('np-font-hidden')?.value || '',
-      'Color': $('np-color-hidden')?.value || ''
-    };
-
-    const qty = Math.max(1, parseInt($('np-qty')?.value || '1', 10));
-
-    // build x-www-form-urlencoded body
-    const bodyArr = [];
-    bodyArr.push('id=' + encodeURIComponent(variantId));
-    bodyArr.push('quantity=' + encodeURIComponent(qty));
-    for (const k in properties) {
-      bodyArr.push('properties[' + encodeURIComponent(k) + ']=' + encodeURIComponent(properties[k]));
-    }
-    const body = bodyArr.join('&');
-
-    // POST to Shopify storefront cart add (same-origin)
-    const resp = await fetch('/cart/add', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: body,
-      credentials: 'same-origin'
-    });
-
-    // If Shopify returns redirect or success, send user to cart or checkout
-    // Option: redirect to '/cart' to let user edit, or directly to '/checkout'
-    if (resp.ok) {
-      // redirect to checkout directly:
-      // window.location.href = '/checkout';
-      // OR redirect to cart first (recommended)
-      window.location.href = '/cart';
-      return;
-    } else {
-      // Try fallback: direct cart permalink (works if numeric variant exists)
-      window.location.href = `/cart/${variantId}:${qty}`;
-      return;
-    }
-  } catch (err) {
-    console.error('Add to cart error', err);
-    alert('Something went wrong adding to cart.');
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Add to Cart'; }
-  }
-});
 })();
 </script>
+
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+
 </body>
 </html>
