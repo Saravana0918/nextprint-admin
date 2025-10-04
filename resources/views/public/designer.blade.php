@@ -118,11 +118,9 @@
 
 <script> window.layoutSlots = {!! json_encode($layoutSlots ?? [], JSON_NUMERIC_CHECK) !!}; </script>
 
-<!-- Inject server-side variant map (controller must pass $variantMap) -->
 <script>
-  // server should pass a plain object like {"S":"45187784278209","M":"45187784278210",...}
-  window.variantMap = {!! json_encode($variantMap ?? [], JSON_UNESCAPED_SLASHES) !!};
-  console.log('Injected variantMap:', window.variantMap);
+  // storefront base URL for cart adds — adjust if your storefront is different
+  window.STOREFRONT_ORIGIN = "{{ url('/') }}"; // example: https://nextprint.in
 </script>
 
 <!-- Robust helpers -->
@@ -137,17 +135,39 @@ function toGidIfNeeded(v){
 }
 
 function ensureVariantGid(){
-  const size = (document.getElementById('np-size')?.value || '').toString();
+  const size = (document.getElementById('np-size')?.value || '').toString().trim();
   let mapped = '';
+
+  // try window.variantMap first (case-insensitive)
   if (window.variantMap && size) {
-    mapped = window.variantMap[size] || window.variantMap[size.toUpperCase()] || window.variantMap[size.toLowerCase()] || '';
+    if (window.variantMap[size]) mapped = window.variantMap[size];
+    else {
+      // try different casings
+      const keys = Object.keys(window.variantMap || {});
+      for (const k of keys) {
+        if (k.toString().toLowerCase() === size.toLowerCase()) { mapped = window.variantMap[k]; break; }
+      }
+    }
   }
-  if(mapped && mapped.toString().startsWith('gid://')) mapped = mapped.split('/').pop();
+
+  // normalize mapped -> numeric
+  if (mapped && mapped.toString().startsWith('gid://')) {
+    mapped = mapped.toString().split('/').pop();
+  } else if (mapped) {
+    mapped = mapped.toString().replace(/[^\d]/g,'');
+  }
+
+  // also allow hidden field to contain gid or numeric fallback
   const hidden = document.getElementById('np-variant-id');
-  const finalNumeric = mapped || '';
-  const gid = finalNumeric ? 'gid://shopify/ProductVariant/' + finalNumeric : '';
+  let fallback = hidden ? hidden.value : '';
+  if (fallback && fallback.toString().startsWith('gid://')) fallback = fallback.split('/').pop();
+  else fallback = (fallback || '').toString().replace(/[^\d]/g,'');
+
+  const numeric = (mapped || fallback || '').toString();
+  const gid = numeric ? 'gid://shopify/ProductVariant/' + numeric : '';
   if (hidden) hidden.value = gid;
-  return gid;
+  // return numeric (string) — easiest for cart post
+  return numeric;
 }
 </script>
 
@@ -340,101 +360,86 @@ function ensureVariantGid(){
   form?.addEventListener('submit', async function(evt){
   evt.preventDefault();
 
-  // basic validation
   const size = document.getElementById('np-size')?.value || '';
   if (!size) { alert('Please select a size.'); return; }
+
   const nameVal = (document.getElementById('np-name')?.value||'').trim();
   const numVal  = (document.getElementById('np-num')?.value||'').trim();
-  if (!nameVal || !/^[A-Za-z ]{1,12}$/.test(nameVal) || !/^\d{1,3}$/.test(numVal)) {
-    alert('Please enter valid Name and Number');
-    return;
+  if (!/^[A-Za-z ]{1,12}$/.test(nameVal) || !/^\d{1,3}$/.test(numVal)) {
+    alert('Please enter valid Name and Number'); return;
   }
 
-  // keep UI responsive
   if (btn) { btn.disabled = true; btn.textContent = 'Adding…'; }
 
-  // ensure hidden inputs / variant are synced
-  syncHidden();
-  const rawVariant = (document.getElementById('np-variant-id')?.value || '').toString().trim();
-  let numericVariant = '';
-
-  if (/^\d+$/.test(rawVariant)) {
-    numericVariant = rawVariant;
-  } else if (/\/\d+$/.test(rawVariant)) {
-    numericVariant = rawVariant.split('/').pop();
-  } else {
-    // fallback: window.variantMap (server-injected must exist)
-    const mapped = (window.variantMap && window.variantMap[size]) ? window.variantMap[size] : '';
-    numericVariant = mapped ? mapped.toString().replace(/\D/g,'') : '';
-  }
-
-  if (!numericVariant) {
+  // ensure variant numeric id
+  const numericVariant = ensureVariantGid(); // returns numeric id string (no gid prefix)
+  if (!numericVariant || !/^\d+$/.test(numericVariant)) {
     if (btn) { btn.disabled = false; btn.textContent = 'Add to Cart'; }
     alert('Variant id missing or invalid. Please reselect size.');
     return;
   }
 
-  // prepare properties - these become cart line properties in Shopify
+  // sync hidden preview value (optional)
+  syncHidden();
+
+  // capture preview (optional)
+  let previewData = '';
+  try {
+    const canvas = await html2canvas(stage, { useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1 });
+    previewData = canvas.toDataURL('image/png');
+    if (previewData.length > 70000) previewData = '[preview-too-large]';
+    document.getElementById('np-preview-hidden').value = previewData;
+  } catch (err) {
+    console.warn('html2canvas error', err);
+  }
+
+  // build properties
   const properties = {
     "Name": nameVal.toUpperCase(),
     "Number": numVal,
     "Font": (document.getElementById('np-font')?.value||''),
-    "Color": (document.getElementById('np-color')?.value||''),
+    "Color": (document.getElementById('np-color')?.value||'')
   };
+  if (previewData) properties["Preview"] = previewData;
 
-  // optionally prepare preview via html2canvas (may be large - optional)
-  try {
-    const canvas = await html2canvas(stage, { useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1 });
-    let dataUrl = canvas.toDataURL('image/png');
-    // if it's extremely long, drop it or upload server-side; here we store trimmed
-    if (dataUrl.length > 70000) {
-      console.warn('Preview too large, not including full data URL in properties.');
-      properties["Preview"] = '[preview-too-large]';
-    } else {
-      properties["Preview"] = dataUrl;
-    }
-  } catch (err) {
-    console.warn('html2canvas failed — continuing without preview', err);
-  }
+  // create body
+  const params = new URLSearchParams();
+  params.append('id', numericVariant);
+  params.append('quantity', (document.getElementById('np-qty')?.value || '1'));
 
-  // Build body for /cart/add.js - use URLSearchParams to mimic form
-  const body = new URLSearchParams();
-  body.append('id', numericVariant);       // numeric variant id
-  body.append('quantity', (document.getElementById('np-qty')?.value || '1'));
-
-  // Add properties as properties[Key]
   for (const k in properties) {
-    if (!Object.prototype.hasOwnProperty.call(properties, k)) continue;
-    body.append(`properties[${k}]`, properties[k]);
+    if (!Object.prototype.hasOwnProperty.call(properties,k)) continue;
+    params.append(`properties[${k}]`, properties[k]);
   }
 
+  // decide storefront endpoint: use injected var or fallback
+  const origin = (window.STOREFRONT_ORIGIN && window.STOREFRONT_ORIGIN.startsWith('http')) ? window.STOREFRONT_ORIGIN.replace(/\/+$/,'') : '';
+  const addUrl = origin ? (origin + '/cart/add.js') : '/cart/add.js';
+
   try {
-    // POST to storefront add endpoint (returns JSON)
-    const resp = await fetch('/cart/add.js', {
+    const resp = await fetch(addUrl, {
       method: 'POST',
-      credentials: 'same-origin',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
-      },
-      body: body.toString()
+      credentials: 'include',
+      headers: { 'Accept':'application/json', 'Content-Type':'application/x-www-form-urlencoded; charset=UTF-8' },
+      body: params.toString()
     });
 
     if (!resp.ok) {
-      const errText = await resp.text().catch(()=>null);
-      console.error('Add to cart failed', resp.status, errText);
-      alert('Unable to add to cart. Please try again.');
+      const txt = await resp.text().catch(()=>null);
+      console.error('Add to cart failed', resp.status, txt);
+      alert('Unable to add to cart. Check console / network.');
       if (btn) { btn.disabled = false; btn.textContent = 'Add to Cart'; }
       return;
     }
 
-    // success -> redirect to checkout page
-    // optional: you can redirect to cart first by using '/cart' instead
-    window.location.href = '/checkout';
+    // success -> redirect to checkout
+    // if you want cart page instead use '/cart'
+    const checkoutUrl = (origin ? (origin + '/checkout') : '/checkout');
+    window.location.href = checkoutUrl;
 
-  } catch (e) {
-    console.error('Add to cart exception', e);
-    alert('Something went wrong. See console for details.');
+  } catch (err) {
+    console.error('Add-to-cart exception', err);
+    alert('Something went wrong, see console.');
     if (btn) { btn.disabled = false; btn.textContent = 'Add to Cart'; }
   }
 });
