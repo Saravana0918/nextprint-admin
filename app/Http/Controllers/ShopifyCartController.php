@@ -10,14 +10,6 @@ use App\Models\ProductVariant;
 
 class ShopifyCartController extends Controller
 {
-    /**
-     * Create a Shopify cart with one line per player (or fallback to single line).
-     * Expects payload:
-     *  - product_id (local numeric)
-     *  - shopify_product_id (string) optional but highly recommended
-     *  - players: [ { name, number, size, font, color, variant_id? } ]
-     *  - quantity (fallback for single-line)
-     */
     public function addToCart(Request $request)
     {
         $validated = $request->validate([
@@ -31,7 +23,7 @@ class ShopifyCartController extends Controller
             'players.*.color'      => 'nullable|string|max:20',
             'players.*.variant_id' => 'nullable',
             'quantity'             => 'nullable|integer|min:1',
-            'preview_data'         => 'nullable|string', // base64 optional
+            'preview_data'         => 'nullable|string',
             'preview_url'          => 'nullable|url',
         ]);
 
@@ -46,8 +38,21 @@ class ShopifyCartController extends Controller
             'shopify_product_id' => $shopifyProductId,
         ]);
 
+        // normalizer: extract numeric id if gid:// present
+        $normalizeId = function($id){
+            if (empty($id)) return null;
+            if (is_string($id) && str_contains($id, 'gid://')) {
+                if (preg_match('/(\d+)$/', $id, $m)) return $m[1];
+            }
+            return (string)$id;
+        };
+
         // helper to resolve variant id (string numeric id)
-        $resolveVariant = function($productId, $size = null, $incomingVariant = null, $shopifyProductId = null) {
+        $resolveVariant = function($productId, $size = null, $incomingVariant = null, $shopifyProductId = null) use ($normalizeId) {
+            // normalize inputs
+            $incomingVariant = $normalizeId($incomingVariant);
+            $shopifyProductId = $normalizeId($shopifyProductId);
+
             // prefer incoming variant id
             if (!empty($incomingVariant)) {
                 return (string)$incomingVariant;
@@ -64,6 +69,9 @@ class ShopifyCartController extends Controller
                         })->whereNotNull('shopify_variant_id')->first();
 
                     if ($pv && !empty($pv->shopify_variant_id)) {
+                        if (preg_match('/(\d+)$/', $pv->shopify_variant_id, $m)) {
+                            return (string)$m[1];
+                        }
                         return (string)$pv->shopify_variant_id;
                     }
                 } catch (\Throwable $e) {
@@ -92,7 +100,6 @@ class ShopifyCartController extends Controller
                                     return (string)$v['id'];
                                 }
                             }
-                            // fallback to first variant
                             if (!empty($variants)) return (string)$variants[0]['id'];
                         } else {
                             Log::warning('designer: admin_fetch_unexpected', [
@@ -110,7 +117,6 @@ class ShopifyCartController extends Controller
             return null;
         };
 
-        // Build lines for cartCreate
         $lines = [];
 
         if (is_array($players) && count($players) > 0) {
@@ -121,7 +127,6 @@ class ShopifyCartController extends Controller
                 $variantId = $resolveVariant($productId, $size, $incomingVariant, $shopifyProductId);
 
                 if (empty($variantId)) {
-                    // skip player with no variant (log)
                     Log::warning('designer: no_variant_for_player', ['player' => $pl, 'product_id' => $productId]);
                     continue;
                 }
@@ -143,11 +148,10 @@ class ShopifyCartController extends Controller
             }
         }
 
-        // If no player lines resolved, fallback to single line
         if (empty($lines)) {
             $singleVariant = $resolveVariant($productId, $request->input('size', null), null, $shopifyProductId);
             if (empty($singleVariant)) {
-                Log::error('designer: no_variant_any', ['product_id' => $productId]);
+                Log::error('designer: no_variant_any', ['product_id' => $productId, 'shopify_product_id' => $shopifyProductId]);
                 return response()->json(['error' => 'Could not determine any product variant (size).'], 422);
             }
             $lines[] = [
@@ -162,7 +166,6 @@ class ShopifyCartController extends Controller
             ];
         }
 
-        // Build GraphQL mutation
         $mutation = <<<'GRAPHQL'
 mutation cartCreate($input: CartInput!) {
   cartCreate(input: $input) {
@@ -182,7 +185,6 @@ GRAPHQL;
 
         $variables = ['input' => ['lines' => $lines]];
 
-        // ====== DEBUG LOG: snapshot of payload right before calling Storefront API ======
         Log::info('designer: preparing_cart_create', [
             'lines' => $lines,
             'players_count' => count($lines),
@@ -191,7 +193,6 @@ GRAPHQL;
             'shop_env' => env('SHOPIFY_STORE'),
         ]);
 
-        // Storefront API call
         $shop = env('SHOPIFY_STORE');
         $storefrontToken = env('SHOPIFY_STOREFRONT_TOKEN');
 
@@ -222,7 +223,8 @@ GRAPHQL;
             $userErrors = data_get($data, 'data.cartCreate.userErrors', []);
             if (!empty($userErrors)) {
                 Log::error('designer: cartCreate_userErrors', ['errors' => $userErrors, 'body' => $resp->body()]);
-                return response()->json(['error' => 'cartCreate_userErrors', 'details' => $userErrors, 'body' => $resp->body()], 500);
+                // return errors to client to help debugging
+                return response()->json(['error' => 'cartCreate_userErrors', 'details' => $userErrors, 'body' => $resp->body()], 422);
             }
 
             $cart = data_get($data, 'data.cartCreate.cart');
@@ -232,14 +234,13 @@ GRAPHQL;
                 return response()->json(['checkoutUrl' => $checkoutUrl]);
             }
 
-            // fallback: /cart/{variant}:{qty} (first line)
+            // fallback to numeric cart url
             $firstLine = $lines[0] ?? null;
             if ($firstLine) {
                 $gid = $firstLine['merchandiseId'];
                 $numeric = $gid;
-                if (is_string($numeric) && str_contains($numeric, '/')) {
-                    $parts = explode('/', $numeric);
-                    $numeric = end($parts);
+                if (is_string($numeric) && preg_match('/(\d+)$/', $numeric, $m)) {
+                    $numeric = $m[1];
                 }
                 if (!empty($numeric)) {
                     $fallback = "https://{$shop}/cart/{$numeric}:{$firstLine['quantity']}";
