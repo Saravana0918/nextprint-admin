@@ -130,19 +130,20 @@
 
 <script> window.layoutSlots = {!! json_encode($layoutSlots ?? [], JSON_NUMERIC_CHECK) !!}; /* define window.variantMap in server side if available: e.g. {"S":"45229263159492","M":"45229263159493"} */ </script>
 
-<!-- Inject server-side variant map (controller must pass $variantMap) -->
+<!-- If you already inject server-side variantMap keep it; for quick test we set a forced map below -->
 <script>
   window.variantMap = {!! json_encode($variantMap ?? [], JSON_UNESCAPED_SLASHES) !!};
   console.log('Injected variantMap:', window.variantMap);
 </script>
+
 <script>
- 
+  // ===== TEMP HARDCODE MAP (testing) - remove after confirm =====
   window.variantMap = {
     "XS": "45187784278208",
     "S" : "45187784278209",
     "M" : "45187784278210",
     "L" : "45187784278211",
-    "XL": "45187784278212",  
+    "XL": "45187784278212",
     "2XL": "45187784310980",
     "3XL": "45187784343748"
   };
@@ -314,33 +315,33 @@ function debugVariant(){
     });
   });
 
-// -------------------- REPLACE your existing updateATCState() with this --------------------
-function updateATCState(){
-  // We will NOT disable the Add to Cart button here.
-  // Keep logging for debugging and still ensure variant gid is computed on change.
-  const okName = /^[A-Za-z ]{1,12}$/.test((document.getElementById('np-name')?.value||''));
-  const okNum  = /^\d{1,3}$/.test((document.getElementById('np-num')?.value||''));
-  const size = (document.getElementById('np-size')?.value || '');
-  const gid = ensureVariantGid();
-  console.log('updateATCState ->', { okName, okNum, size, gid });
+  // -------------------- REPLACE your existing updateATCState() with this --------------------
+  function updateATCState(){
+    // We will NOT disable the Add to Cart button here.
+    // Keep logging for debugging and still ensure variant gid is computed on change.
+    const okName = /^[A-Za-z ]{1,12}$/.test((document.getElementById('np-name')?.value||''));
+    const okNum  = /^\d{1,3}$/.test((document.getElementById('np-num')?.value||''));
+    const size = (document.getElementById('np-size')?.value || '');
+    const gid = ensureVariantGid();
+    console.log('updateATCState ->', { okName, okNum, size, gid });
 
-  // ALWAYS enable the button (initially visible and clickable).
-  const btn = document.getElementById('np-atc-btn');
-  if (btn) {
-    btn.disabled = false;
+    // ALWAYS enable the button (initially visible and clickable).
+    const btn = document.getElementById('np-atc-btn');
+    if (btn) {
+      btn.disabled = false;
+    }
   }
-}
 
-// -------------------- ALSO ensure on DOMContentLoaded the button is enabled --------------------
-document.addEventListener('DOMContentLoaded', function(){
-  // make sure ATC button is enabled on load
-  const btn = document.getElementById('np-atc-btn');
-  if (btn) {
-    btn.disabled = false;
-  }
-  // call layout/preview init
-  updateATCState();
-});
+  // -------------------- ALSO ensure on DOMContentLoaded the button is enabled --------------------
+  document.addEventListener('DOMContentLoaded', function(){
+    // make sure ATC button is enabled on load
+    const btn = document.getElementById('np-atc-btn');
+    if (btn) {
+      btn.disabled = false;
+    }
+    // call layout/preview init
+    updateATCState();
+  });
 
 
   // add team button behaviour
@@ -370,50 +371,109 @@ document.addEventListener('DOMContentLoaded', function(){
   window.addEventListener('orientationchange', ()=> setTimeout(applyLayout, 200));
   document.fonts?.ready.then(()=> setTimeout(applyLayout, 120));
 
-  // submit handler (html2canvas + fetch)
+  /* ============================
+     NEW: Submit directly to storefront /cart/add with properties
+     This bypasses admin GraphQL cartCreate and navigates user to storefront cart.
+     ============================ */
+
+  // helper to post to storefront cart/add
+  function submitToShopifyStorefront({variantNumericId, quantity, props}) {
+    const storeDomain = 'nextprint.in'; // <- change to your storefront domain if different
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = `https://${storeDomain}/cart/add`;
+    form.style.display = 'none';
+
+    const addInput = (nameAttr, val) => {
+      const i = document.createElement('input');
+      i.type = 'hidden';
+      i.name = nameAttr;
+      i.value = val ?? '';
+      form.appendChild(i);
+    };
+
+    addInput('id', variantNumericId);
+    addInput('quantity', quantity);
+
+    if (props && typeof props === 'object') {
+      for (const k in props) {
+        if (!Object.prototype.hasOwnProperty.call(props, k)) continue;
+        let v = String(props[k] ?? '');
+        // trim extremely long properties (safe guard)
+        if (v.length > 60000) {
+          console.warn('Property', k, 'too long; trimming.');
+          v = v.slice(0, 60000);
+        }
+        addInput(`properties[${k}]`, v);
+      }
+    }
+
+    document.body.appendChild(form);
+    form.submit();
+  }
+
+  // Replace HTML2Canvas + fetch flow: use storefront POST instead
   form?.addEventListener('submit', async function(evt){
     evt.preventDefault();
+
     const size = $('np-size')?.value || '';
     if (!size) { alert('Please select a size.'); return; }
     if (!(NAME_RE.test(nameEl.value||'') && NUM_RE.test(numEl.value||''))) { alert('Please enter valid Name and Number'); return; }
 
-    // sync hidden data + ensure variant gid
+    // sync hidden values
     syncHidden();
-    const gid = ensureVariantGid();
-    console.log('DEBUG before submit - variant_id =', document.getElementById('np-variant-id')?.value, 'shopifyProductId:', $('np-shopify-product-id')?.value);
-    debugVariant();
 
-    if (btn) { btn.disabled = true; btn.textContent = 'Preparing...'; }
+    // determine numeric variant id
+    let raw = (document.getElementById('np-variant-id')?.value || '').toString().trim();
+    let numeric = '';
+    if (/^\d+$/.test(raw)) {
+      numeric = raw;
+    } else if (/\/\d+$/.test(raw)) {
+      numeric = raw.split('/').pop();
+    } else {
+      // fallback via window.variantMap
+      const mapped = window.variantMap && window.variantMap[size] ? window.variantMap[size] : '';
+      if (mapped && mapped.toString().startsWith('gid://')) numeric = mapped.split('/').pop();
+      else numeric = mapped || '';
+    }
 
+    if (!numeric || !/^\d+$/.test(numeric)) { alert('Variant id missing or invalid. Please reselect size.'); return; }
+
+    // prepare preview via html2canvas (optional) and trim if too large
+    let previewDataUrl = '';
     try {
       const canvas = await html2canvas(stage, { useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1 });
-      const dataUrl = canvas.toDataURL('image/png');
-      $('np-preview-hidden').value = dataUrl;
-
-      const fd = new FormData(form);
-      const token = document.querySelector('input[name="_token"]')?.value || '';
-
-      // Debug: log what we will post (do not leave in prod if it leaks sensitive data)
-      console.log('Submitting add-to-cart form; formData keys:');
-      for (const k of fd.keys()) console.log(k, fd.get(k));
-
-      const resp = await fetch(form.action, { method: 'POST', body: fd, credentials: 'same-origin', headers: { 'X-CSRF-TOKEN': token, 'Accept':'application/json' } });
-      if (resp.redirected) { window.location.href = resp.url; return; }
-      const data = await resp.json().catch(()=>null);
-      console.log('AddToCart response:', resp.status, data);
-
-      if (!resp.ok) {
-        alert((data && (data.error||data.message)) || 'Add to cart failed');
-        return;
+      previewDataUrl = canvas.toDataURL('image/png');
+      // trim if extremely large - better approach: upload to server and pass URL
+      if (previewDataUrl.length > 60000) {
+        console.warn('Preview too large, truncating to small marker.');
+        previewDataUrl = '[preview-too-large]';
       }
-      if (data && data.checkoutUrl) { window.location.href = data.checkoutUrl; return; }
-      alert('Added to cart.');
-    } catch(err) {
-      console.error('ATC exception', err);
-      alert('Something went wrong. See console for details');
-    } finally {
-      if (btn) { btn.disabled = false; btn.textContent = 'Add to Cart'; }
+      $('np-preview-hidden').value = previewDataUrl;
+    } catch (err) {
+      console.warn('html2canvas failed, continuing without preview', err);
+      previewDataUrl = '';
     }
+
+    // build properties
+    const properties = {
+      "Name": (nameEl?.value||'').toUpperCase().trim(),
+      "Number": (numEl?.value||'').replace(/\D/g,'').trim(),
+      "Font": fontEl?.value || '',
+      "Color": colorEl?.value || ''
+    };
+    if (previewDataUrl) properties["Preview"] = previewDataUrl;
+
+    // quantity
+    const qty = parseInt($('np-qty')?.value || '1', 10) || 1;
+
+    // submit to storefront
+    submitToShopifyStorefront({
+      variantNumericId: numeric,
+      quantity: qty,
+      props: properties
+    });
+
   });
 
 })();
