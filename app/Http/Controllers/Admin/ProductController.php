@@ -77,14 +77,41 @@ public function index()
 
 public function show($id)
 {
-    // <<< IMPORTANT: replace these with your real Shopify variant numeric ids >>>
-    $variantMap = [
-        'S'  => 45187784179908,
-        'M'  => 45187784212676,
-        'L'  => 45187784245444,
-        'XL' => 45187784278212,
-        '2XL' => 45187784310980,
-    ];
+    $product = Product::findOrFail($id);
+
+    $variantMap = [];
+    $shopifyId = $product->shopify_product_id ?? $product->shopify_id ?? null;
+
+    if ($shopifyId) {
+        try {
+            $shop = env('SHOPIFY_STORE');
+            $adminToken = env('SHOPIFY_ADMIN_API_TOKEN');
+            if ($shop && $adminToken) {
+                $resp = \Illuminate\Support\Facades\Http::withHeaders([
+                    'X-Shopify-Access-Token' => $adminToken,
+                    'Content-Type' => 'application/json',
+                ])->get("https://{$shop}/admin/api/2025-01/products/{$shopifyId}.json");
+
+                if ($resp->successful() && ($pd = $resp->json('product'))) {
+                    foreach ($pd['variants'] ?? [] as $v) {
+                        $opt = trim($v['option1'] ?? $v['title'] ?? '');
+                        if ($opt) {
+                            // normalize typical labels
+                            $variantMap[$opt] = (int)$v['id'];
+                            $variantMap[strtoupper($opt)] = (int)$v['id'];
+                            $variantMap[strtolower($opt)] = (int)$v['id'];
+                        }
+                    }
+                } else {
+                    \Log::warning('product fetch failed', ['status'=>$resp->status(), 'body'=>substr($resp->body(),0,500)]);
+                }
+            } else {
+                \Log::warning('shop or admin token missing');
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('variant fetch failed', ['err'=>$e->getMessage()]);
+        }
+    }
 
     return view('designer', compact('product','variantMap'));
 }

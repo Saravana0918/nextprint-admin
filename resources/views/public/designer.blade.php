@@ -163,16 +163,17 @@ function ensureVariantGid(){
   if (window.variantMap && size) {
     mapped = window.variantMap[size] || window.variantMap[size.toUpperCase()] || window.variantMap[size.toLowerCase()] || '';
   }
-  if(mapped && mapped.toString().startsWith('gid://')){
-    mapped = stripGid(mapped);
+  if(mapped && mapped.toString().startsWith('gid://')) {
+    // strip if already gid
+    mapped = mapped.split('/').pop();
   }
+  // leave fallback if present in hidden field numeric
   const hidden = document.getElementById('np-variant-id');
   let fallback = hidden ? hidden.value : '';
-  if (fallback && fallback.startsWith('gid://')) fallback = stripGid(fallback);
+  if (fallback && fallback.toString().startsWith('gid://')) fallback = fallback.split('/').pop();
   const finalNumeric = mapped || fallback || '';
-  const gid = toGidIfNeeded(finalNumeric);
-  if(hidden) hidden.value = gid;
-  console.log('ensureVariantGid -> size:', size, 'mapped:', mapped, 'fallback:', fallback, 'finalNumeric:', finalNumeric, 'finalGid:', gid);
+  const gid = finalNumeric ? 'gid://shopify/ProductVariant/' + finalNumeric : '';
+  if (hidden) hidden.value = gid;
   return gid;
 }
 
@@ -306,13 +307,22 @@ function debugVariant(){
 
   // ATC state function with console debug
   function updateATCState(){
+  const btn = document.getElementById('np-atc-btn');
   if(!btn) return;
-  const okName = NAME_RE.test(document.getElementById('np-name')?.value || '');
-  const okNum  = NUM_RE.test(document.getElementById('np-num')?.value || '');
-  const size = document.getElementById('np-size')?.value || '';
+  const okName = /^[A-Za-z ]{1,12}$/.test((document.getElementById('np-name')?.value||''));
+  const okNum  = /^\d{1,3}$/.test((document.getElementById('np-num')?.value||''));
+  const size = (document.getElementById('np-size')?.value || '');
   const gid = ensureVariantGid();
   console.log('updateATCState ->', { okName, okNum, size, gid });
+  btn.disabled = !(okName && okNum && size && gid);
 }
+
+document.getElementById('np-name')?.addEventListener('input', updateATCState);
+document.getElementById('np-num')?.addEventListener('input', updateATCState);
+document.getElementById('np-size')?.addEventListener('change', updateATCState);
+
+// initial call
+document.addEventListener('DOMContentLoaded', function(){ updateATCState(); });
 
   // add team button behaviour
   if (addTeam) addTeam.addEventListener('click', function(e){ e.preventDefault();
