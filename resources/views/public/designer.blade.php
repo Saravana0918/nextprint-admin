@@ -135,6 +135,19 @@
   window.variantMap = {!! json_encode($variantMap ?? [], JSON_UNESCAPED_SLASHES) !!};
   console.log('Injected variantMap:', window.variantMap);
 </script>
+<script>
+ 
+  window.variantMap = {
+    "XS": "45187784278208",
+    "S" : "45187784278209",
+    "M" : "45187784278210",
+    "L" : "45187784278211",
+    "XL": "45187784278212",  
+    "2XL": "45187784310980",
+    "3XL": "45187784343748"
+  };
+  console.log('FORCED variantMap (TEST ONLY):', window.variantMap);
+</script>
 
 <!-- Robust helpers: convert ids, normalize, ensure gid -->
 <script>
