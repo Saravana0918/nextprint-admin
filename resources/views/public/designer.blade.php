@@ -132,138 +132,42 @@
 
 <!-- helper to convert numeric variant id to Shopify gid and ensure hidden is set -->
 <script>
-/* ---------- Utility helpers ---------- */
 function toGidIfNeeded(v){
   if(!v) return '';
   v = v.toString().trim();
   if(v.startsWith('gid://')) return v;
+  // if it already looks like a numeric id, produce gid
   return 'gid://shopify/ProductVariant/' + v;
 }
 
-function debugVariant(){
+function ensureVariantGid() {
+  const size = (document.getElementById('np-size')?.value || '').toString();
+  let mapped = '';
+  if (window.variantMap && size) {
+    mapped = window.variantMap[size] || window.variantMap[size.toUpperCase()] || '';
+  }
+  const hidden = document.getElementById('np-variant-id');
+  if(!mapped && hidden) mapped = hidden.value || '';
+  const gid = toGidIfNeeded(mapped);
+  if(hidden) hidden.value = gid;
+  console.log('ensureVariantGid -> selected size:', size, 'mapped:', mapped, 'final gid:', gid);
+  return gid;
+}
+function debugVariant() {
   console.log('variantMap:', window.variantMap);
   console.log('np-variant-id (hidden):', document.getElementById('np-variant-id')?.value);
   console.log('shopify_product_id:', document.getElementById('np-shopify-product-id')?.value);
 }
+</script>
 
-/* ensureVariantGid: reads selected size and writes hidden gid */
-function ensureVariantGid(sizeInput){
-  const size = (sizeInput || (document.getElementById('np-size')?.value || '')).toString().trim();
-  if(!size) {
-    // clear hidden if no size
-    const hidden = document.getElementById('np-variant-id');
-    if(hidden) hidden.value = '';
-    console.log('ensureVariantGid -> no size selected');
-    return '';
-  }
-  const map = window.variantMap || {};
-  const mapped = map[size.toUpperCase()] || map[size] || '';
-  const hidden = document.getElementById('np-variant-id');
-  let gid = '';
-  if(mapped) gid = toGidIfNeeded(mapped);
-  else if(hidden && hidden.value) gid = hidden.value;
-  if(hidden) hidden.value = gid;
-  console.log('ensureVariantGid -> size:', size, 'mapped:', mapped, 'gid:', gid);
-  return gid;
-}
-
-/* ---------- Visual placement helpers ---------- */
-function computeStageSize(){
-  const baseImg = document.getElementById('np-base'), stage = document.getElementById('np-stage');
-  if (!baseImg || !stage) return null;
-  const stageRect = stage.getBoundingClientRect();
-  const imgRect = baseImg.getBoundingClientRect();
-  return {
-    offsetLeft: Math.round(imgRect.left - stageRect.left),
-    offsetTop: Math.round(imgRect.top - stageRect.top),
-    imgW: Math.max(1,imgRect.width), imgH: Math.max(1,imgRect.height),
-    stageW: Math.max(1, stageRect.width), stageH: Math.max(1, stageRect.height)
-  };
-}
-
-/* placeOverlay: uses layoutSlots if present else safe defaults */
-function placeOverlay(el, slotKey){
-  if(!el) return;
-  const s = computeStageSize();
-  if(!s) return;
-
-  // try using server-provided layoutSlots (expected numbers are percents)
-  const layout = (window.layoutSlots && typeof window.layoutSlots === 'object') ? window.layoutSlots : null;
-
-  let left_pct, top_pct, width_pct, height_pct, rotation;
-  if (layout && layout[slotKey]) {
-    left_pct = Number(layout[slotKey].left_pct || layout[slotKey].left || 50);
-    top_pct  = Number(layout[slotKey].top_pct  || layout[slotKey].top  || (slotKey==='number'?70:40));
-    width_pct  = Number(layout[slotKey].width_pct  || layout[slotKey].width  || (slotKey==='number'?30:70));
-    height_pct = Number(layout[slotKey].height_pct || layout[slotKey].height || (slotKey==='number'?18:12));
-    rotation = Number(layout[slotKey].rotation || 0);
-  } else {
-    // safe defaults (keep text centered roughly same as earlier)
-    left_pct   = 50;
-    top_pct    = (slotKey === 'number' ? 70 : 40);
-    width_pct  = (slotKey === 'number' ? 30 : 70);
-    height_pct = (slotKey === 'number' ? 18 : 12);
-    rotation = 0;
-  }
-
-  const centerX = Math.round(s.offsetLeft + (left_pct/100) * s.imgW);
-  const centerY = Math.round(s.offsetTop  + (top_pct/100)  * s.imgH);
-  const areaWpx = Math.max(8, Math.round((width_pct/100) * s.imgW));
-  const areaHpx = Math.max(8, Math.round((height_pct/100) * s.imgH));
-
-  el.style.position = 'absolute';
-  el.style.left = centerX + 'px';
-  el.style.top  = centerY + 'px';
-  el.style.width = areaWpx + 'px';
-  el.style.height = areaHpx + 'px';
-  el.style.transform = 'translate(-50%,-50%) rotate(' + rotation + 'deg)';
-  el.style.display = 'flex';
-  el.style.alignItems = 'center';
-  el.style.justifyContent = 'center';
-  el.style.boxSizing = 'border-box';
-  el.style.padding = '0 6px';
-  el.style.whiteSpace = 'nowrap';
-  el.style.overflow = 'hidden';
-  el.style.pointerEvents = 'none';
-  el.style.zIndex = (slotKey === 'number' ? 60 : 50);
-
-  // font sizing heuristic (stable)
-  const text = (el.textContent || '').toString().trim() || (slotKey === 'number' ? '09' : 'NAME');
-  const chars = Math.max(1, text.length);
-  const isMobile = window.innerWidth <= 767;
-  const heightCandidate = Math.floor(areaHpx);
-  const avgCharRatio = 0.48;
-  const widthCap = Math.floor((areaWpx * 0.95) / (chars * avgCharRatio));
-  let fontSize = Math.floor(Math.min(heightCandidate, widthCap));
-  const maxAllowed = Math.max(14, Math.floor(s.stageW * (isMobile ? 0.45 : 0.32)));
-  fontSize = Math.max(8, Math.min(fontSize, maxAllowed));
-  fontSize = Math.floor(fontSize * 1.10);
-  el.style.fontSize = fontSize + 'px';
-  el.style.lineHeight = '1';
-  el.style.fontWeight = '700';
-
-  let attempts = 0;
-  while (el.scrollWidth > el.clientWidth && fontSize > 7 && attempts < 30) {
-    fontSize = Math.max(7, Math.floor(fontSize * 0.92));
-    el.style.fontSize = fontSize + 'px';
-    attempts++;
-  }
-}
-
-/* applyLayout: places name & number overlays */
-function applyLayout(){
-  const pvName = document.getElementById('np-prev-name');
-  const pvNum  = document.getElementById('np-prev-num');
-  if (pvName) placeOverlay(pvName, 'name');
-  if (pvNum)  placeOverlay(pvNum, 'number');
-}
-
-/* ---------- Form & preview syncing ---------- */
+<script>
 (function(){
   const $ = id => document.getElementById(id);
+
   const nameEl  = $('np-name'), numEl = $('np-num'), fontEl = $('np-font'), colorEl = $('np-color');
   const pvName  = $('np-prev-name'), pvNum = $('np-prev-num'), baseImg = $('np-base'), stage = $('np-stage');
   const btn = $('np-atc-btn'), form = $('np-atc-form'), addTeam = $('btn-add-team');
+  const layout = (typeof window.layoutSlots === 'object' && window.layoutSlots !== null) ? window.layoutSlots : {};
 
   const NAME_RE = /^[A-Za-z ]{1,12}$/, NUM_RE = /^\d{1,3}$/;
 
@@ -271,6 +175,73 @@ function applyLayout(){
     const map = {bebas:'font-bebas', anton:'font-anton', oswald:'font-oswald', impact:'font-impact'};
     const cls = map[val] || 'font-bebas';
     [pvName, pvNum].forEach(el => { if(el) el.className = 'np-overlay ' + cls; });
+  }
+
+  function computeStageSize(){
+    if (!baseImg || !stage) return null;
+    const stageRect = stage.getBoundingClientRect();
+    const imgRect = baseImg.getBoundingClientRect();
+    return {
+      offsetLeft: Math.round(imgRect.left - stageRect.left),
+      offsetTop: Math.round(imgRect.top - stageRect.top),
+      imgW: Math.max(1,imgRect.width), imgH: Math.max(1,imgRect.height),
+      stageW: Math.max(1, stageRect.width), stageH: Math.max(1, stageRect.height)
+    };
+  }
+
+  function placeOverlay(el, slot, slotKey){
+    if(!el || !slot) return;
+    const s = computeStageSize();
+    if(!s) return;
+
+    const centerX = Math.round(s.offsetLeft + ((slot.left_pct||0)/100) * s.imgW + ((slot.width_pct||0)/200)*s.imgW);
+    const centerY = Math.round(s.offsetTop  + ((slot.top_pct||0)/100)  * s.imgH + ((slot.height_pct||0)/200)*s.imgH);
+    const areaWpx = Math.max(8, Math.round(((slot.width_pct||10)/100) * s.imgW));
+    const areaHpx = Math.max(8, Math.round(((slot.height_pct||10)/100) * s.imgH));
+
+    el.style.position = 'absolute';
+    el.style.left = centerX + 'px';
+    el.style.top  = centerY + 'px';
+    el.style.width = areaWpx + 'px';
+    el.style.height = areaHpx + 'px';
+    el.style.transform = 'translate(-50%,-50%) rotate(' + ((slot.rotation||0)) + 'deg)';
+    el.style.display = 'flex';
+    el.style.alignItems = 'center';
+    el.style.justifyContent = 'center';
+    el.style.boxSizing = 'border-box';
+    el.style.padding = '0 6px';
+    el.style.whiteSpace = 'nowrap';
+    el.style.overflow = 'hidden';
+    el.style.pointerEvents = 'none';
+    el.style.zIndex = (slotKey === 'number' ? 60 : 50);
+
+    const text = (el.textContent || '').toString().trim() || (slotKey === 'number' ? '09' : 'NAME');
+    const chars = Math.max(1, text.length);
+    const isMobile = window.innerWidth <= 767;
+    const heightCandidate = Math.floor(areaHpx * (slotKey === 'number' ? (isMobile?1.05:1) : 1));
+    const avgCharRatio = 0.48;
+    const widthCap = Math.floor((areaWpx * 0.95) / (chars * avgCharRatio));
+    let numericShrink = (slotKey === 'number') ? (isMobile ? 1.0 : 0.98) : 1.0;
+    let fontSize = Math.floor(Math.min(heightCandidate, widthCap) * numericShrink);
+    const maxAllowed = Math.max(14, Math.floor(s.stageW * (isMobile ? 0.45 : 0.32)));
+    fontSize = Math.max(8, Math.min(fontSize, maxAllowed));
+    fontSize = Math.floor(fontSize * 1.10);
+    el.style.fontSize = fontSize + 'px';
+    el.style.lineHeight = '1';
+    el.style.fontWeight = '700';
+
+    let attempts = 0;
+    while (el.scrollWidth > el.clientWidth && fontSize > 7 && attempts < 30) {
+      fontSize = Math.max(7, Math.floor(fontSize * 0.92));
+      el.style.fontSize = fontSize + 'px';
+      attempts++;
+    }
+  }
+
+  function applyLayout(){
+    if (!baseImg || !baseImg.complete) return;
+    if (layout && layout.name) placeOverlay(pvName, layout.name, 'name'); else { pvName.style.left='50%'; pvName.style.top='45%'; pvName.style.transform='translate(-50%,-50%)'; }
+    if (layout && layout.number) placeOverlay(pvNum, layout.number, 'number'); else { pvNum.style.left='50%'; pvNum.style.top='65%'; pvNum.style.transform='translate(-50%,-50%)'; }
   }
 
   function syncPreview(){
@@ -289,13 +260,13 @@ function applyLayout(){
     ensureVariantGid();
   }
 
-  // events: keep ATC state updated ALWAYS
+  // events: add updateATCState calls
   if (nameEl) nameEl.addEventListener('input', ()=>{ syncPreview(); syncHidden(); updateATCState(); });
   if (numEl) numEl.addEventListener('input', e=>{ e.target.value = e.target.value.replace(/\D/g,'').slice(0,3); syncPreview(); syncHidden(); updateATCState(); });
   if (fontEl) fontEl.addEventListener('change', ()=>{ applyFont(fontEl.value); syncHidden(); syncPreview(); });
   if (colorEl) colorEl.addEventListener('input', ()=>{ if(pvName) pvName.style.color = colorEl.value; if(pvNum) pvNum.style.color = colorEl.value; syncHidden(); });
 
-  // size change must update variant gid and ATC state
+  // when size changes, update variant gid and ATC state
   const sizeEl = $('np-size');
   sizeEl?.addEventListener('change', ()=> { ensureVariantGid(); updateATCState(); });
 
@@ -313,15 +284,14 @@ function applyLayout(){
   // ATC state function with console debug
   function updateATCState(){
     if(!btn) return;
-    const okName = NAME_RE.test($('np-name')?.value || '');
-    const okNum  = NUM_RE.test($('np-num')?.value || '');
-    const size = $('np-size')?.value || '';
-    const variantGid = $('np-variant-id')?.value || '';
-    const enabled = okName && okNum && size && variantGid;
-    btn.disabled = !enabled;
-    console.log('updateATCState ->', { okName, okNum, size, variantGid, enabled });
+    const okName = NAME_RE.test(document.getElementById('np-name')?.value || '');
+    const okNum  = NUM_RE.test(document.getElementById('np-num')?.value || '');
+    const size = document.getElementById('np-size')?.value || '';
+    console.log('updateATCState ->', { okName, okNum, size, variantHidden: document.getElementById('np-variant-id')?.value });
+    btn.disabled = !(okName && okNum && size);
   }
 
+  // add team button behaviour
   if (addTeam) addTeam.addEventListener('click', function(e){ e.preventDefault();
     const params = new URLSearchParams();
     if ($('np-product-id')?.value) params.set('product_id', $('np-product-id').value);
@@ -334,34 +304,28 @@ function applyLayout(){
     window.location.href = base + '?' + params.toString();
   });
 
-  // initial setup (safe)
+  // init
   applyFont(fontEl?.value || 'bebas');
   if (pvName && colorEl) pvName.style.color = colorEl.value;
   if (pvNum && colorEl) pvNum.style.color = colorEl.value;
   syncPreview();
   syncHidden();
+  updateATCState();
 
-  // run on DOM ready ensure variant set and ATC updated
-  document.addEventListener('DOMContentLoaded', function(){
-    ensureVariantGid();
-    updateATCState();
-    // one more layout run after fonts/images ready
-    setTimeout(()=>{ applyLayout(); updateATCState(); }, 120);
-  });
-
-  // layout triggers
+  // layout / font readiness
   baseImg.addEventListener('load', ()=> setTimeout(applyLayout, 80));
   window.addEventListener('resize', ()=> setTimeout(applyLayout, 80));
   window.addEventListener('orientationchange', ()=> setTimeout(applyLayout, 200));
   document.fonts?.ready.then(()=> setTimeout(applyLayout, 120));
 
-  // submit handler unchanged but robust: collects variant hidden as gid
+  // submit handler (html2canvas + fetch)
   form?.addEventListener('submit', async function(evt){
     evt.preventDefault();
     const size = $('np-size')?.value || '';
     if (!size) { alert('Please select a size.'); return; }
     if (!(NAME_RE.test(nameEl.value||'') && NUM_RE.test(numEl.value||''))) { alert('Please enter valid Name and Number'); return; }
 
+    // sync hidden data + ensure variant gid
     syncHidden();
     const gid = ensureVariantGid();
     console.log('DEBUG before submit - variant_id =', document.getElementById('np-variant-id')?.value, 'shopifyProductId:', $('np-shopify-product-id')?.value);
@@ -375,8 +339,9 @@ function applyLayout(){
       $('np-preview-hidden').value = dataUrl;
 
       const fd = new FormData(form);
-      const token = document.querySelector('meta[name="csrf-token"]')?.content || '';
+      const token = document.querySelector('input[name="_token"]')?.value || '';
 
+      // Debug: log what we will post (do not leave in prod if it leaks sensitive data)
       console.log('Submitting add-to-cart form; formData keys:');
       for (const k of fd.keys()) console.log(k, fd.get(k));
 
@@ -386,16 +351,11 @@ function applyLayout(){
       console.log('AddToCart response:', resp.status, data);
 
       if (!resp.ok) {
-        if (data && data.userErrors) {
-          console.error('Shopify userErrors:', data.userErrors);
-          alert('Error adding to cart: ' + (data.userErrors[0].message || JSON.stringify(data.userErrors)));
-        } else {
-          alert((data && (data.error||data.message)) || 'Add to cart failed');
-        }
+        alert((data && (data.error||data.message)) || 'Add to cart failed');
         return;
       }
-
-      if (data && data.cart) { alert('Added to cart.'); } else { alert('Added to cart.'); }
+      if (data && data.checkoutUrl) { window.location.href = data.checkoutUrl; return; }
+      alert('Added to cart.');
     } catch(err) {
       console.error('ATC exception', err);
       alert('Something went wrong. See console for details');
@@ -406,7 +366,6 @@ function applyLayout(){
 
 })();
 </script>
-
 
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 </body>
