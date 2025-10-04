@@ -41,13 +41,6 @@
   padding: 0.75rem 1rem;      /* designer-ish padding; tweak if needed */
   } 
 
-  /* responsive rules - same breakpoints as designer */
-  @media (max-width: 767px) {
-    /* mobile look from designer - keep stage width fixed so overlay mapping predictable */
-    .np-stage { width: 320px !important; height: 420px !important; }
-    .np-stage img { width: 320px !important; height: 420px !important; object-fit: contain !important; }
-  }
-
   /* page specific layout */
   .main-flex { align-items: flex-start; }
   @media (max-width: 991px) {
@@ -55,10 +48,6 @@
     .preview-col { order: 1; width: 100% !important; margin-bottom: 1rem; }
     .form-col { order: 2; width: 100% !important; }
   }
-  @media (max-width: 767px) {
-  .np-stage { width: 320px !important; height: 420px !important; margin: 0 auto !important; }
-  .np-stage img { width: 320px !important; height: 420px !important; object-fit: contain !important; display:block; margin:0 auto; }
-}
 </style>
 
 <div class="container py-4">
