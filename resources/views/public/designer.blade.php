@@ -121,7 +121,7 @@
           <input id="np-qty" name="quantity" type="number" min="1" value="1" class="form-control">
         </div>
 
-        <button id="np-atc-btn" type="submit" class="btn btn-primary" disabled>Add to Cart</button>
+        <button id="np-atc-btn" type="submit" class="btn btn-primary">Add to Cart</button>
         <a href="#" class="btn btn-success" id="btn-add-team" style="margin-left:8px;">Add Team Players</a>
       </form>
     </div>
@@ -306,15 +306,13 @@ function debugVariant(){
 
   // ATC state function with console debug
   function updateATCState(){
-    if(!btn) return;
-    const okName = NAME_RE.test(document.getElementById('np-name')?.value || '');
-    const okNum  = NUM_RE.test(document.getElementById('np-num')?.value || '');
-    const size = document.getElementById('np-size')?.value || '';
-    const gid = ensureVariantGid();
-    console.log('updateATCState ->', { okName, okNum, size, gid });
-    btn.disabled = !(okName && okNum && size && gid);
-  }
-    window.updateATCState = updateATCState;
+  if(!btn) return;
+  const okName = NAME_RE.test(document.getElementById('np-name')?.value || '');
+  const okNum  = NUM_RE.test(document.getElementById('np-num')?.value || '');
+  const size = document.getElementById('np-size')?.value || '';
+  const gid = ensureVariantGid();
+  console.log('updateATCState ->', { okName, okNum, size, gid });
+}
 
   // add team button behaviour
   if (addTeam) addTeam.addEventListener('click', function(e){ e.preventDefault();
