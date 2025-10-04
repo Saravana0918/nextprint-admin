@@ -37,6 +37,10 @@
     z-index: 9999;
   }
 
+  .preview-col .card-body {
+  padding: 0.75rem 1rem;      /* designer-ish padding; tweak if needed */
+  } 
+
   /* responsive rules - same breakpoints as designer */
   @media (max-width: 767px) {
     /* mobile look from designer - keep stage width fixed so overlay mapping predictable */
@@ -51,6 +55,10 @@
     .preview-col { order: 1; width: 100% !important; margin-bottom: 1rem; }
     .form-col { order: 2; width: 100% !important; }
   }
+  @media (max-width: 767px) {
+  .np-stage { width: 320px !important; height: 420px !important; margin: 0 auto !important; }
+  .np-stage img { width: 320px !important; height: 420px !important; object-fit: contain !important; display:block; margin:0 auto; }
+}
 </style>
 
 <div class="container py-4">
@@ -231,6 +239,41 @@ document.addEventListener('DOMContentLoaded', function() {
     placeOverlay(ovName, layout.name, 'name');
     placeOverlay(ovNum, layout.number, 'number');
   }
+
+  (function addReliableRecalc() {
+  try {
+    // ResizeObserver to catch any layout/size change
+    if ('ResizeObserver' in window) {
+      const ro = new ResizeObserver(() => {
+        // debounce small changes
+        clearTimeout(window._team_layout_timer);
+        window._team_layout_timer = setTimeout(() => {
+          applyLayout();
+        }, 80);
+      });
+      if (imgEl) ro.observe(imgEl);
+      if (stageEl) ro.observe(stageEl);
+    } else {
+      // fallback: listen to window resize
+      window.addEventListener('resize', () => setTimeout(applyLayout, 120));
+    }
+
+    // also recalc on scroll/visibility/orientationchange (mobile can shift when address bar hides)
+    window.addEventListener('scroll', () => {
+      clearTimeout(window._team_layout_timer);
+      window._team_layout_timer = setTimeout(() => applyLayout(), 90);
+    }, { passive: true });
+
+    window.addEventListener('orientationchange', () => setTimeout(applyLayout, 180));
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(applyLayout, 120); });
+
+    // one extra forced call after slight delay (helps when fonts or images finish)
+    setTimeout(() => { if (imgEl && imgEl.complete) applyLayout(); }, 300);
+    setTimeout(() => { if (imgEl && imgEl.complete) applyLayout(); }, 900);
+  } catch (err) {
+    console.warn('layout recalc helper failed', err);
+  }
+})();
 
   // debug helper: open console and call teamOverlayDebug()
   window.teamOverlayDebug = function() {
