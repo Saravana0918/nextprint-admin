@@ -7,7 +7,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use App\Models\DecorationAreaTemplate;
-use Illuminate\Support\Facades\Log;
 
 class DecorationAreaController extends Controller
 {
@@ -54,52 +53,8 @@ class DecorationAreaController extends Controller
     return back()->with('ok','Saved');
 }
 
-private function computeLayoutSlotsFromArea($area, $imgW = 1200, $imgH = 800)
-{
-    $a = is_array($area) ? (object)$area : $area;
 
-    // if percent fields present, use them
-    if (isset($a->left_pct) && isset($a->top_pct) && isset($a->width_pct) && isset($a->height_pct)) {
-        $left = floatval($a->left_pct);
-        $top  = floatval($a->top_pct);
-        $wPct = floatval($a->width_pct);
-        $hPct = floatval($a->height_pct);
-    } else {
-        // pixel fallback
-        $x = $a->x ?? $a->left ?? 0;
-        $y = $a->y ?? $a->top ?? 0;
-        $w = $a->width ?? $a->w ?? 100;
-        $h = $a->height ?? $a->h ?? 100;
-
-        $left = ($x / max(1, $imgW)) * 100;
-        $top  = ($y / max(1, $imgH)) * 100;
-        $wPct = ($w / max(1, $imgW)) * 100;
-        $hPct = ($h / max(1, $imgH)) * 100;
-    }
-
-    $centerX = $left + ($wPct * 0.5);
-    $nameTop = $top + ($hPct * 0.18);
-    $numTop  = $top + ($hPct * 0.62);
-
-    return [
-        'name' => [
-            'left_pct'  => round($centerX, 3),
-            'top_pct'   => round($nameTop, 3),
-            'width_pct' => round(max(6, $wPct * 0.86), 3),
-            'height_pct'=> round(max(6, $hPct * 0.22), 3),
-            'rotation'  => 0
-        ],
-        'number' => [
-            'left_pct'  => round($centerX, 3),
-            'top_pct'   => round($numTop, 3),
-            'width_pct' => round(max(6, $wPct * 0.94), 3),
-            'height_pct'=> round(max(6, $hPct * 0.36), 3),
-            'rotation'  => 0
-        ]
-    ];
-}
- 
-// AJAX list/search for the modal
+    // AJAX list/search for the modal
 public function search(Request $r)
 {
     $q = \App\Models\DecorationAreaTemplate::query();

@@ -4,7 +4,6 @@
 
 @section('content')
 @php
-  // safe fallbacks
   $img = $product->image_url ?? ($product->preview_src ?? asset('images/placeholder.png'));
   $prefill = $prefill ?? [];
   $layoutSlots = $layoutSlots ?? null;
@@ -16,7 +15,6 @@
     <div class="preview-col" style="width:534px; flex-shrink:0;">
       <div class="card">
         <div class="card-body text-center" style="position:relative;">
-          <!-- Stage container -->
           <div id="player-stage" style="position:relative; display:inline-block; width:100%;">
             <img id="player-base"
                  src="{{ $img }}"
@@ -63,7 +61,6 @@
           <!-- JS inserts rows here -->
         </div>
 
-        {{-- hidden fields for possible backend usage --}}
         <input type="hidden" id="team-preview-data" name="team_preview_data" value="">
       </form>
     </div>
@@ -73,7 +70,7 @@
 {{-- expose server values to JS --}}
 <script>
   window.prefill = {!! json_encode($prefill ?? []) !!};
-  window.layoutSlots = {!! json_encode($layoutSlots ?? null, JSON_NUMERIC_CHECK) !!};
+  window.layoutSlots = {!! json_encode($layoutSlots ?? [], JSON_NUMERIC_CHECK) !!};
 </script>
 
 <!-- row template -->
@@ -110,22 +107,19 @@
     pointer-events: none;
   }
 
-  /* layout responsiveness */
+  /* responsive layout */
   @media (max-width: 991px) {
     .main-flex { flex-direction: column !important; }
     .preview-col { order: 1; width: 100% !important; margin-bottom: 1rem; }
     .form-col { order: 2; width: 100% !important; }
 
-    /* stage forced on mobile for predictable mapping (tweak if required) */
     #player-stage { width: 320px !important; height: 420px !important; margin:0 auto 1rem !important; }
     #player-base  { width: 320px !important; height: 420px !important; object-fit:contain !important; }
   }
 
-  /* optional visual for active row */
   .player-row.preview-active { box-shadow: 0 0 0 3px rgba(20,120,220,0.08); border-color: rgba(20,120,220,0.12); }
 </style>
 
-<!-- core JS: builds rows, applies overlay layout using layoutSlots -->
 <script>
 document.addEventListener('DOMContentLoaded', function() {
   const list = document.getElementById('players-list');
@@ -139,10 +133,13 @@ document.addEventListener('DOMContentLoaded', function() {
   const ovNum  = document.getElementById('overlay-number');
 
   const pf = window.prefill || {};
-  const layout = (typeof window.layoutSlots === 'object' && window.layoutSlots) ? window.layoutSlots : {
-    name: { left_pct:50, top_pct:25, width_pct:85, height_pct:8, rotation:0 },
-    number: { left_pct:50, top_pct:54, width_pct:70, height_pct:12, rotation:0 }
-  };
+  // use server-provided layoutSlots if present; otherwise fallback
+  const layout = (typeof window.layoutSlots === 'object' && Object.keys(window.layoutSlots || {}).length)
+                 ? window.layoutSlots
+                 : {
+                    name: { left_pct:50, top_pct:25, width_pct:85, height_pct:8, rotation:0 },
+                    number: { left_pct:50, top_pct:54, width_pct:70, height_pct:12, rotation:0 }
+                 };
 
   function computeStageSize(stage, img) {
     if(!stage || !img) return null;
@@ -192,7 +189,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const maxAllowed = Math.max(14, Math.floor(s.stageW * (isMobile ? 0.45 : 0.32)));
     fs = Math.max(8, Math.min(fs, maxAllowed));
     fs = Math.floor(fs * 1.08);
-    el.style.fontSize = fs + 'px'; el.style.lineHeight = '1'; el.style.fontWeight = '700';
+    el.style.fontSize = fs + 'px';
+    el.style.lineHeight = '1';
+    el.style.fontWeight = '700';
     let attempts = 0;
     while (el.scrollWidth > el.clientWidth && fs > 7 && attempts < 30) {
       fs = Math.max(7, Math.floor(fs * 0.92));
@@ -203,10 +202,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
   function applyLayout() {
     if (!imgEl || !imgEl.complete) return;
-    // prefer server prefill, else leave as-is
+
+    // apply prefill text
     if (pf.prefill_name || pf.name) ovName.textContent = (pf.prefill_name || pf.name || '').toString().toUpperCase();
     if (pf.prefill_number || pf.number) ovNum.textContent = (pf.prefill_number || pf.number || '').toString().replace(/\D/g,'').slice(0,3);
-    // fonts/colors from prefill
+
+    // apply prefill font & color if present
     if (pf.prefill_font || pf.font) {
       const map = {bebas: "Bebas Neue, sans-serif", oswald: "Oswald, sans-serif", anton: "Anton, sans-serif", impact: "Impact, Arial"};
       const key = (pf.prefill_font || pf.font).toString().toLowerCase();
@@ -217,24 +218,25 @@ document.addEventListener('DOMContentLoaded', function() {
       try { var c = decodeURIComponent(pf.prefill_color || pf.color || ''); } catch(e){ var c = (pf.prefill_color || pf.color || ''); }
       if (c) { ovName.style.color = c; ovNum.style.color = c; }
     }
+
     placeOverlay(ovName, layout.name, 'name');
     placeOverlay(ovNum, layout.number, 'number');
   }
 
-  // debug helper
+  // debug helper (run in console)
   window.teamOverlayDebug = function() {
     console.log('layoutSlots', layout);
     console.log('stageRect', stageEl?.getBoundingClientRect(), 'imgRect', imgEl?.getBoundingClientRect());
     console.log('compute', computeStageSize(stageEl, imgEl));
   };
 
-  // wire image + resize
+  // run layout after image loads / resize / fonts ready
   if (imgEl) {
     if (imgEl.complete) setTimeout(applyLayout, 80);
     else imgEl.addEventListener('load', ()=> setTimeout(applyLayout, 80));
   }
-  window.addEventListener('resize', ()=> setTimeout(applyLayout,120));
-  document.fonts?.ready.then(()=> setTimeout(applyLayout,120));
+  window.addEventListener('resize', ()=> setTimeout(applyLayout, 120));
+  document.fonts?.ready.then(()=> setTimeout(applyLayout, 120));
 
   /* ===== rows & preview wiring ===== */
   function enforceLimits(input) {
@@ -266,23 +268,18 @@ document.addEventListener('DOMContentLoaded', function() {
 
     enforceLimits(numEl); enforceLimits(nameEl);
 
-    // remove
     last.querySelector('.btn-remove').addEventListener('click', ()=> {
       last.remove();
-      // if no rows left, clear preview
       if (!list.querySelector('.player-row')) {
-        ovName.textContent = ''; ovNum.textContent = '';
-        applyLayout();
+        ovName.textContent = ''; ovNum.textContent = ''; applyLayout();
       }
     });
 
-    // preview
     last.querySelector('.btn-preview').addEventListener('click', ()=> {
       list.querySelectorAll('.player-row').forEach(r => r.classList.remove('preview-active'));
       last.classList.add('preview-active');
       const nm = (nameEl.value || '').toUpperCase().slice(0,12);
       const nu = (numEl.value || '').replace(/\D/g,'').slice(0,3);
-      // apply hidden font/color if set
       if (fontHidden.value) {
         const fm = fontHidden.value.toLowerCase();
         const familyMap = {bebas: "Bebas Neue, sans-serif", oswald: "Oswald, sans-serif", anton:"Anton, sans-serif"};
@@ -295,7 +292,7 @@ document.addEventListener('DOMContentLoaded', function() {
       applyLayout();
     });
 
-    // live preview when focused/typing
+    // live preview on focus/input
     nameEl.addEventListener('focus', ()=> { last.classList.add('preview-active'); ovName.textContent = (nameEl.value||'').toUpperCase().slice(0,12); ovNum.textContent = (numEl.value||'').replace(/\D/g,'').slice(0,3); applyLayout(); });
     numEl.addEventListener('focus', ()=> { last.classList.add('preview-active'); ovName.textContent = (nameEl.value||'').toUpperCase().slice(0,12); ovNum.textContent = (numEl.value||'').replace(/\D/g,'').slice(0,3); applyLayout(); });
 
@@ -307,7 +304,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   addBtn.addEventListener('click', ()=> createRow());
 
-  // initial row(s) from prefill
+  // initial rows from prefill
   if ((pf.prefill_name && pf.prefill_name.length) || (pf.prefill_number && pf.prefill_number.length)) {
     createRow({
       name: (pf.prefill_name || pf.name || '').toString().toUpperCase().slice(0,12),
@@ -315,14 +312,13 @@ document.addEventListener('DOMContentLoaded', function() {
       font: pf.prefill_font || pf.font || '',
       color: (pf.prefill_color ? decodeURIComponent(pf.prefill_color) : pf.color) || ''
     });
-    // mark first as active preview
     const first = list.querySelector('.player-row');
     if (first) first.classList.add('preview-active');
   } else {
     createRow();
   }
 
-  // final form submission: gather players array and post JSON
+  // form submit: collect players and POST JSON
   form.addEventListener('submit', async function(e) {
     e.preventDefault();
     const rows = list.querySelectorAll('.player-row');
@@ -333,13 +329,12 @@ document.addEventListener('DOMContentLoaded', function() {
       const sz = r.querySelector('.player-size')?.value || '';
       const f  = r.querySelector('.player-font')?.value || '';
       const c  = r.querySelector('.player-color')?.value || '';
-      if (!n && !num) return; // skip empty
+      if (!n && !num) return;
       players.push({ name: n.toString().toUpperCase().slice(0,12), number: num.toString().replace(/\D/g,'').slice(0,3), size: sz, font: f, color: c });
     });
 
     if (players.length === 0) { alert('Add at least one player.'); return; }
 
-    // create payload and POST as JSON
     const payload = { product_id: form.querySelector('input[name="product_id"]').value || null, players: players };
     try {
       const token = document.querySelector('input[name="_token"]')?.value || '';
@@ -354,14 +349,12 @@ document.addEventListener('DOMContentLoaded', function() {
         alert((json && (json.message || json.error)) || 'Server error while adding team players.');
         return;
       }
-      // server should respond with checkout url or success
       if (json.checkoutUrl || json.checkout_url) {
         window.location.href = json.checkoutUrl || json.checkout_url;
         return;
       }
       if (json.success) {
         alert('Team saved successfully.');
-        // optionally redirect to team show
         if (json.team_id) window.location.href = '/team/' + json.team_id;
         return;
       }
@@ -372,7 +365,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 
-  // final applyLayout call after fonts ready
+  // initial applyLayout after fonts ready
   document.fonts?.ready.then(()=> setTimeout(()=> { if (imgEl.complete) applyLayout(); }, 120));
 });
 </script>

@@ -282,14 +282,19 @@
   // add team button
   if (addTeam) addTeam.addEventListener('click', function(e){ e.preventDefault();
     const params = new URLSearchParams();
-    if ($('np-product-id')?.value) params.set('product_id', $('np-product-id').value);
-    if (nameEl?.value) params.set('prefill_name', nameEl.value);
-    if (numEl?.value) params.set('prefill_number', numEl.value);
-    if (fontEl?.value) params.set('prefill_font', fontEl.value);
-    if (colorEl?.value) params.set('prefill_color', colorEl.value);
-    if ($('np-size')?.value) params.set('prefill_size', $('np-size').value);
-    const base = "{{ route('team.create') }}";
-    window.location.href = base + '?' + params.toString();
+    params.set('product_id', productId);
+    params.set('prefill_name', nameEl.value || '');
+    params.set('prefill_number', numEl.value || '');
+    params.set('prefill_font', fontEl.value || '');
+    params.set('prefill_color', colorEl.value || '');
+    params.set('prefill_size', document.getElementById('np-size')?.value || '');
+
+    // pass layoutSlots (if available)
+    if (window.layoutSlots && Object.keys(window.layoutSlots).length) {
+      params.set('layoutSlots', encodeURIComponent(JSON.stringify(window.layoutSlots)));
+    }
+
+    window.location.href = "{{ route('team.create') }}?" + params.toString();
   });
 
   // init

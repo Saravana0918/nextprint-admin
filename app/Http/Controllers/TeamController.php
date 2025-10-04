@@ -9,41 +9,29 @@ use Illuminate\Http\Response;
 use App\Models\Team;
 use App\Models\Product;
 use App\Http\Controllers\ShopifyCartController;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class TeamController extends Controller
 {
-public function create(Request $request)
-{
-    $product = null;
-    $productId = $request->query('product_id');
-    if ($productId) $product = Product::find($productId);
+    public function create(Request $request)
+        {
+            $product = Product::find($request->query('product_id'));
+            $prefill = $request->only(['prefill_name','prefill_number','prefill_font','prefill_color','prefill_size']);
 
-    $prefill = [
-        'name'   => $request->query('prefill_name',''),
-        'number' => $request->query('prefill_number',''),
-        'font'   => $request->query('prefill_font',''),
-        'color'  => $request->query('prefill_color',''),
-        'size'   => $request->query('prefill_size','')
-    ];
+            $layoutSlots = [];
+            // prefer DB saved slots
+            if ($product && !empty($product->layout_slots)) {
+                $layoutSlots = is_array($product->layout_slots) ? $product->layout_slots : json_decode($product->layout_slots, true);
+            }
+            // fallback to URL-passed slots (quick test)
+            if (empty($layoutSlots) && $request->has('layoutSlots')) {
+                $raw = urldecode($request->query('layoutSlots'));
+                $decoded = json_decode($raw, true);
+                if (is_array($decoded)) $layoutSlots = $decoded;
+            }
 
-    $layoutSlots = [];
-    if ($product && !empty($product->layout_slots)) {
-        $layoutSlots = json_decode($product->layout_slots, true);
-    }
-
-    // fallback
-    if (empty($layoutSlots)) {
-      $layoutSlots = [
-        'name' => ['left_pct'=>67,'top_pct'=>18,'width_pct'=>22,'height_pct'=>8,'rotation'=>0],
-        'number'=>['left_pct'=>62,'top_pct'=>48,'width_pct'=>30,'height_pct'=>18,'rotation'=>0],
-      ];
-    }
-
-    return view('team.create', compact('product','prefill','layoutSlots'));
-}
-
+            return view('team.create', compact('product','prefill','layoutSlots'));
+        }
 
     public function store(Request $request)
     {
