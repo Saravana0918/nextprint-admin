@@ -8,41 +8,18 @@
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Oswald:wght@400;600&display=swap" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <style>
-    /* fonts */
+    /* small styles (same as you had) */
     .font-bebas{font-family:'Bebas Neue', Impact, 'Arial Black', sans-serif;}
     .font-anton{font-family:'Anton', Impact, 'Arial Black', sans-serif;}
     .font-oswald{font-family:'Oswald', Arial, sans-serif;}
     .font-impact{font-family:Impact, 'Arial Black', sans-serif;}
-
-    /* stage */
     .np-stage { position: relative; width: 100%; max-width: 534px; margin: 0 auto; background:#fff; border-radius:8px; padding:8px; min-height: 320px; box-sizing: border-box; overflow: visible; }
     .np-stage img { width:100%; height:auto; border-radius:6px; display:block; }
-
-    /* overlays */
-    .np-overlay {
-      position: absolute;
-      color: #D4AF37;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 1.5px;
-      text-align: center;
-      text-shadow: 0 3px 10px rgba(0,0,0,0.65);
-      pointer-events: none;
-      white-space: nowrap;
-      line-height: 1;
-      transform-origin: center center;
-      z-index: 9999;
-    }
-
-    .np-swatch { width:28px; height:28px; border-radius:50%; border:1px solid #ccc; cursor:pointer; display:inline-block; }
-    .np-swatch.active { outline: 2px solid rgba(0,0,0,0.08); box-shadow: 0 2px 6px rgba(0,0,0,0.06); }
-
-    body { background-color: #929292; }
-    .body-padding{ padding-top: 100px; }
-    .right-layout{ padding-top:350px; }
-
+    .np-overlay { position: absolute; color: #D4AF37; font-weight:700; text-transform:uppercase; letter-spacing:1.5px; text-align:center; text-shadow:0 3px 10px rgba(0,0,0,0.65); pointer-events:none; white-space:nowrap; line-height:1; transform-origin:center center; z-index:9999; }
+    .np-swatch{ width:28px; height:28px; border-radius:50%; border:1px solid #ccc; cursor:pointer; display:inline-block;}
+    .np-swatch.active{ outline:2px solid rgba(0,0,0,0.08); box-shadow:0 2px 6px rgba(0,0,0,0.06); }
+    body{ background-color:#929292; } .body-padding{ padding-top:100px; } .right-layout{ padding-top:350px; }
     input:focus, select:focus { outline: 3px solid rgba(13,110,253,0.12); }
-    .desktop-display{ color : white ;}
   </style>
 </head>
 <body class="body-padding">
@@ -57,8 +34,7 @@
     <div class="col-md-6 np-col order-1 order-md-2">
       <div class="border rounded p-3">
         <div class="np-stage" id="np-stage">
-          <img id="np-base" crossorigin="anonymous" src="{{ $img }}" alt="Preview"
-               onerror="this.onerror=null;this.src='{{ asset('images/placeholder.png') }}'">
+          <img id="np-base" crossorigin="anonymous" src="{{ $img }}" alt="Preview" onerror="this.onerror=null;this.src='{{ asset('images/placeholder.png') }}'">
           <div id="np-prev-name" class="np-overlay font-bebas" aria-hidden="true"></div>
           <div id="np-prev-num"  class="np-overlay font-bebas" aria-hidden="true"></div>
         </div>
@@ -102,7 +78,7 @@
         <div class="mb-2">
           <select id="np-size" name="size" class="form-select" required>
             <option value="">Select Size</option>
-            <option value="S">S</option><option value="M">M</option><option value="L">L</option><option value="XL">XL</option><option value="2XL">2XL</option>
+            <option value="XS">XS</option><option value="S">S</option><option value="M">M</option><option value="L">L</option><option value="XL">XL</option><option value="2XL">2XL</option><option value="3XL">3XL</option>
           </select>
         </div>
         <div class="mb-2">
@@ -116,14 +92,22 @@
   </div>
 </div>
 
+<!-- server-side layout slots -->
 <script> window.layoutSlots = {!! json_encode($layoutSlots ?? [], JSON_NUMERIC_CHECK) !!}; </script>
 
+<!-- server variant map injection (controller must pass $variantMap) -->
 <script>
-  // storefront base URL for cart adds — adjust if your storefront is different
-  window.STOREFRONT_ORIGIN = "{{ url('/') }}"; // example: https://nextprint.in
+  window.variantMap = {!! json_encode($variantMap ?? [], JSON_UNESCAPED_SLASHES) !!};
+  console.log('Injected variantMap:', window.variantMap);
 </script>
 
-<!-- Robust helpers -->
+<!-- force storefront origin: IMPORTANT - change if your storefront domain differs -->
+<script>
+  window.STOREFRONT_ORIGIN = "{{ url('/') }}"; // example: https://nextprint.in
+  console.log('STOREFRONT_ORIGIN', window.STOREFRONT_ORIGIN);
+</script>
+
+<!-- helper functions -->
 <script>
 function toGidIfNeeded(v){
   if(!v) return '';
@@ -134,39 +118,34 @@ function toGidIfNeeded(v){
   return 'gid://shopify/ProductVariant/' + numeric;
 }
 
-function ensureVariantGid(){
+function ensureVariantNumeric(){
+  // returns numeric id string or ''
   const size = (document.getElementById('np-size')?.value || '').toString().trim();
   let mapped = '';
 
-  // try window.variantMap first (case-insensitive)
   if (window.variantMap && size) {
     if (window.variantMap[size]) mapped = window.variantMap[size];
     else {
-      // try different casings
-      const keys = Object.keys(window.variantMap || {});
-      for (const k of keys) {
+      // try case-insensitive match
+      for (const k of Object.keys(window.variantMap || {})) {
         if (k.toString().toLowerCase() === size.toLowerCase()) { mapped = window.variantMap[k]; break; }
       }
     }
   }
 
   // normalize mapped -> numeric
-  if (mapped && mapped.toString().startsWith('gid://')) {
-    mapped = mapped.toString().split('/').pop();
-  } else if (mapped) {
-    mapped = mapped.toString().replace(/[^\d]/g,'');
-  }
+  if (mapped && mapped.toString().startsWith('gid://')) mapped = mapped.toString().split('/').pop();
+  else if (mapped) mapped = mapped.toString().replace(/[^\d]/g,'');
 
-  // also allow hidden field to contain gid or numeric fallback
+  // fallback: hidden field
   const hidden = document.getElementById('np-variant-id');
   let fallback = hidden ? hidden.value : '';
   if (fallback && fallback.toString().startsWith('gid://')) fallback = fallback.split('/').pop();
-  else fallback = (fallback || '').toString().replace(/[^\d]/g,'');
+  else fallback = (fallback||'').toString().replace(/[^\d]/g,'');
 
   const numeric = (mapped || fallback || '').toString();
-  const gid = numeric ? 'gid://shopify/ProductVariant/' + numeric : '';
-  if (hidden) hidden.value = gid;
-  // return numeric (string) — easiest for cart post
+  if (hidden) hidden.value = numeric ? ('gid://shopify/ProductVariant/' + numeric) : '';
+  console.log('ensureVariantNumeric ->', { size, mapped, fallback, numeric });
   return numeric;
 }
 </script>
@@ -178,9 +157,6 @@ function ensureVariantGid(){
   const nameEl  = $('np-name'), numEl = $('np-num'), fontEl = $('np-font'), colorEl = $('np-color');
   const pvName  = $('np-prev-name'), pvNum = $('np-prev-num'), baseImg = $('np-base'), stage = $('np-stage');
   const btn = $('np-atc-btn'), form = $('np-atc-form'), addTeam = $('btn-add-team');
-  const layout = (typeof window.layoutSlots === 'object' && window.layoutSlots !== null) ? window.layoutSlots : {};
-
-  const NAME_RE = /^[A-Za-z ]{1,12}$/, NUM_RE = /^\d{1,3}$/;
 
   function applyFont(val){
     const map = {bebas:'font-bebas', anton:'font-anton', oswald:'font-oswald', impact:'font-impact'};
@@ -188,70 +164,11 @@ function ensureVariantGid(){
     [pvName, pvNum].forEach(el => { if(el) el.className = 'np-overlay ' + cls; });
   }
 
-  function computeStageSize(){
-    if (!baseImg || !stage) return null;
-    const stageRect = stage.getBoundingClientRect();
-    const imgRect = baseImg.getBoundingClientRect();
-    return {
-      offsetLeft: Math.round(imgRect.left - stageRect.left),
-      offsetTop: Math.round(imgRect.top - stageRect.top),
-      imgW: Math.max(1,imgRect.width), imgH: Math.max(1,imgRect.height),
-      stageW: Math.max(1, stageRect.width), stageH: Math.max(1, stageRect.height)
-    };
-  }
-
-  function placeOverlay(el, slot, slotKey){
-    if(!el || !slot) return;
-    const s = computeStageSize();
-    if(!s) return;
-    const centerX = Math.round(s.offsetLeft + ((slot.left_pct||0)/100) * s.imgW + ((slot.width_pct||0)/200)*s.imgW);
-    const centerY = Math.round(s.offsetTop  + ((slot.top_pct||0)/100)  * s.imgH + ((slot.height_pct||0)/200)*s.imgH);
-    const areaWpx = Math.max(8, Math.round(((slot.width_pct||10)/100) * s.imgW));
-    const areaHpx = Math.max(8, Math.round(((slot.height_pct||10)/100) * s.imgH));
-
-    el.style.position = 'absolute';
-    el.style.left = centerX + 'px';
-    el.style.top  = centerY + 'px';
-    el.style.width = areaWpx + 'px';
-    el.style.height = areaHpx + 'px';
-    el.style.transform = 'translate(-50%,-50%) rotate(' + ((slot.rotation||0)) + 'deg)';
-    el.style.display = 'flex';
-    el.style.alignItems = 'center';
-    el.style.justifyContent = 'center';
-    el.style.boxSizing = 'border-box';
-    el.style.padding = '0 6px';
-    el.style.whiteSpace = 'nowrap';
-    el.style.overflow = 'hidden';
-    el.style.pointerEvents = 'none';
-    el.style.zIndex = (slotKey === 'number' ? 60 : 50);
-
-    const text = (el.textContent || '').toString().trim() || (slotKey === 'number' ? '09' : 'NAME');
-    const chars = Math.max(1, text.length);
-    const isMobile = window.innerWidth <= 767;
-    const heightCandidate = Math.floor(areaHpx * (slotKey === 'number' ? (isMobile?1.05:1) : 1));
-    const avgCharRatio = 0.48;
-    const widthCap = Math.floor((areaWpx * 0.95) / (chars * avgCharRatio));
-    let numericShrink = (slotKey === 'number') ? (isMobile ? 1.0 : 0.98) : 1.0;
-    let fontSize = Math.floor(Math.min(heightCandidate, widthCap) * numericShrink);
-    const maxAllowed = Math.max(14, Math.floor(s.stageW * (isMobile ? 0.45 : 0.32)));
-    fontSize = Math.max(8, Math.min(fontSize, maxAllowed));
-    fontSize = Math.floor(fontSize * 1.10);
-    el.style.fontSize = fontSize + 'px';
-    el.style.lineHeight = '1';
-    el.style.fontWeight = '700';
-
-    let attempts = 0;
-    while (el.scrollWidth > el.clientWidth && fontSize > 7 && attempts < 30) {
-      fontSize = Math.max(7, Math.floor(fontSize * 0.92));
-      el.style.fontSize = fontSize + 'px';
-      attempts++;
-    }
-  }
-
   function applyLayout(){
     if (!baseImg || !baseImg.complete) return;
-    if (layout && layout.name) placeOverlay(pvName, layout.name, 'name'); else { pvName.style.left='50%'; pvName.style.top='45%'; pvName.style.transform='translate(-50%,-50%)'; }
-    if (layout && layout.number) placeOverlay(pvNum, layout.number, 'number'); else { pvNum.style.left='50%'; pvNum.style.top='65%'; pvNum.style.transform='translate(-50%,-50%)'; }
+    // place default positions (simple)
+    pvName.style.left='50%'; pvName.style.top='45%'; pvName.style.transform='translate(-50%,-50%)';
+    pvNum.style.left='50%'; pvNum.style.top='65%'; pvNum.style.transform='translate(-50%,-50%)';
   }
 
   function syncPreview(){
@@ -266,7 +183,7 @@ function ensureVariantGid(){
     if (nm) nm.value = (numEl ? (numEl.value||'') : '').replace(/\D/g,'').trim();
     if (f) f.value = fontEl ? fontEl.value : '';
     if (c) c.value = colorEl ? colorEl.value : '';
-    ensureVariantGid();
+    ensureVariantNumeric();
   }
 
   // events
@@ -274,8 +191,7 @@ function ensureVariantGid(){
   if (numEl) numEl.addEventListener('input', e=>{ e.target.value = e.target.value.replace(/\D/g,'').slice(0,3); syncPreview(); syncHidden(); });
   if (fontEl) fontEl.addEventListener('change', ()=>{ applyFont(fontEl.value); syncHidden(); syncPreview(); });
   if (colorEl) colorEl.addEventListener('input', ()=>{ if(pvName) pvName.style.color = colorEl.value; if(pvNum) pvNum.style.color = colorEl.value; syncHidden(); });
-  const sizeEl = $('np-size');
-  sizeEl?.addEventListener('change', ()=> { ensureVariantGid(); });
+  const sizeEl = $('np-size'); sizeEl?.addEventListener('change', ()=> { ensureVariantNumeric(); });
 
   document.querySelectorAll('.np-swatch').forEach(b=>{
     b.addEventListener('click', ()=>{
@@ -294,155 +210,99 @@ function ensureVariantGid(){
   if (pvNum && colorEl) pvNum.style.color = colorEl.value;
   syncPreview();
   syncHidden();
-  applyLayout();
-  baseImg.addEventListener('load', ()=> setTimeout(applyLayout, 80));
-  window.addEventListener('resize', ()=> setTimeout(applyLayout, 80));
-  document.fonts?.ready.then(()=> setTimeout(applyLayout, 120));
 
-  /* ============================
-     Upload preview to server helper
-     ============================ */
-  async function uploadPreviewToServer(dataUrl) {
-    try {
-      const token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-      const fd = new FormData();
-      fd.append('preview', dataUrl);
-      const resp = await fetch('{{ route('designer.upload_preview') }}', {
-        method: 'POST',
-        body: fd,
-        headers: { 'X-CSRF-TOKEN': token },
-        credentials: 'same-origin'
-      });
-      const json = await resp.json();
-      if (!resp.ok) throw new Error(json.message || 'Upload failed');
-      return json.url || null;
-    } catch (err) {
-      console.warn('uploadPreviewToServer failed', err);
-      return null;
-    }
-  }
+  // team button -> redirect to team.create route with query params
+  if (addTeam) addTeam.addEventListener('click', function(e){ e.preventDefault();
+    const params = new URLSearchParams();
+    if ($('np-product-id')?.value) params.set('product_id', $('np-product-id').value);
+    if (nameEl?.value) params.set('prefill_name', nameEl.value);
+    if (numEl?.value) params.set('prefill_number', numEl.value);
+    if (fontEl?.value) params.set('prefill_font', fontEl.value);
+    if (colorEl?.value) params.set('prefill_color', colorEl.value);
+    if ($('np-size')?.value) params.set('prefill_size', $('np-size').value);
+    const base = "{{ route('team.create') }}";
+    window.location.href = base + '?' + params.toString();
+  });
 
-  /* ============================
-     Submit to Shopify storefront /cart/add
-     ============================ */
-  function submitToShopifyStorefront({variantNumericId, quantity, props}) {
-    const storeDomain = location.hostname; // will submit to current host domain (works for same-origin store)
-    const form2 = document.createElement('form');
-    form2.method = 'POST';
-    form2.action = `https://${storeDomain}/cart/add`;
-    form2.style.display = 'none';
-
-    const addInput = (nameAttr, val) => {
-      const i = document.createElement('input');
-      i.type = 'hidden';
-      i.name = nameAttr;
-      i.value = val ?? '';
-      form2.appendChild(i);
-    };
-
-    addInput('id', variantNumericId);
-    addInput('quantity', quantity);
-
-    if (props && typeof props === 'object') {
-      for (const k in props) {
-        if (!Object.prototype.hasOwnProperty.call(props, k)) continue;
-        let v = String(props[k] ?? '');
-        if (v.length > 60000) v = v.slice(0, 60000);
-        addInput(`properties[${k}]`, v);
-      }
-    }
-
-    document.body.appendChild(form2);
-    form2.submit();
-  }
-
-  // handle form submit: create preview -> upload -> submit to cart
+  /* ---------- add-to-cart submit ---------- */
   form?.addEventListener('submit', async function(evt){
-  evt.preventDefault();
+    evt.preventDefault();
+    if (btn) { btn.disabled = true; btn.textContent = 'Preparing…'; }
 
-  const size = document.getElementById('np-size')?.value || '';
-  if (!size) { alert('Please select a size.'); return; }
+    const size = document.getElementById('np-size')?.value || '';
+    const nameVal = (document.getElementById('np-name')?.value||'').trim();
+    const numVal  = (document.getElementById('np-num')?.value||'').trim();
 
-  const nameVal = (document.getElementById('np-name')?.value||'').trim();
-  const numVal  = (document.getElementById('np-num')?.value||'').trim();
-  if (!/^[A-Za-z ]{1,12}$/.test(nameVal) || !/^\d{1,3}$/.test(numVal)) {
-    alert('Please enter valid Name and Number'); return;
-  }
+    if (!size) { alert('Please select a size.'); if(btn){btn.disabled=false;btn.textContent='Add to Cart';} return; }
+    if (!/^[A-Za-z ]{1,12}$/.test(nameVal) || !/^\d{1,3}$/.test(numVal)) { alert('Please enter valid Name and Number'); if(btn){btn.disabled=false;btn.textContent='Add to Cart';} return; }
 
-  if (btn) { btn.disabled = true; btn.textContent = 'Adding…'; }
-
-  // ensure variant numeric id
-  const numericVariant = ensureVariantGid(); // returns numeric id string (no gid prefix)
-  if (!numericVariant || !/^\d+$/.test(numericVariant)) {
-    if (btn) { btn.disabled = false; btn.textContent = 'Add to Cart'; }
-    alert('Variant id missing or invalid. Please reselect size.');
-    return;
-  }
-
-  // sync hidden preview value (optional)
-  syncHidden();
-
-  // capture preview (optional)
-  let previewData = '';
-  try {
-    const canvas = await html2canvas(stage, { useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1 });
-    previewData = canvas.toDataURL('image/png');
-    if (previewData.length > 70000) previewData = '[preview-too-large]';
-    document.getElementById('np-preview-hidden').value = previewData;
-  } catch (err) {
-    console.warn('html2canvas error', err);
-  }
-
-  // build properties
-  const properties = {
-    "Name": nameVal.toUpperCase(),
-    "Number": numVal,
-    "Font": (document.getElementById('np-font')?.value||''),
-    "Color": (document.getElementById('np-color')?.value||'')
-  };
-  if (previewData) properties["Preview"] = previewData;
-
-  // create body
-  const params = new URLSearchParams();
-  params.append('id', numericVariant);
-  params.append('quantity', (document.getElementById('np-qty')?.value || '1'));
-
-  for (const k in properties) {
-    if (!Object.prototype.hasOwnProperty.call(properties,k)) continue;
-    params.append(`properties[${k}]`, properties[k]);
-  }
-
-  // decide storefront endpoint: use injected var or fallback
-  const origin = (window.STOREFRONT_ORIGIN && window.STOREFRONT_ORIGIN.startsWith('http')) ? window.STOREFRONT_ORIGIN.replace(/\/+$/,'') : '';
-  const addUrl = origin ? (origin + '/cart/add.js') : '/cart/add.js';
-
-  try {
-    const resp = await fetch(addUrl, {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Accept':'application/json', 'Content-Type':'application/x-www-form-urlencoded; charset=UTF-8' },
-      body: params.toString()
-    });
-
-    if (!resp.ok) {
-      const txt = await resp.text().catch(()=>null);
-      console.error('Add to cart failed', resp.status, txt);
-      alert('Unable to add to cart. Check console / network.');
-      if (btn) { btn.disabled = false; btn.textContent = 'Add to Cart'; }
+    // ensure numeric variant id
+    const numericVariant = ensureVariantNumeric();
+    if (!numericVariant || !/^\d+$/.test(numericVariant)) {
+      alert('Variant id missing or invalid. Please reselect size.');
+      if(btn){btn.disabled=false;btn.textContent='Add to Cart';}
       return;
     }
 
-    // success -> redirect to checkout
-    // if you want cart page instead use '/cart'
-    const checkoutUrl = (origin ? (origin + '/checkout') : '/checkout');
-    window.location.href = checkoutUrl;
+    // optional: capture preview (try but continue if fails)
+    let previewData = '';
+    try {
+      const canvas = await html2canvas(stage, { useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1 });
+      previewData = canvas.toDataURL('image/png');
+      if (previewData.length > 120000) previewData = '[preview-too-large]';
+      document.getElementById('np-preview-hidden').value = previewData;
+    } catch (err) {
+      console.warn('html2canvas failed', err);
+    }
 
-  } catch (err) {
-    console.error('Add-to-cart exception', err);
-    alert('Something went wrong, see console.');
-    if (btn) { btn.disabled = false; btn.textContent = 'Add to Cart'; }
-  }
-});
+    // build properties
+    const properties = {
+      "Name": nameVal.toUpperCase(),
+      "Number": numVal,
+      "Font": (document.getElementById('np-font')?.value||''),
+      "Color": (document.getElementById('np-color')?.value||'')
+    };
+    if (previewData) properties["Preview"] = previewData;
+
+    // prepare body
+    const params = new URLSearchParams();
+    params.append('id', numericVariant);
+    params.append('quantity', (document.getElementById('np-qty')?.value || '1'));
+    for (const k in properties) {
+      if (!Object.prototype.hasOwnProperty.call(properties,k)) continue;
+      params.append(`properties[${k}]`, properties[k]);
+    }
+
+    const origin = (window.STOREFRONT_ORIGIN && window.STOREFRONT_ORIGIN.startsWith('http')) ? window.STOREFRONT_ORIGIN.replace(/\/+$/,'') : '';
+    const addUrl = origin ? (origin + '/cart/add.js') : '/cart/add.js';
+
+    try {
+      const resp = await fetch(addUrl, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Accept':'application/json', 'Content-Type':'application/x-www-form-urlencoded; charset=UTF-8' },
+        body: params.toString()
+      });
+
+      const json = await resp.json().catch(()=>null);
+      console.log('add-to-cart response', resp.status, json);
+
+      if (!resp.ok) {
+        alert((json && (json.description || json.message)) || 'Add to cart failed — see console');
+        if (btn) { btn.disabled = false; btn.textContent = 'Add to Cart'; }
+        return;
+      }
+
+      // on success, go to checkout (change to '/cart' if you want cart page instead)
+      const checkoutUrl = origin ? (origin + '/checkout') : '/checkout';
+      window.location.href = checkoutUrl;
+
+    } catch (err) {
+      console.error('Add-to-cart exception', err);
+      alert('Something went wrong — see console');
+      if (btn) { btn.disabled = false; btn.textContent = 'Add to Cart'; }
+    }
+  });
 
 })();
 </script>
