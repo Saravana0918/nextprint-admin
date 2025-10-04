@@ -6,23 +6,68 @@
 @php
   $img = $product->image_url ?? ($product->preview_src ?? asset('images/placeholder.png'));
   $prefill = $prefill ?? [];
-  $layoutSlots = $layoutSlots ?? null; // controller may pass; if not we will accept layoutSlots from query param
+  $layoutSlots = $layoutSlots ?? null;
 @endphp
+
+<!-- copy same stage CSS as designer so measurements match exactly -->
+<style>
+  /* fonts (ensure same families as designer) */
+  .font-bebas{font-family:'Bebas Neue', Impact, 'Arial Black', sans-serif;}
+  .font-anton{font-family:'Anton', Impact, 'Arial Black', sans-serif;}
+  .font-oswald{font-family:'Oswald', Arial, sans-serif;}
+  .font-impact{font-family:Impact, 'Arial Black', sans-serif;}
+
+  /* match designer stage exactly */
+  .np-stage { position: relative; width: 100%; max-width: 534px; margin: 0 auto; background:#fff; border-radius:8px; padding:8px; min-height: 320px; box-sizing: border-box; overflow: visible; }
+  .np-stage img { width:100%; height:auto; border-radius:6px; display:block; }
+
+  /* overlay styling (same as designer) */
+  .np-overlay {
+    position: absolute;
+    color: #D4AF37;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    text-align: center;
+    text-shadow: 0 3px 10px rgba(0,0,0,0.65);
+    pointer-events: none;
+    white-space: nowrap;
+    line-height: 1;
+    transform-origin: center center;
+    z-index: 9999;
+  }
+
+  .preview-col .card-body {
+  padding: 0.75rem 1rem;      /* designer-ish padding; tweak if needed */
+  } 
+
+  /* page specific layout */
+  .main-flex { align-items: flex-start; }
+  @media (max-width: 991px) {
+    .main-flex { flex-direction: column !important; }
+    .preview-col { order: 1; width: 100% !important; margin-bottom: 1rem; }
+    .form-col { order: 2; width: 100% !important; }
+  }
+</style>
 
 <div class="container py-4">
   <div class="d-flex align-items-start gap-4 main-flex">
-    <!-- PREVIEW COLUMN -->
+    <!-- PREVIEW COLUMN (uses designer-like .np-stage) -->
     <div class="preview-col" style="width:534px; flex-shrink:0;">
       <div class="card">
         <div class="card-body text-center" style="position:relative;">
-          <div class="np-stage" id="player-stage">
+          <div id="player-stage" class="np-stage" aria-hidden="false">
             <img id="player-base"
                  src="{{ $img }}"
                  alt="{{ $product->name ?? 'Product' }}"
-                 onerror="this.onerror=null;this.src='{{ asset('images/placeholder.png') }}'"
-                 crossorigin="anonymous">
-            <div id="overlay-name" class="np-overlay font-bebas" aria-hidden="true">NAME</div>
-            <div id="overlay-number" class="np-overlay font-bebas" aria-hidden="true">NUMBER</div>
+                 crossorigin="anonymous"
+                 onerror="this.onerror=null;this.src='{{ asset('images/placeholder.png') }}'">
+
+            <div id="overlay-name" class="np-overlay font-bebas" aria-hidden="true"
+                 style="z-index:30; pointer-events:none; font-weight:800;">NAME</div>
+
+            <div id="overlay-number" class="np-overlay font-bebas" aria-hidden="true"
+                 style="z-index:35; pointer-events:none; font-weight:900;">NUMBER</div>
           </div>
 
           <h5 class="card-title mt-3">{{ $product->name ?? 'Product' }}</h5>
@@ -57,12 +102,13 @@
   </div>
 </div>
 
-{{-- server-side prefill & layoutSlots (if any) --}}
+{{-- expose server values to JS --}}
 <script>
   window.prefill = {!! json_encode($prefill ?? []) !!};
-  window.serverLayoutSlots = {!! json_encode($layoutSlots ?? null, JSON_NUMERIC_CHECK) !!};
+  window.layoutSlots = {!! json_encode($layoutSlots ?? [], JSON_NUMERIC_CHECK) !!};
 </script>
 
+<!-- row template (same as you had) -->
 <template id="player-row-template">
   <div class="card mb-2 p-2 player-row">
     <div class="d-flex gap-2 align-items-start row-controls">
@@ -71,7 +117,6 @@
       <select name="players[][size]" class="form-select w-25 player-size">
         <option value="">Size</option><option value="XS">XS</option><option value="S">S</option><option value="M">M</option><option value="L">L</option><option value="XL">XL</option>
       </select>
-
       <input type="hidden" name="players[][font]" class="player-font">
       <input type="hidden" name="players[][color]" class="player-color">
       <button type="button" class="btn btn-danger btn-remove">Remove</button>
@@ -79,61 +124,6 @@
     </div>
   </div>
 </template>
-
-<style>
-  /* copy of designer stage CSS so visuals + padding exactly match designer */
-  .font-bebas{font-family:'Bebas Neue', Impact, 'Arial Black', sans-serif;}
-  .font-anton{font-family:'Anton', Impact, 'Arial Black', sans-serif;}
-  .font-oswald{font-family:'Oswald', Arial, sans-serif;}
-  .font-impact{font-family:Impact, 'Arial Black', sans-serif;}
-
-  .np-stage {
-    position: relative;
-    width: 100%;
-    max-width: 534px;
-    margin: 0 auto;
-    background:#fff;
-    border-radius:8px;
-    padding:8px;              /* IMPORTANT: same inner padding as designer */
-    min-height: 320px;
-    box-sizing: border-box;
-    overflow: visible;
-  }
-  .np-stage img {
-    width:100%;
-    height:auto;
-    border-radius:6px;
-    display:block;
-    object-fit:contain;
-  }
-
-  .np-overlay {
-    position: absolute;
-    color: #D4AF37;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 1.5px;
-    text-align: center;
-    text-shadow: 0 3px 10px rgba(0,0,0,0.65);
-    pointer-events: none;
-    white-space: nowrap;
-    line-height: 1;
-    transform-origin: center center;
-    z-index: 9999;
-  }
-
-  /* responsive: force same mobile box as designer */
-  @media (max-width: 991px) {
-    .main-flex { flex-direction: column !important; }
-    .preview-col { order: 1; width: 100% !important; margin-bottom: 1rem; }
-    .form-col { order: 2; width: 100% !important; }
-
-    #player-stage { width: 320px !important; height: 420px !important; margin: 0 auto 1rem !important; padding:8px !important; }
-    #player-base  { width: 100% !important; height: auto !important; object-fit:contain !important; }
-  }
-
-  .player-row.preview-active { box-shadow: 0 0 0 3px rgba(20,120,220,0.08); border-color: rgba(20,120,220,0.12); }
-</style>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -147,45 +137,32 @@ document.addEventListener('DOMContentLoaded', function() {
   const ovName = document.getElementById('overlay-name');
   const ovNum  = document.getElementById('overlay-number');
 
-  // get prefill & layoutSlots (server first, else parse from URL)
   const pf = window.prefill || {};
-  let layout = window.serverLayoutSlots || null;
-
-  if (!layout) {
-    // maybe passed as URL param 'layoutSlots' (encoded JSON)
-    try {
-      const qp = new URLSearchParams(window.location.search);
-      const ls = qp.get('layoutSlots') || qp.get('layoutslots') || null;
-      if (ls) {
-        layout = JSON.parse(decodeURIComponent(ls));
-      }
-    } catch(e) { layout = null; }
-  }
-
-  // fallback defaults (these values should match designer default)
-  if (!layout || !layout.name || !layout.number) {
-    layout = {
-      name:   { left_pct:50, top_pct:25, width_pct:85, height_pct:8,  rotation:0 },
-      number: { left_pct:50, top_pct:54, width_pct:70, height_pct:12, rotation:0 }
-    };
-  }
+  const layout = (typeof window.layoutSlots === 'object' && Object.keys(window.layoutSlots || {}).length)
+                 ? window.layoutSlots
+                 : {
+                    name: { left_pct:50, top_pct:25, width_pct:85, height_pct:8, rotation:0 },
+                    number: { left_pct:50, top_pct:54, width_pct:70, height_pct:12, rotation:0 }
+                 };
 
   function computeStageSize(stage, img) {
-    if(!stage || !img) return null;
+    if (!stage || !img) return null;
     const stageRect = stage.getBoundingClientRect();
     const imgRect = img.getBoundingClientRect();
     return {
       offsetLeft: Math.round(imgRect.left - stageRect.left),
       offsetTop: Math.round(imgRect.top - stageRect.top),
-      imgW: Math.max(1, imgRect.width), imgH: Math.max(1, imgRect.height),
-      stageW: Math.max(1, stageRect.width), stageH: Math.max(1, stageRect.height)
+      imgW: Math.max(1, imgRect.width),
+      imgH: Math.max(1, imgRect.height),
+      stageW: Math.max(1, stageRect.width),
+      stageH: Math.max(1, stageRect.height)
     };
   }
 
   function placeOverlay(el, slot, slotKey) {
-    if(!el || !slot) return;
+    if (!el || !slot) return;
     const s = computeStageSize(stageEl, imgEl);
-    if(!s) return;
+    if (!s) return;
 
     const centerX = Math.round(s.offsetLeft + ((slot.left_pct||50)/100) * s.imgW + ((slot.width_pct||0)/200) * s.imgW);
     const centerY = Math.round(s.offsetTop  + ((slot.top_pct||50)/100)  * s.imgH + ((slot.height_pct||0)/200) * s.imgH);
@@ -206,7 +183,7 @@ document.addEventListener('DOMContentLoaded', function() {
     el.style.boxSizing = 'border-box';
     el.style.padding = '0 6px';
 
-    // font sizing (same algorithm as designer)
+    // font sizing logic (same as designer)
     const txt = (el.textContent || '').toString().trim() || (slotKey === 'number' ? '09' : 'NAME');
     const chars = Math.max(1, txt.length);
     const isMobile = window.innerWidth <= 767;
@@ -221,7 +198,6 @@ document.addEventListener('DOMContentLoaded', function() {
     el.style.lineHeight = '1';
     el.style.fontWeight = '700';
 
-    // shrink loop
     let attempts = 0;
     while (el.scrollWidth > el.clientWidth && fs > 7 && attempts < 30) {
       fs = Math.max(7, Math.floor(fs * 0.92));
@@ -232,11 +208,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
   function applyLayout() {
     if (!imgEl || !imgEl.complete) return;
-    // apply prefill text if any
+
+    // prefill text
     if (pf.prefill_name || pf.name) ovName.textContent = (pf.prefill_name || pf.name || '').toString().toUpperCase();
     if (pf.prefill_number || pf.number) ovNum.textContent = (pf.prefill_number || pf.number || '').toString().replace(/\D/g,'').slice(0,3);
 
-    // prefill font/color mapping
+    // prefill font & color
     if (pf.prefill_font || pf.font) {
       const map = {bebas: "Bebas Neue, sans-serif", oswald: "Oswald, sans-serif", anton: "Anton, sans-serif", impact: "Impact, Arial"};
       const key = (pf.prefill_font || pf.font).toString().toLowerCase();
@@ -244,7 +221,7 @@ document.addEventListener('DOMContentLoaded', function() {
       if (fam) { ovName.style.fontFamily = fam; ovNum.style.fontFamily = fam; }
     }
     if (pf.prefill_color || pf.color) {
-      try { var c = decodeURIComponent(pf.prefill_color || pf.color || ''); } catch(e) { var c = (pf.prefill_color || pf.color || ''); }
+      try { var c = decodeURIComponent(pf.prefill_color || pf.color || ''); } catch(e){ var c = (pf.prefill_color || pf.color || ''); }
       if (c) { ovName.style.color = c; ovNum.style.color = c; }
     }
 
@@ -252,21 +229,57 @@ document.addEventListener('DOMContentLoaded', function() {
     placeOverlay(ovNum, layout.number, 'number');
   }
 
-  // debug helper
+  (function addReliableRecalc() {
+  try {
+    // ResizeObserver to catch any layout/size change
+    if ('ResizeObserver' in window) {
+      const ro = new ResizeObserver(() => {
+        // debounce small changes
+        clearTimeout(window._team_layout_timer);
+        window._team_layout_timer = setTimeout(() => {
+          applyLayout();
+        }, 80);
+      });
+      if (imgEl) ro.observe(imgEl);
+      if (stageEl) ro.observe(stageEl);
+    } else {
+      // fallback: listen to window resize
+      window.addEventListener('resize', () => setTimeout(applyLayout, 120));
+    }
+
+    // also recalc on scroll/visibility/orientationchange (mobile can shift when address bar hides)
+    window.addEventListener('scroll', () => {
+      clearTimeout(window._team_layout_timer);
+      window._team_layout_timer = setTimeout(() => applyLayout(), 90);
+    }, { passive: true });
+
+    window.addEventListener('orientationchange', () => setTimeout(applyLayout, 180));
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(applyLayout, 120); });
+
+    // one extra forced call after slight delay (helps when fonts or images finish)
+    setTimeout(() => { if (imgEl && imgEl.complete) applyLayout(); }, 300);
+    setTimeout(() => { if (imgEl && imgEl.complete) applyLayout(); }, 900);
+  } catch (err) {
+    console.warn('layout recalc helper failed', err);
+  }
+})();
+
+  // debug helper: open console and call teamOverlayDebug()
   window.teamOverlayDebug = function() {
-    console.log({ layout, stageRect: stageEl.getBoundingClientRect(), imgRect: imgEl.getBoundingClientRect(), compute: computeStageSize(stageEl,imgEl) });
+    console.log('layoutSlots', layout);
+    console.log('stageRect', stageEl?.getBoundingClientRect(), 'imgRect', imgEl?.getBoundingClientRect());
+    console.log('compute', computeStageSize(stageEl, imgEl));
   };
 
-  // run layout after image loaded + on resize + fonts ready
+  // trigger layout at right times
   if (imgEl) {
     if (imgEl.complete) setTimeout(applyLayout, 80);
     else imgEl.addEventListener('load', ()=> setTimeout(applyLayout, 80));
   }
   window.addEventListener('resize', ()=> setTimeout(applyLayout, 120));
-  window.addEventListener('orientationchange', ()=> setTimeout(applyLayout, 200));
-  document.fonts?.ready.then(()=> setTimeout(applyLayout,120));
+  document.fonts?.ready.then(()=> setTimeout(applyLayout, 120));
 
-  /* rows / preview wiring (same as your previous code but ensures overlays update on focus/preview) */
+  /* ===== rows & preview wiring (unchanged) ===== */
   function enforceLimits(input) {
     if (!input) return;
     if (input.classList.contains('player-number')) {
@@ -284,13 +297,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const last = rows[rows.length - 1];
     const numEl = last.querySelector('.player-number');
     const nameEl = last.querySelector('.player-name');
-    const sizeEl = last.querySelector('.player-size');
     const fontHidden = last.querySelector('.player-font');
     const colorHidden = last.querySelector('.player-color');
 
     if (vals.number) numEl.value = vals.number;
     if (vals.name) nameEl.value = vals.name;
-    if (vals.size) sizeEl.value = vals.size;
     if (vals.font) fontHidden.value = vals.font;
     if (vals.color) colorHidden.value = vals.color;
 
@@ -298,9 +309,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     last.querySelector('.btn-remove').addEventListener('click', ()=> {
       last.remove();
-      if (!list.querySelector('.player-row')) {
-        ovName.textContent = ''; ovNum.textContent = ''; applyLayout();
-      }
+      if (!list.querySelector('.player-row')) { ovName.textContent = ''; ovNum.textContent = ''; applyLayout(); }
     });
 
     last.querySelector('.btn-preview').addEventListener('click', ()=> {
@@ -308,34 +317,20 @@ document.addEventListener('DOMContentLoaded', function() {
       last.classList.add('preview-active');
       const nm = (nameEl.value || '').toUpperCase().slice(0,12);
       const nu = (numEl.value || '').replace(/\D/g,'').slice(0,3);
-
-      // apply row font/color if set (else keep prefill)
       if (fontHidden.value) {
         const fm = fontHidden.value.toLowerCase();
-        const familyMap = {bebas: "Bebas Neue, sans-serif", oswald: "Oswald, sans-serif", anton:"Anton, sans-serif", impact:"Impact, Arial"};
+        const familyMap = {bebas: "Bebas Neue, sans-serif", oswald: "Oswald, sans-serif", anton:"Anton, sans-serif"};
         const fam = familyMap[fm] || fontHidden.value;
         ovName.style.fontFamily = fam; ovNum.style.fontFamily = fam;
       }
       if (colorHidden.value) { ovName.style.color = colorHidden.value; ovNum.style.color = colorHidden.value; }
-
       ovName.textContent = nm || 'NAME';
       ovNum.textContent = nu || '09';
       applyLayout();
     });
 
-    // live preview on focus/input
-    nameEl.addEventListener('focus', ()=> {
-      last.classList.add('preview-active');
-      ovName.textContent = (nameEl.value||'').toUpperCase().slice(0,12);
-      ovNum.textContent = (numEl.value||'').replace(/\D/g,'').slice(0,3);
-      applyLayout();
-    });
-    numEl.addEventListener('focus', ()=> {
-      last.classList.add('preview-active');
-      ovName.textContent = (nameEl.value||'').toUpperCase().slice(0,12);
-      ovNum.textContent = (numEl.value||'').replace(/\D/g,'').slice(0,3);
-      applyLayout();
-    });
+    nameEl.addEventListener('focus', ()=> { last.classList.add('preview-active'); ovName.textContent = (nameEl.value||'').toUpperCase().slice(0,12); ovNum.textContent = (numEl.value||'').replace(/\D/g,'').slice(0,3); applyLayout(); });
+    numEl.addEventListener('focus', ()=> { last.classList.add('preview-active'); ovName.textContent = (nameEl.value||'').toUpperCase().slice(0,12); ovNum.textContent = (numEl.value||'').replace(/\D/g,'').slice(0,3); applyLayout(); });
 
     nameEl.addEventListener('input', ()=> { if (last.classList.contains('preview-active')) { ovName.textContent = (nameEl.value||'').toUpperCase().slice(0,12); applyLayout(); } });
     numEl.addEventListener('input', ()=> { if (last.classList.contains('preview-active')) { ovNum.textContent = (numEl.value||'').replace(/\D/g,'').slice(0,3); applyLayout(); } });
@@ -345,7 +340,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
   addBtn.addEventListener('click', ()=> createRow());
 
-  // initial rows from prefill
   if ((pf.prefill_name && pf.prefill_name.length) || (pf.prefill_number && pf.prefill_number.length)) {
     createRow({
       name: (pf.prefill_name || pf.name || '').toString().toUpperCase().slice(0,12),
@@ -359,7 +353,6 @@ document.addEventListener('DOMContentLoaded', function() {
     createRow();
   }
 
-  // form submit: send players array JSON to controller
   form.addEventListener('submit', async function(e) {
     e.preventDefault();
     const rows = list.querySelectorAll('.player-row');
@@ -402,7 +395,7 @@ document.addEventListener('DOMContentLoaded', function() {
       alert('Saved. Refresh to continue.');
     } catch(err) {
       console.error(err);
-      alert('Network/server error. Check console.');  
+      alert('Network/server error. Check console.');
     }
   });
 
