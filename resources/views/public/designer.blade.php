@@ -325,29 +325,82 @@
   document.fonts?.ready.then(()=> setTimeout(applyLayout, 120));
 
   // submit handler (html2canvas)
-  form?.addEventListener('submit', async function(evt){
-    evt.preventDefault();
-    const size = $('np-size')?.value || '';
-    if (!size) { alert('Please select a size.'); return; }
-    if (!(NAME_RE.test(nameEl.value||'') && NUM_RE.test(numEl.value||''))) { alert('Please enter valid Name and Number'); return; }
-    syncHidden();
-    if (btn) { btn.disabled = false; btn.textContent = 'Add to Cart'; }
+  // ===== Replace existing form submit handler with this block =====
+form?.addEventListener('submit', async function(evt){
+  evt.preventDefault();
+
+  const size = $('np-size')?.value || '';
+  if (!size) { alert('Please select a size.'); return; }
+  if (!/^[A-Za-z ]{1,12}$/.test(nameEl.value||'') || !/^\d{1,3}$/.test(numEl.value||'')) { alert('Please enter valid Name and Number'); return; }
+
+  syncHidden(); // updates hidden inputs and np-variant-id
+
+  // ensure variant numeric id present
+  const variantId = (document.getElementById('np-variant-id') || { value: '' }).value;
+  if (!variantId || !/^\d+$/.test(variantId)) {
+    alert('Variant not selected or invalid. Please re-select size.');
+    return;
+  }
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Adding...'; }
+
+  try {
+    // capture preview image (optional)
     try {
       const canvas = await html2canvas(stage, { useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1 });
       const dataUrl = canvas.toDataURL('image/png');
       $('np-preview-hidden').value = dataUrl;
-      const fd = new FormData(form);
-      const token = document.querySelector('input[name="_token"]')?.value || '';
-      const resp = await fetch(form.action, { method: 'POST', body: fd, credentials: 'same-origin', headers: { 'X-CSRF-TOKEN': token, 'Accept':'application/json' } });
-      if (resp.redirected) { window.location.href = resp.url; return; }
-      const data = await resp.json().catch(()=>null);
-      if (!resp.ok) { alert((data && (data.error||data.message)) || 'Add to cart failed'); return; }
-      if (data && data.checkoutUrl) { window.location.href = data.checkoutUrl; return; }
-      alert('Added to cart.');
-    } catch(err) { console.error(err); alert('Something went wrong'); }
-    finally { if (btn) { btn.disabled = false; btn.textContent = 'Add to Cart'; } }
-  });
+    } catch(e) {
+      console.warn('html2canvas failed, continuing without preview:', e);
+    }
 
+    // build properties to send as line item properties
+    const properties = {
+      'Name': $('np-name-hidden')?.value || '',
+      'Number': $('np-num-hidden')?.value || '',
+      'Font': $('np-font-hidden')?.value || '',
+      'Color': $('np-color-hidden')?.value || ''
+    };
+
+    const qty = Math.max(1, parseInt($('np-qty')?.value || '1', 10));
+
+    // build x-www-form-urlencoded body
+    const bodyArr = [];
+    bodyArr.push('id=' + encodeURIComponent(variantId));
+    bodyArr.push('quantity=' + encodeURIComponent(qty));
+    for (const k in properties) {
+      bodyArr.push('properties[' + encodeURIComponent(k) + ']=' + encodeURIComponent(properties[k]));
+    }
+    const body = bodyArr.join('&');
+
+    // POST to Shopify storefront cart add (same-origin)
+    const resp = await fetch('/cart/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body,
+      credentials: 'same-origin'
+    });
+
+    // If Shopify returns redirect or success, send user to cart or checkout
+    // Option: redirect to '/cart' to let user edit, or directly to '/checkout'
+    if (resp.ok) {
+      // redirect to checkout directly:
+      // window.location.href = '/checkout';
+      // OR redirect to cart first (recommended)
+      window.location.href = '/cart';
+      return;
+    } else {
+      // Try fallback: direct cart permalink (works if numeric variant exists)
+      window.location.href = `/cart/${variantId}:${qty}`;
+      return;
+    }
+  } catch (err) {
+    console.error('Add to cart error', err);
+    alert('Something went wrong adding to cart.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Add to Cart'; }
+  }
+});
 })();
 </script>
 
