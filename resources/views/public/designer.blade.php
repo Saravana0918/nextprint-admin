@@ -301,12 +301,13 @@ function debugVariant() {
   });
 
   function updateATCState(){
-    if (!btn) return;
-    const okName = NAME_RE.test(nameEl?.value || '');
-    const okNum  = NUM_RE.test(numEl?.value || '');
-    const size = $('np-size')?.value || '';
-    btn.disabled = !(okName && okNum && size);
-  }
+  if(!btn) return;
+  const okName = NAME_RE.test(document.getElementById('np-name')?.value || '');
+  const okNum  = NUM_RE.test(document.getElementById('np-num')?.value || '');
+  const size = document.getElementById('np-size')?.value || '';
+  console.log('updateATCState ->', { okName, okNum, size });
+  btn.disabled = !(okName && okNum && size);
+}
 
   // add team button
   if (addTeam) addTeam.addEventListener('click', function(e){ e.preventDefault();
