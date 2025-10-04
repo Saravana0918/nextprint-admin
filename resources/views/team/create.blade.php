@@ -15,7 +15,7 @@
     <div class="preview-col" style="width:534px; flex-shrink:0;">
       <div class="card">
         <div class="card-body text-center" style="position:relative;">
-          <div id="player-stage" style="position:relative; display:inline-block; width:100%;">
+          <div id="player-stage" class="np-stage" style="position:relative; display:inline-block; width:100%;">
             <img id="player-base"
                  src="{{ $img }}"
                  alt="{{ $product->name ?? 'Product' }}"
@@ -73,7 +73,6 @@
   window.layoutSlots = {!! json_encode($layoutSlots ?? [], JSON_NUMERIC_CHECK) !!};
 </script>
 
-<!-- row template -->
 <template id="player-row-template">
   <div class="card mb-2 p-2 player-row">
     <div class="d-flex gap-2 align-items-start row-controls">
@@ -97,6 +96,21 @@
 </template>
 
 <style>
+  /* match designer stage styles so positioning calculations match */
+  .np-stage {
+    position: relative;
+    width: 100%;
+    max-width: 534px;
+    margin: 0 auto;
+    background: #fff;
+    border-radius: 8px;
+    padding: 8px;          /* IMPORTANT: same inner padding as designer */
+    min-height: 320px;
+    box-sizing: border-box;
+    overflow: visible;
+  }
+  .np-stage img { width:100%; height:auto; border-radius:6px; display:block; object-fit:contain; }
+
   /* base overlay helper */
   .np-overlay {
     position: absolute;
@@ -107,14 +121,24 @@
     pointer-events: none;
   }
 
-  /* responsive layout */
+  /* responsive layout: force same mobile stage size as designer */
   @media (max-width: 991px) {
     .main-flex { flex-direction: column !important; }
     .preview-col { order: 1; width: 100% !important; margin-bottom: 1rem; }
     .form-col { order: 2; width: 100% !important; }
 
-    #player-stage { width: 320px !important; height: 420px !important; margin:0 auto 1rem !important; }
-    #player-base  { width: 320px !important; height: 420px !important; object-fit:contain !important; }
+    /* force the same mobile stage / image dimensions as designer so overlay mapping is identical */
+    #player-stage, .np-stage {
+      width: 320px !important;
+      height: 420px !important;
+      margin: 0 auto 1rem !important;
+      padding: 8px !important;
+    }
+    #player-base, .np-stage img {
+      width: 320px !important;
+      height: 420px !important;
+      object-fit: contain !important;
+    }
   }
 
   .player-row.preview-active { box-shadow: 0 0 0 3px rgba(20,120,220,0.08); border-color: rgba(20,120,220,0.12); }
@@ -133,7 +157,6 @@ document.addEventListener('DOMContentLoaded', function() {
   const ovNum  = document.getElementById('overlay-number');
 
   const pf = window.prefill || {};
-  // use server-provided layoutSlots if present; otherwise fallback
   const layout = (typeof window.layoutSlots === 'object' && Object.keys(window.layoutSlots || {}).length)
                  ? window.layoutSlots
                  : {
@@ -230,15 +253,45 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('compute', computeStageSize(stageEl, imgEl));
   };
 
-  // run layout after image loads / resize / fonts ready
-  if (imgEl) {
-    if (imgEl.complete) setTimeout(applyLayout, 80);
-    else imgEl.addEventListener('load', ()=> setTimeout(applyLayout, 80));
+  /* ===== ensure mobile stage/img sizes match designer and re-run layout ===== */
+  function adjustStageForViewport() {
+    try {
+      const vw = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
+      if (vw <= 991) {
+        const w = (vw <= 420) ? 280 : 320;
+        const h = (vw <= 420) ? 380 : 420;
+        stageEl.style.width = w + 'px';
+        stageEl.style.height = h + 'px';
+        imgEl.style.width = w + 'px';
+        imgEl.style.height = h + 'px';
+        stageEl.style.padding = '8px';
+      } else {
+        stageEl.style.width = '';
+        stageEl.style.height = '';
+        imgEl.style.width = '';
+        imgEl.style.height = '';
+        stageEl.style.padding = '';
+      }
+    } catch (e) {
+      console.warn('adjustStageForViewport error', e);
+    }
   }
-  window.addEventListener('resize', ()=> setTimeout(applyLayout, 120));
-  document.fonts?.ready.then(()=> setTimeout(applyLayout, 120));
 
-  /* ===== rows & preview wiring ===== */
+  // call adjust & layout at key times
+  function runAdjustAndLayout(delay = 120) {
+    adjustStageForViewport();
+    setTimeout(()=> { if (typeof applyLayout === 'function') applyLayout(); }, delay);
+  }
+
+  if (imgEl) {
+    if (imgEl.complete) runAdjustAndLayout(100);
+    else imgEl.addEventListener('load', ()=> runAdjustAndLayout(100));
+  }
+  window.addEventListener('resize', ()=> runAdjustAndLayout(140));
+  window.addEventListener('orientationchange', ()=> runAdjustAndLayout(220));
+  document.fonts?.ready.then(()=> runAdjustAndLayout(140));
+
+  /* ===== rows & preview wiring (unchanged behaviour) ===== */
   function enforceLimits(input) {
     if (!input) return;
     if (input.classList.contains('player-number')) {
@@ -365,7 +418,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 
-  // initial applyLayout after fonts ready
+  // initial applyLayout after fonts ready (and image)
   document.fonts?.ready.then(()=> setTimeout(()=> { if (imgEl.complete) applyLayout(); }, 120));
 });
 </script>
