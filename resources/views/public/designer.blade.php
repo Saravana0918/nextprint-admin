@@ -272,14 +272,9 @@
   });
 
   function updateATCState(){
-  // Always enable Add to Cart button
-  try {
-    if (btn) btn.disabled = false;
-  } catch (err) {
-    // if something unexpected, ensure button not stuck disabled
-    if (btn) btn.disabled = false;
-    console.warn('updateATCState fallback', err);
-  }
+  if (!btn) return;
+  // Always enable the Add to Cart button. Final validation still runs on submit.
+  btn.disabled = false;
 }
 
   // add team button
