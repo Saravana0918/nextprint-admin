@@ -47,68 +47,78 @@ class ShopifyCartController extends Controller
         ]);
 
         // helper to resolve variant id (string numeric id)
-        $resolveVariant = function($productId, $size = null, $incomingVariant = null, $shopifyProductId = null) {
-            // prefer incoming variant id
-            if (!empty($incomingVariant)) {
-                return (string)$incomingVariant;
+       $resolveVariant = function($productId, $size = null, $incomingVariant = null, $shopifyProductId = null) {
+    // 1) Normalize incoming variant (accept gid or numeric)
+    if (!empty($incomingVariant)) {
+        $iv = (string)$incomingVariant;
+        if (str_contains($iv, '/')) {
+            $parts = explode('/', $iv);
+            $iv = end($parts);
+        }
+        $iv = preg_replace('/\D/', '', $iv);
+        if (!empty($iv)) {
+            return (string)$iv;
+        }
+    }
+
+    // 2) Try product_variants table (if exists)
+    if (!empty($size) && Schema::hasTable('product_variants')) {
+        try {
+            $pv = ProductVariant::where('product_id', $productId)
+                ->where(function($q) use ($size) {
+                    $q->where('option_value', $size)
+                      ->orWhere('option_value', strtoupper($size))
+                      ->orWhere('option_value', strtolower($size));
+                })->whereNotNull('shopify_variant_id')->first();
+
+            if ($pv && !empty($pv->shopify_variant_id)) {
+                return (string) preg_replace('/\D/', '', (string)$pv->shopify_variant_id);
             }
+        } catch (\Throwable $e) {
+            Log::warning('designer: product_variants_lookup_failed', ['err'=>$e->getMessage()]);
+        }
+    }
 
-            // try product_variants DB table if exists
-            if (!empty($size) && Schema::hasTable('product_variants')) {
-                try {
-                    $pv = ProductVariant::where('product_id', $productId)
-                        ->where(function($q) use ($size) {
-                            $q->where('option_value', $size)
-                              ->orWhere('option_value', strtoupper($size))
-                              ->orWhere('option_value', strtolower($size));
-                        })->whereNotNull('shopify_variant_id')->first();
+    // 3) Fallback: fetch variants from Shopify Admin API (normalize shopify_product_id)
+    if (!empty($shopifyProductId)) {
+        try {
+            $shop = env('SHOPIFY_STORE');
+            $adminToken = env('SHOPIFY_ADMIN_API_TOKEN');
+            if ($shop && $adminToken) {
+                // normalize product id numeric
+                $spid = preg_replace('/\D/', '', (string)$shopifyProductId);
+                $resp = Http::withHeaders([
+                    'X-Shopify-Access-Token' => $adminToken,
+                    'Content-Type' => 'application/json'
+                ])->get("https://{$shop}/admin/api/2025-01/products/{$spid}.json");
 
-                    if ($pv && !empty($pv->shopify_variant_id)) {
-                        return (string)$pv->shopify_variant_id;
-                    }
-                } catch (\Throwable $e) {
-                    Log::warning('designer: product_variants_lookup_failed', ['err'=>$e->getMessage()]);
-                }
-            }
-
-            // fallback: fetch from Shopify Admin API and pick a variant
-            if (!empty($shopifyProductId)) {
-                try {
-                    $shop = env('SHOPIFY_STORE');
-                    $adminToken = env('SHOPIFY_ADMIN_API_TOKEN');
-                    if ($shop && $adminToken) {
-                        $resp = Http::withHeaders([
-                            'X-Shopify-Access-Token' => $adminToken,
-                            'Content-Type' => 'application/json'
-                        ])->get("https://{$shop}/admin/api/2025-01/products/{$shopifyProductId}.json");
-
-                        if ($resp->successful() && !empty($resp->json('product'))) {
-                            $productData = $resp->json('product');
-                            $variants = $productData['variants'] ?? [];
-                            foreach ($variants as $v) {
-                                $opt1 = $v['option1'] ?? '';
-                                $title = $v['title'] ?? '';
-                                if ($size && (strcasecmp(trim($opt1), trim($size)) === 0 || stripos($title, $size) !== false)) {
-                                    return (string)$v['id'];
-                                }
-                            }
-                            // fallback to first variant
-                            if (!empty($variants)) return (string)$variants[0]['id'];
-                        } else {
-                            Log::warning('designer: admin_fetch_unexpected', [
-                                'product' => $shopifyProductId,
-                                'status' => $resp->status(),
-                                'body' => substr($resp->body(), 0, 1000)
-                            ]);
+                if ($resp->successful() && !empty($resp->json('product'))) {
+                    $productData = $resp->json('product');
+                    $variants = $productData['variants'] ?? [];
+                    foreach ($variants as $v) {
+                        $opt1 = $v['option1'] ?? '';
+                        $title = $v['title'] ?? '';
+                        if ($size && (strcasecmp(trim($opt1), trim($size)) === 0 || stripos($title, $size) !== false)) {
+                            return (string) preg_replace('/\D/', '', (string) ($v['id'] ?? ''));
                         }
                     }
-                } catch (\Throwable $e) {
-                    Log::warning('designer: admin_fetch_failed', ['err'=>$e->getMessage()]);
+                    // fallback to first variant numeric id
+                    if (!empty($variants)) return (string) preg_replace('/\D/', '', (string) ($variants[0]['id'] ?? ''));
+                } else {
+                    Log::warning('designer: admin_fetch_unexpected', [
+                        'product' => $shopifyProductId,
+                        'status' => $resp->status(),
+                        'body' => substr($resp->body(), 0, 1000)
+                    ]);
                 }
             }
+        } catch (\Throwable $e) {
+            Log::warning('designer: admin_fetch_failed', ['err'=>$e->getMessage()]);
+        }
+    }
 
-            return null;
-        };
+    return null;
+};
 
         // Build lines for cartCreate
         $lines = [];

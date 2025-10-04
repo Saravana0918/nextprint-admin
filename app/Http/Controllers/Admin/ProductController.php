@@ -75,6 +75,20 @@ public function index()
     return view('admin.products.index', compact('rows'));
 }
 
+public function show($id)
+{
+    // <<< IMPORTANT: replace these with your real Shopify variant numeric ids >>>
+    $variantMap = [
+        'S'  => 45187784179908,
+        'M'  => 45187784212676,
+        'L'  => 45187784245444,
+        'XL' => 45187784278212,
+        '2XL' => 45187784310980,
+    ];
+
+    return view('designer', compact('product','variantMap'));
+}
+
 
 public function edit(Product $product)
 {

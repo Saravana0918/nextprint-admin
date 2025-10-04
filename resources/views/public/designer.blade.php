@@ -114,7 +114,7 @@
         <div class="mb-2">
           <select id="np-size" name="size" class="form-select" required>
             <option value="">Select Size</option>
-            <option value="S">S</option><option value="M">M</option><option value="L">L</option><option value="XL">XL</option>
+            <option value="S">S</option><option value="M">M</option><option value="L">L</option><option value="XL">XL</option><option value="2XL">2XL</option>
           </select>
         </div>
         <div class="mb-2">
