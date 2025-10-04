@@ -124,7 +124,21 @@
     </div>
   </div>
 </template>
+<script>
+  // TEMP: hardcoded variant map for this product (replace with server-side data later)
+  window.variantMap = {
+    "XS": "45229263061188",
+    "S":  "45229263061188",
+    "M":  "45229263093956",
+    "L":  "45229263126724",
+    "XL": "45229263159492",
+    "2XL":"45229263192260",
+    "3XL":"45229263225028"
+  };
 
+  // storefront public URL (same as designer)
+  window.shopfrontUrl = "{{ env('SHOPIFY_STORE_FRONT_URL', 'https://nextprint.in') }}";
+</script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
   const list = document.getElementById('players-list');
@@ -367,14 +381,30 @@ document.addEventListener('DOMContentLoaded', function() {
     const rows = list.querySelectorAll('.player-row');
     const players = [];
     rows.forEach(r => {
-      const n = r.querySelector('.player-name')?.value || '';
-      const num = r.querySelector('.player-number')?.value || '';
-      const sz = r.querySelector('.player-size')?.value || '';
-      const f  = r.querySelector('.player-font')?.value || '';
-      const c  = r.querySelector('.player-color')?.value || '';
-      if (!n && !num) return;
-      players.push({ name: n.toString().toUpperCase().slice(0,12), number: num.toString().replace(/\D/g,'').slice(0,3), size: sz, font: f, color: c });
-    });
+  const n = r.querySelector('.player-name')?.value || '';
+  const num = r.querySelector('.player-number')?.value || '';
+  const sz = (r.querySelector('.player-size')?.value || '').toString();
+  const f  = r.querySelector('.player-font')?.value || '';
+  const c  = r.querySelector('.player-color')?.value || '';
+  if (!n && !num) return;
+
+  // resolve numeric variant id using window.variantMap (case-insensitive)
+  let variantId = '';
+  try {
+    if (window.variantMap) {
+      variantId = window.variantMap[sz] || window.variantMap[sz.toUpperCase()] || window.variantMap[sz.toLowerCase()] || '';
+    }
+  } catch(e) { variantId = ''; }
+
+  players.push({
+    name: n.toString().toUpperCase().slice(0,12),
+    number: num.toString().replace(/\D/g,'').slice(0,3),
+    size: sz,
+    font: f,
+    color: c,
+    variant_id: variantId  // <-- important: numeric id
+  });
+});
 
     if (players.length === 0) { alert('Add at least one player.'); return; }
 
