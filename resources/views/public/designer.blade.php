@@ -147,7 +147,20 @@
 </div>
 
 <script> window.layoutSlots = {!! json_encode($layoutSlots ?? [], JSON_NUMERIC_CHECK) !!}; window.personalizationSupported = {{ !empty($layoutSlots) ? 'true' : 'false' }}; </script>
-
+<script>
+  // TEMP: hardcoded variant map — replace with dynamic values from DB later
+  // Keys must match the <select> option values (case-sensitive or use uppercase lookup)
+  window.variantMap = {
+    "S": "45229263061188",
+    "M": "45229263093956",
+    "L": "45229263126724",
+    "XL": "45229263159492",
+    "2XL": "45229263192260",
+    "3XL": "45229263225028"
+  };
+  // Also expose shopify product id numeric if needed elsewhere
+  window.shopifyProductNumericId = "{{ $product->shopify_product_id ?? $product->shopify_id ?? '' }}";
+</script>
 <script>
 (function(){
   const $ = id => document.getElementById(id);
@@ -251,7 +264,10 @@
     if (f) f.value = fontEl ? fontEl.value : '';
     if (c) c.value = colorEl ? colorEl.value : '';
     const size = $('np-size')?.value || '';
-    if (window.variantMap && size) $('np-variant-id').value = window.variantMap[size] || '';
+    if (window.variantMap && size) {
+  const k = (size || '').toString();
+  $('np-variant-id').value = window.variantMap[k] || window.variantMap[k.toUpperCase()] || window.variantMap[k.toLowerCase()] || '';
+    }
   }
 
   // events
@@ -403,7 +419,6 @@ form?.addEventListener('submit', async function(evt){
 });
 })();
 </script>
-
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 </body>
 </html>
