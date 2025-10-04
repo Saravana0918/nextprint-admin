@@ -314,6 +314,7 @@ function debugVariant(){
     console.log('updateATCState ->', { okName, okNum, size, gid });
     btn.disabled = !(okName && okNum && size && gid);
   }
+    window.updateATCState = updateATCState;
 
   // add team button behaviour
   if (addTeam) addTeam.addEventListener('click', function(e){ e.preventDefault();
