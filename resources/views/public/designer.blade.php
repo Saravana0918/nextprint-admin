@@ -301,22 +301,34 @@ function debugVariant(){
     });
   });
 
+// -------------------- REPLACE your existing updateATCState() with this --------------------
 function updateATCState(){
-  const btn = document.getElementById('np-atc-btn');
-  if(!btn) return;
+  // We will NOT disable the Add to Cart button here.
+  // Keep logging for debugging and still ensure variant gid is computed on change.
   const okName = /^[A-Za-z ]{1,12}$/.test((document.getElementById('np-name')?.value||''));
   const okNum  = /^\d{1,3}$/.test((document.getElementById('np-num')?.value||''));
   const size = (document.getElementById('np-size')?.value || '');
   const gid = ensureVariantGid();
   console.log('updateATCState ->', { okName, okNum, size, gid });
-  btn.disabled = !(okName && okNum && size && gid);
+
+  // ALWAYS enable the button (initially visible and clickable).
+  const btn = document.getElementById('np-atc-btn');
+  if (btn) {
+    btn.disabled = false;
+  }
 }
 
-// wire events
-document.getElementById('np-name')?.addEventListener('input', updateATCState);
-document.getElementById('np-num')?.addEventListener('input', updateATCState);
-document.getElementById('np-size')?.addEventListener('change', updateATCState);
-document.addEventListener('DOMContentLoaded', updateATCState);
+// -------------------- ALSO ensure on DOMContentLoaded the button is enabled --------------------
+document.addEventListener('DOMContentLoaded', function(){
+  // make sure ATC button is enabled on load
+  const btn = document.getElementById('np-atc-btn');
+  if (btn) {
+    btn.disabled = false;
+  }
+  // call layout/preview init
+  updateATCState();
+});
+
 
   // add team button behaviour
   if (addTeam) addTeam.addEventListener('click', function(e){ e.preventDefault();
