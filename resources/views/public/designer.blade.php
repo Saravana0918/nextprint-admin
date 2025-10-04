@@ -1,11 +1,9 @@
-{{-- resources/views/public/designer.blade.php --}}
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <title>{{ $product->name ?? ($product->title ?? 'Product') }} – NextPrint</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="csrf-token" content="{{ csrf_token() }}">
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Oswald:wght@400;600&display=swap" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 
@@ -20,6 +18,7 @@
     .np-stage { position: relative; width: 100%; max-width: 534px; margin: 0 auto; background:#fff; border-radius:8px; padding:8px; min-height: 320px; box-sizing: border-box; overflow: visible; }
     .np-stage img { width:100%; height:auto; border-radius:6px; display:block; }
 
+    /* overlays: NO background, sits on top of image */
     .np-overlay {
       position: absolute;
       color: #D4AF37;
@@ -129,31 +128,11 @@
   </div>
 </div>
 
-{{-- Build window.variantMap here from $product->variants if available.
-    Key: UPPERCASE size label -> value: numeric shopify variant id or gid string --}}
-<script>
-  (function(){
-    var vm = {};
-    @if(isset($product) && isset($product->variants) && count($product->variants))
-      @foreach($product->variants as $v)
-        @php
-          // determine label (try option1/size/sku)
-          $label = strtoupper(trim($v->option1 ?? $v->size ?? $v->sku ?? ''));
-          // prefer explicit shopify variant id fields if present
-          $shopifyId = $v->shopify_variant_id ?? $v->shopify_id ?? $v->variant_id ?? $v->id ?? '';
-        @endphp
-        @if($label && $shopifyId)
-          vm["{{ $label }}"] = "{{ $shopifyId }}";
-        @endif
-      @endforeach
-    @endif
-    window.variantMap = vm;
-    console.log('DEBUG window.variantMap:', window.variantMap);
-  })();
-</script>
+<script> window.layoutSlots = {!! json_encode($layoutSlots ?? [], JSON_NUMERIC_CHECK) !!}; /* define window.variantMap in server side if available: e.g. {"S":"45229263159492","M":"45229263159493"} */ </script>
 
+<!-- helper to convert numeric variant id to Shopify gid and ensure hidden is set -->
 <script>
-/* Utility: convert numeric -> gid or leave gid alone */
+/* ---------- Utility helpers ---------- */
 function toGidIfNeeded(v){
   if(!v) return '';
   v = v.toString().trim();
@@ -161,10 +140,22 @@ function toGidIfNeeded(v){
   return 'gid://shopify/ProductVariant/' + v;
 }
 
-/* ensureVariantGid: reads size (or provided) and writes hidden variant_id (gid) */
-function ensureVariantGid(size){
-  size = (size || (document.getElementById('np-size')?.value || '')).toString().trim();
-  if(!size) return '';
+function debugVariant(){
+  console.log('variantMap:', window.variantMap);
+  console.log('np-variant-id (hidden):', document.getElementById('np-variant-id')?.value);
+  console.log('shopify_product_id:', document.getElementById('np-shopify-product-id')?.value);
+}
+
+/* ensureVariantGid: reads selected size and writes hidden gid */
+function ensureVariantGid(sizeInput){
+  const size = (sizeInput || (document.getElementById('np-size')?.value || '')).toString().trim();
+  if(!size) {
+    // clear hidden if no size
+    const hidden = document.getElementById('np-variant-id');
+    if(hidden) hidden.value = '';
+    console.log('ensureVariantGid -> no size selected');
+    return '';
+  }
   const map = window.variantMap || {};
   const mapped = map[size.toUpperCase()] || map[size] || '';
   const hidden = document.getElementById('np-variant-id');
@@ -176,14 +167,98 @@ function ensureVariantGid(size){
   return gid;
 }
 
-function debugVariant(){
-  console.log('variantMap:', window.variantMap);
-  console.log('np-variant-id (hidden):', document.getElementById('np-variant-id')?.value);
-  console.log('shopify_product_id:', document.getElementById('np-shopify-product-id')?.value);
+/* ---------- Visual placement helpers ---------- */
+function computeStageSize(){
+  const baseImg = document.getElementById('np-base'), stage = document.getElementById('np-stage');
+  if (!baseImg || !stage) return null;
+  const stageRect = stage.getBoundingClientRect();
+  const imgRect = baseImg.getBoundingClientRect();
+  return {
+    offsetLeft: Math.round(imgRect.left - stageRect.left),
+    offsetTop: Math.round(imgRect.top - stageRect.top),
+    imgW: Math.max(1,imgRect.width), imgH: Math.max(1,imgRect.height),
+    stageW: Math.max(1, stageRect.width), stageH: Math.max(1, stageRect.height)
+  };
 }
-</script>
 
-<script>
+/* placeOverlay: uses layoutSlots if present else safe defaults */
+function placeOverlay(el, slotKey){
+  if(!el) return;
+  const s = computeStageSize();
+  if(!s) return;
+
+  // try using server-provided layoutSlots (expected numbers are percents)
+  const layout = (window.layoutSlots && typeof window.layoutSlots === 'object') ? window.layoutSlots : null;
+
+  let left_pct, top_pct, width_pct, height_pct, rotation;
+  if (layout && layout[slotKey]) {
+    left_pct = Number(layout[slotKey].left_pct || layout[slotKey].left || 50);
+    top_pct  = Number(layout[slotKey].top_pct  || layout[slotKey].top  || (slotKey==='number'?70:40));
+    width_pct  = Number(layout[slotKey].width_pct  || layout[slotKey].width  || (slotKey==='number'?30:70));
+    height_pct = Number(layout[slotKey].height_pct || layout[slotKey].height || (slotKey==='number'?18:12));
+    rotation = Number(layout[slotKey].rotation || 0);
+  } else {
+    // safe defaults (keep text centered roughly same as earlier)
+    left_pct   = 50;
+    top_pct    = (slotKey === 'number' ? 70 : 40);
+    width_pct  = (slotKey === 'number' ? 30 : 70);
+    height_pct = (slotKey === 'number' ? 18 : 12);
+    rotation = 0;
+  }
+
+  const centerX = Math.round(s.offsetLeft + (left_pct/100) * s.imgW);
+  const centerY = Math.round(s.offsetTop  + (top_pct/100)  * s.imgH);
+  const areaWpx = Math.max(8, Math.round((width_pct/100) * s.imgW));
+  const areaHpx = Math.max(8, Math.round((height_pct/100) * s.imgH));
+
+  el.style.position = 'absolute';
+  el.style.left = centerX + 'px';
+  el.style.top  = centerY + 'px';
+  el.style.width = areaWpx + 'px';
+  el.style.height = areaHpx + 'px';
+  el.style.transform = 'translate(-50%,-50%) rotate(' + rotation + 'deg)';
+  el.style.display = 'flex';
+  el.style.alignItems = 'center';
+  el.style.justifyContent = 'center';
+  el.style.boxSizing = 'border-box';
+  el.style.padding = '0 6px';
+  el.style.whiteSpace = 'nowrap';
+  el.style.overflow = 'hidden';
+  el.style.pointerEvents = 'none';
+  el.style.zIndex = (slotKey === 'number' ? 60 : 50);
+
+  // font sizing heuristic (stable)
+  const text = (el.textContent || '').toString().trim() || (slotKey === 'number' ? '09' : 'NAME');
+  const chars = Math.max(1, text.length);
+  const isMobile = window.innerWidth <= 767;
+  const heightCandidate = Math.floor(areaHpx);
+  const avgCharRatio = 0.48;
+  const widthCap = Math.floor((areaWpx * 0.95) / (chars * avgCharRatio));
+  let fontSize = Math.floor(Math.min(heightCandidate, widthCap));
+  const maxAllowed = Math.max(14, Math.floor(s.stageW * (isMobile ? 0.45 : 0.32)));
+  fontSize = Math.max(8, Math.min(fontSize, maxAllowed));
+  fontSize = Math.floor(fontSize * 1.10);
+  el.style.fontSize = fontSize + 'px';
+  el.style.lineHeight = '1';
+  el.style.fontWeight = '700';
+
+  let attempts = 0;
+  while (el.scrollWidth > el.clientWidth && fontSize > 7 && attempts < 30) {
+    fontSize = Math.max(7, Math.floor(fontSize * 0.92));
+    el.style.fontSize = fontSize + 'px';
+    attempts++;
+  }
+}
+
+/* applyLayout: places name & number overlays */
+function applyLayout(){
+  const pvName = document.getElementById('np-prev-name');
+  const pvNum  = document.getElementById('np-prev-num');
+  if (pvName) placeOverlay(pvName, 'name');
+  if (pvNum)  placeOverlay(pvNum, 'number');
+}
+
+/* ---------- Form & preview syncing ---------- */
 (function(){
   const $ = id => document.getElementById(id);
   const nameEl  = $('np-name'), numEl = $('np-num'), fontEl = $('np-font'), colorEl = $('np-color');
@@ -198,76 +273,6 @@ function debugVariant(){
     [pvName, pvNum].forEach(el => { if(el) el.className = 'np-overlay ' + cls; });
   }
 
-  function computeStageSize(){
-    if (!baseImg || !stage) return null;
-    const stageRect = stage.getBoundingClientRect();
-    const imgRect = baseImg.getBoundingClientRect();
-    return {
-      offsetLeft: Math.round(imgRect.left - stageRect.left),
-      offsetTop: Math.round(imgRect.top - stageRect.top),
-      imgW: Math.max(1,imgRect.width), imgH: Math.max(1,imgRect.height),
-      stageW: Math.max(1, stageRect.width), stageH: Math.max(1, stageRect.height)
-    };
-  }
-
-  function placeOverlay(el, slotKey){
-    if(!el) return;
-    const s = computeStageSize();
-    if(!s) return;
-
-    // default placement; your controller provided layoutSlots if needed else this is safe
-    const leftPct = 50, topPct = (slotKey === 'number' ? 70 : 40);
-    const widthPct = (slotKey === 'number' ? 30 : 70);
-    const heightPct = (slotKey === 'number' ? 18 : 12);
-
-    const centerX = Math.round(s.offsetLeft + (leftPct/100) * s.imgW);
-    const centerY = Math.round(s.offsetTop  + (topPct/100)  * s.imgH);
-    const areaWpx = Math.max(8, Math.round((widthPct/100) * s.imgW));
-    const areaHpx = Math.max(8, Math.round((heightPct/100) * s.imgH));
-
-    el.style.position = 'absolute';
-    el.style.left = centerX + 'px';
-    el.style.top  = centerY + 'px';
-    el.style.width = areaWpx + 'px';
-    el.style.height = areaHpx + 'px';
-    el.style.transform = 'translate(-50%,-50%)';
-    el.style.display = 'flex';
-    el.style.alignItems = 'center';
-    el.style.justifyContent = 'center';
-    el.style.boxSizing = 'border-box';
-    el.style.padding = '0 6px';
-    el.style.whiteSpace = 'nowrap';
-    el.style.overflow = 'hidden';
-    el.style.pointerEvents = 'none';
-    el.style.zIndex = (slotKey === 'number' ? 60 : 50);
-
-    const text = (el.textContent || '').toString().trim() || (slotKey === 'number' ? '09' : 'NAME');
-    const chars = Math.max(1, text.length);
-    const isMobile = window.innerWidth <= 767;
-    const heightCandidate = Math.floor(areaHpx);
-    const avgCharRatio = 0.48;
-    const widthCap = Math.floor((areaWpx * 0.95) / (chars * avgCharRatio));
-    let fontSize = Math.floor(Math.min(heightCandidate, widthCap));
-    const maxAllowed = Math.max(14, Math.floor(s.stageW * (isMobile ? 0.45 : 0.32)));
-    fontSize = Math.max(8, Math.min(fontSize, maxAllowed));
-    fontSize = Math.floor(fontSize * 1.10);
-    el.style.fontSize = fontSize + 'px';
-    el.style.lineHeight = '1';
-    el.style.fontWeight = '700';
-
-    let attempts = 0;
-    while (el.scrollWidth > el.clientWidth && fontSize > 7 && attempts < 30) {
-      fontSize = Math.max(7, Math.floor(fontSize * 0.92));
-      el.style.fontSize = fontSize + 'px';
-      attempts++;
-    }
-  }
-
-  function applyLayout(){
-    placeOverlay(pvName, 'name');
-    placeOverlay(pvNum, 'number');
-  }
-
   function syncPreview(){
     if (pvName && nameEl) pvName.textContent = (nameEl.value || 'NAME').toUpperCase();
     if (pvNum && numEl) pvNum.textContent = (numEl.value || '09').replace(/\D/g,'');
@@ -280,21 +285,32 @@ function debugVariant(){
     if (nm) nm.value = (numEl ? (numEl.value||'') : '').replace(/\D/g,'').trim();
     if (f) f.value = fontEl ? fontEl.value : '';
     if (c) c.value = colorEl ? colorEl.value : '';
+    // ensure variant updated from size whenever hidden sync runs
     ensureVariantGid();
   }
 
-  // events
+  // events: keep ATC state updated ALWAYS
   if (nameEl) nameEl.addEventListener('input', ()=>{ syncPreview(); syncHidden(); updateATCState(); });
   if (numEl) numEl.addEventListener('input', e=>{ e.target.value = e.target.value.replace(/\D/g,'').slice(0,3); syncPreview(); syncHidden(); updateATCState(); });
   if (fontEl) fontEl.addEventListener('change', ()=>{ applyFont(fontEl.value); syncHidden(); syncPreview(); });
   if (colorEl) colorEl.addEventListener('input', ()=>{ if(pvName) pvName.style.color = colorEl.value; if(pvNum) pvNum.style.color = colorEl.value; syncHidden(); });
 
-  // size change must update variant gid and atc state
+  // size change must update variant gid and ATC state
   const sizeEl = $('np-size');
   sizeEl?.addEventListener('change', ()=> { ensureVariantGid(); updateATCState(); });
 
-  document.querySelectorAll('.np-swatch').forEach(b=>{ b.addEventListener('click', ()=>{ document.querySelectorAll('.np-swatch').forEach(x=>x.classList.remove('active')); b.classList.add('active'); if (colorEl) colorEl.value = b.dataset.color; if (pvName) pvName.style.color = b.dataset.color; if (pvNum) pvNum.style.color = b.dataset.color; syncHidden(); }); });
+  document.querySelectorAll('.np-swatch').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      document.querySelectorAll('.np-swatch').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active');
+      if (colorEl) colorEl.value = b.dataset.color;
+      if (pvName) pvName.style.color = b.dataset.color;
+      if (pvNum) pvNum.style.color = b.dataset.color;
+      syncHidden();
+    });
+  });
 
+  // ATC state function with console debug
   function updateATCState(){
     if(!btn) return;
     const okName = NAME_RE.test($('np-name')?.value || '');
@@ -314,12 +330,11 @@ function debugVariant(){
     if (fontEl?.value) params.set('prefill_font', fontEl.value);
     if (colorEl?.value) params.set('prefill_color', colorEl.value);
     if ($('np-size')?.value) params.set('prefill_size', $('np-size').value);
-    // adjust team route if different
     const base = "{{ route('team.create') }}";
     window.location.href = base + '?' + params.toString();
   });
 
-  // init
+  // initial setup (safe)
   applyFont(fontEl?.value || 'bebas');
   if (pvName && colorEl) pvName.style.color = colorEl.value;
   if (pvNum && colorEl) pvNum.style.color = colorEl.value;
@@ -330,15 +345,17 @@ function debugVariant(){
   document.addEventListener('DOMContentLoaded', function(){
     ensureVariantGid();
     updateATCState();
+    // one more layout run after fonts/images ready
+    setTimeout(()=>{ applyLayout(); updateATCState(); }, 120);
   });
 
-  // resize / fonts
+  // layout triggers
   baseImg.addEventListener('load', ()=> setTimeout(applyLayout, 80));
   window.addEventListener('resize', ()=> setTimeout(applyLayout, 80));
   window.addEventListener('orientationchange', ()=> setTimeout(applyLayout, 200));
   document.fonts?.ready.then(()=> setTimeout(applyLayout, 120));
 
-  // submit handler (html2canvas + post)
+  // submit handler unchanged but robust: collects variant hidden as gid
   form?.addEventListener('submit', async function(evt){
     evt.preventDefault();
     const size = $('np-size')?.value || '';
@@ -353,22 +370,18 @@ function debugVariant(){
     if (btn) { btn.disabled = true; btn.textContent = 'Preparing...'; }
 
     try {
-      // html2canvas may be heavy but keep as you had it
       const canvas = await html2canvas(stage, { useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1 });
       const dataUrl = canvas.toDataURL('image/png');
       $('np-preview-hidden').value = dataUrl;
 
       const fd = new FormData(form);
-      const token = document.querySelector('meta[name="csrf-token"]').content || '';
+      const token = document.querySelector('meta[name="csrf-token"]')?.content || '';
 
-      // debug form keys
-      for (const k of fd.keys()) console.log('form key:', k, fd.get(k));
+      console.log('Submitting add-to-cart form; formData keys:');
+      for (const k of fd.keys()) console.log(k, fd.get(k));
 
       const resp = await fetch(form.action, { method: 'POST', body: fd, credentials: 'same-origin', headers: { 'X-CSRF-TOKEN': token, 'Accept':'application/json' } });
-
-      // if server redirects to checkout, follow
       if (resp.redirected) { window.location.href = resp.url; return; }
-
       const data = await resp.json().catch(()=>null);
       console.log('AddToCart response:', resp.status, data);
 
@@ -382,12 +395,7 @@ function debugVariant(){
         return;
       }
 
-      if (data && data.cart) {
-        // success: show or redirect per your UX
-        alert('Added to cart.');
-      } else {
-        alert('Added to cart (no cart info returned).');
-      }
+      if (data && data.cart) { alert('Added to cart.'); } else { alert('Added to cart.'); }
     } catch(err) {
       console.error('ATC exception', err);
       alert('Something went wrong. See console for details');
@@ -398,6 +406,7 @@ function debugVariant(){
 
 })();
 </script>
+
 
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 </body>
