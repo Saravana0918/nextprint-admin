@@ -290,6 +290,43 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
+  function renderRowPreview(row) {
+    if (!row) return;
+    const nameEl = row.querySelector('.player-name');
+    const numEl  = row.querySelector('.player-number');
+    const fontHidden = row.querySelector('.player-font');
+    const colorHidden = row.querySelector('.player-color');
+
+    const nm = (nameEl?.value || '').toUpperCase().slice(0,12);
+    const nu = (numEl?.value || '').replace(/\D/g,'').slice(0,3);
+
+    // apply per-row font if provided else keep existing
+    if (fontHidden?.value) {
+      const fm = fontHidden.value.toLowerCase();
+      const familyMap = {bebas: "Bebas Neue, sans-serif", oswald: "Oswald, sans-serif", anton:"Anton, sans-serif", impact:"Impact, Arial"};
+      const fam = familyMap[fm] || fontHidden.value;
+      ovName.style.fontFamily = fam;
+      ovNum.style.fontFamily = fam;
+    }
+
+    // apply per-row color if provided
+    if (colorHidden?.value) {
+      ovName.style.color = colorHidden.value;
+      ovNum.style.color = colorHidden.value;
+    }
+
+    // set text (fallbacks)
+    ovName.textContent = nm || 'NAME';
+    ovNum.textContent = nu || '09';
+
+    // mark row visually active
+    list.querySelectorAll('.player-row').forEach(r => r.classList.remove('preview-active'));
+    row.classList.add('preview-active');
+
+    // reposition overlays according to layout
+    applyLayout();
+  }
+
   function createRow(vals = {}) {
     const node = tpl.content.cloneNode(true);
     list.appendChild(node);
@@ -297,11 +334,13 @@ document.addEventListener('DOMContentLoaded', function() {
     const last = rows[rows.length - 1];
     const numEl = last.querySelector('.player-number');
     const nameEl = last.querySelector('.player-name');
+    const sizeEl = last.querySelector('.player-size');
     const fontHidden = last.querySelector('.player-font');
     const colorHidden = last.querySelector('.player-color');
 
     if (vals.number) numEl.value = vals.number;
     if (vals.name) nameEl.value = vals.name;
+    if (vals.size) sizeEl.value = vals.size;
     if (vals.font) fontHidden.value = vals.font;
     if (vals.color) colorHidden.value = vals.color;
 
@@ -312,28 +351,42 @@ document.addEventListener('DOMContentLoaded', function() {
       if (!list.querySelector('.player-row')) { ovName.textContent = ''; ovNum.textContent = ''; applyLayout(); }
     });
 
-    last.querySelector('.btn-preview').addEventListener('click', ()=> {
-      list.querySelectorAll('.player-row').forEach(r => r.classList.remove('preview-active'));
-      last.classList.add('preview-active');
-      const nm = (nameEl.value || '').toUpperCase().slice(0,12);
-      const nu = (numEl.value || '').replace(/\D/g,'').slice(0,3);
-      if (fontHidden.value) {
-        const fm = fontHidden.value.toLowerCase();
-        const familyMap = {bebas: "Bebas Neue, sans-serif", oswald: "Oswald, sans-serif", anton:"Anton, sans-serif"};
-        const fam = familyMap[fm] || fontHidden.value;
-        ovName.style.fontFamily = fam; ovNum.style.fontFamily = fam;
+    last.querySelector('.btn-remove').addEventListener('click', ()=> {
+      last.remove();
+      if (!list.querySelector('.player-row')) {
+        ovName.textContent = ''; ovNum.textContent = '';
+        applyLayout();
+      } else {
+        // if there are still rows, preview the last row to keep overlays consistent
+        const any = list.querySelector('.player-row');
+        if (any) renderRowPreview(any);
       }
-      if (colorHidden.value) { ovName.style.color = colorHidden.value; ovNum.style.color = colorHidden.value; }
-      ovName.textContent = nm || 'NAME';
-      ovNum.textContent = nu || '09';
-      applyLayout();
     });
 
-    nameEl.addEventListener('focus', ()=> { last.classList.add('preview-active'); ovName.textContent = (nameEl.value||'').toUpperCase().slice(0,12); ovNum.textContent = (numEl.value||'').replace(/\D/g,'').slice(0,3); applyLayout(); });
-    numEl.addEventListener('focus', ()=> { last.classList.add('preview-active'); ovName.textContent = (nameEl.value||'').toUpperCase().slice(0,12); ovNum.textContent = (numEl.value||'').replace(/\D/g,'').slice(0,3); applyLayout(); });
+    last.querySelector('.btn-preview').addEventListener('click', ()=> {
+      renderRowPreview(last);
+    });
 
-    nameEl.addEventListener('input', ()=> { if (last.classList.contains('preview-active')) { ovName.textContent = (nameEl.value||'').toUpperCase().slice(0,12); applyLayout(); } });
-    numEl.addEventListener('input', ()=> { if (last.classList.contains('preview-active')) { ovNum.textContent = (numEl.value||'').replace(/\D/g,'').slice(0,3); applyLayout(); } });
+    // live preview when focused/typing
+    nameEl.addEventListener('focus', ()=> {
+      // preview while focusing
+      renderRowPreview(last);
+    });
+    numEl.addEventListener('focus', ()=> {
+      renderRowPreview(last);
+    });
+
+    nameEl.addEventListener('input', ()=> {
+      if (last.classList.contains('preview-active')) renderRowPreview(last);
+    });
+    numEl.addEventListener('input', ()=> {
+      if (last.classList.contains('preview-active')) renderRowPreview(last);
+    });
+
+    // OPTIONAL: auto-preview the newly created row and focus name input
+    // comment out if you don't want auto-focus
+    nameEl.focus();
+    renderRowPreview(last);
 
     return last;
   }
