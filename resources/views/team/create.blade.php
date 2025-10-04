@@ -169,6 +169,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const areaWpx = Math.max(8, Math.round(((slot.width_pct||10)/100) * s.imgW));
     const areaHpx = Math.max(8, Math.round(((slot.height_pct||10)/100) * s.imgH));
 
+    el.style.position = 'absolute';
     el.style.left = centerX + 'px';
     el.style.top  = centerY + 'px';
     el.style.width = areaWpx + 'px';
@@ -183,7 +184,7 @@ document.addEventListener('DOMContentLoaded', function() {
     el.style.boxSizing = 'border-box';
     el.style.padding = '0 6px';
 
-    // font sizing logic (same as designer)
+    // font sizing
     const txt = (el.textContent || '').toString().trim() || (slotKey === 'number' ? '09' : 'NAME');
     const chars = Math.max(1, txt.length);
     const isMobile = window.innerWidth <= 767;
@@ -209,11 +210,7 @@ document.addEventListener('DOMContentLoaded', function() {
   function applyLayout() {
     if (!imgEl || !imgEl.complete) return;
 
-    // prefill text
-    if (pf.prefill_name || pf.name) ovName.textContent = (pf.prefill_name || pf.name || '').toString().toUpperCase();
-    if (pf.prefill_number || pf.number) ovNum.textContent = (pf.prefill_number || pf.number || '').toString().replace(/\D/g,'').slice(0,3);
-
-    // prefill font & color
+    // apply prefill font & color if present (only initial)
     if (pf.prefill_font || pf.font) {
       const map = {bebas: "Bebas Neue, sans-serif", oswald: "Oswald, sans-serif", anton: "Anton, sans-serif", impact: "Impact, Arial"};
       const key = (pf.prefill_font || pf.font).toString().toLowerCase();
@@ -225,71 +222,33 @@ document.addEventListener('DOMContentLoaded', function() {
       if (c) { ovName.style.color = c; ovNum.style.color = c; }
     }
 
+    // position overlays according to layout slots
     placeOverlay(ovName, layout.name, 'name');
     placeOverlay(ovNum, layout.number, 'number');
   }
 
+  // robust recalculation helper (ResizeObserver + events)
   (function addReliableRecalc() {
-  try {
-    // ResizeObserver to catch any layout/size change
-    if ('ResizeObserver' in window) {
-      const ro = new ResizeObserver(() => {
-        // debounce small changes
-        clearTimeout(window._team_layout_timer);
-        window._team_layout_timer = setTimeout(() => {
-          applyLayout();
-        }, 80);
-      });
-      if (imgEl) ro.observe(imgEl);
-      if (stageEl) ro.observe(stageEl);
-    } else {
-      // fallback: listen to window resize
-      window.addEventListener('resize', () => setTimeout(applyLayout, 120));
-    }
+    try {
+      if ('ResizeObserver' in window) {
+        const ro = new ResizeObserver(() => {
+          clearTimeout(window._team_layout_timer);
+          window._team_layout_timer = setTimeout(() => applyLayout(), 80);
+        });
+        if (imgEl) ro.observe(imgEl);
+        if (stageEl) ro.observe(stageEl);
+      } else {
+        window.addEventListener('resize', () => setTimeout(applyLayout, 120));
+      }
+      window.addEventListener('scroll', () => { clearTimeout(window._team_layout_timer); window._team_layout_timer = setTimeout(() => applyLayout(), 90); }, { passive:true });
+      window.addEventListener('orientationchange', () => setTimeout(applyLayout, 180));
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(applyLayout, 120); });
+      setTimeout(() => { if (imgEl && imgEl.complete) applyLayout(); }, 300);
+      setTimeout(() => { if (imgEl && imgEl.complete) applyLayout(); }, 900);
+    } catch (err) { console.warn('recalc helper failed', err); }
+  })();
 
-    // also recalc on scroll/visibility/orientationchange (mobile can shift when address bar hides)
-    window.addEventListener('scroll', () => {
-      clearTimeout(window._team_layout_timer);
-      window._team_layout_timer = setTimeout(() => applyLayout(), 90);
-    }, { passive: true });
-
-    window.addEventListener('orientationchange', () => setTimeout(applyLayout, 180));
-    document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(applyLayout, 120); });
-
-    // one extra forced call after slight delay (helps when fonts or images finish)
-    setTimeout(() => { if (imgEl && imgEl.complete) applyLayout(); }, 300);
-    setTimeout(() => { if (imgEl && imgEl.complete) applyLayout(); }, 900);
-  } catch (err) {
-    console.warn('layout recalc helper failed', err);
-  }
-})();
-
-  // debug helper: open console and call teamOverlayDebug()
-  window.teamOverlayDebug = function() {
-    console.log('layoutSlots', layout);
-    console.log('stageRect', stageEl?.getBoundingClientRect(), 'imgRect', imgEl?.getBoundingClientRect());
-    console.log('compute', computeStageSize(stageEl, imgEl));
-  };
-
-  // trigger layout at right times
-  if (imgEl) {
-    if (imgEl.complete) setTimeout(applyLayout, 80);
-    else imgEl.addEventListener('load', ()=> setTimeout(applyLayout, 80));
-  }
-  window.addEventListener('resize', ()=> setTimeout(applyLayout, 120));
-  document.fonts?.ready.then(()=> setTimeout(applyLayout, 120));
-
-  /* ===== rows & preview wiring (unchanged) ===== */
-  function enforceLimits(input) {
-    if (!input) return;
-    if (input.classList.contains('player-number')) {
-      input.addEventListener('input', (e) => { e.target.value = (e.target.value || '').replace(/\D/g,'').slice(0,3); });
-    }
-    if (input.classList.contains('player-name')) {
-      input.addEventListener('input', (e) => { e.target.value = (e.target.value || '').toUpperCase().slice(0,12); });
-    }
-  }
-
+  // ---- preview rendering for a row (reusable) ----
   function renderRowPreview(row) {
     if (!row) return;
     const nameEl = row.querySelector('.player-name');
@@ -300,7 +259,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const nm = (nameEl?.value || '').toUpperCase().slice(0,12);
     const nu = (numEl?.value || '').replace(/\D/g,'').slice(0,3);
 
-    // apply per-row font if provided else keep existing
+    // apply per-row font if provided
     if (fontHidden?.value) {
       const fm = fontHidden.value.toLowerCase();
       const familyMap = {bebas: "Bebas Neue, sans-serif", oswald: "Oswald, sans-serif", anton:"Anton, sans-serif", impact:"Impact, Arial"};
@@ -315,18 +274,28 @@ document.addEventListener('DOMContentLoaded', function() {
       ovNum.style.color = colorHidden.value;
     }
 
-    // set text (fallbacks)
+    // set overlay text & mark active row
     ovName.textContent = nm || 'NAME';
     ovNum.textContent = nu || '09';
-
-    // mark row visually active
     list.querySelectorAll('.player-row').forEach(r => r.classList.remove('preview-active'));
     row.classList.add('preview-active');
 
-    // reposition overlays according to layout
+    // reposition overlays
     applyLayout();
   }
 
+  // helper: attach input limits
+  function enforceLimits(input) {
+    if (!input) return;
+    if (input.classList.contains('player-number')) {
+      input.addEventListener('input', (e) => { e.target.value = (e.target.value || '').replace(/\D/g,'').slice(0,3); });
+    }
+    if (input.classList.contains('player-name')) {
+      input.addEventListener('input', (e) => { e.target.value = (e.target.value || '').toUpperCase().slice(0,12); });
+    }
+  }
+
+  // create a new row and wire UI
   function createRow(vals = {}) {
     const node = tpl.content.cloneNode(true);
     list.appendChild(node);
@@ -346,53 +315,41 @@ document.addEventListener('DOMContentLoaded', function() {
 
     enforceLimits(numEl); enforceLimits(nameEl);
 
+    // wire remove click (per-row)
     last.querySelector('.btn-remove').addEventListener('click', ()=> {
       last.remove();
       if (!list.querySelector('.player-row')) { ovName.textContent = ''; ovNum.textContent = ''; applyLayout(); }
-    });
-
-    last.querySelector('.btn-remove').addEventListener('click', ()=> {
-      last.remove();
-      if (!list.querySelector('.player-row')) {
-        ovName.textContent = ''; ovNum.textContent = '';
-        applyLayout();
-      } else {
-        // if there are still rows, preview the last row to keep overlays consistent
+      else {
         const any = list.querySelector('.player-row');
         if (any) renderRowPreview(any);
       }
     });
 
-    last.querySelector('.btn-preview').addEventListener('click', ()=> {
-      renderRowPreview(last);
-    });
+    // wire focus => auto preview for this row
+    nameEl.addEventListener('focus', ()=> renderRowPreview(last));
+    numEl.addEventListener('focus', ()=> renderRowPreview(last));
+    nameEl.addEventListener('input', ()=> { if (last.classList.contains('preview-active')) renderRowPreview(last); });
+    numEl.addEventListener('input', ()=> { if (last.classList.contains('preview-active')) renderRowPreview(last); });
 
-    // live preview when focused/typing
-    nameEl.addEventListener('focus', ()=> {
-      // preview while focusing
-      renderRowPreview(last);
-    });
-    numEl.addEventListener('focus', ()=> {
-      renderRowPreview(last);
-    });
-
-    nameEl.addEventListener('input', ()=> {
-      if (last.classList.contains('preview-active')) renderRowPreview(last);
-    });
-    numEl.addEventListener('input', ()=> {
-      if (last.classList.contains('preview-active')) renderRowPreview(last);
-    });
-
-    // OPTIONAL: auto-preview the newly created row and focus name input
-    // comment out if you don't want auto-focus
+    // auto-focus and auto-preview new row
     nameEl.focus();
     renderRowPreview(last);
 
     return last;
   }
 
+  // event delegation for Preview buttons (works for dynamic rows)
+  list.addEventListener('click', function(evt) {
+    const btn = evt.target.closest('.btn-preview');
+    if (!btn) return;
+    const row = btn.closest('.player-row');
+    if (!row) return;
+    renderRowPreview(row);
+  });
+
   addBtn.addEventListener('click', ()=> createRow());
 
+  // initial rows from prefill (if provided)
   if ((pf.prefill_name && pf.prefill_name.length) || (pf.prefill_number && pf.prefill_number.length)) {
     createRow({
       name: (pf.prefill_name || pf.name || '').toString().toUpperCase().slice(0,12),
@@ -400,12 +357,11 @@ document.addEventListener('DOMContentLoaded', function() {
       font: pf.prefill_font || pf.font || '',
       color: (pf.prefill_color ? decodeURIComponent(pf.prefill_color) : pf.color) || ''
     });
-    const first = list.querySelector('.player-row');
-    if (first) first.classList.add('preview-active');
   } else {
     createRow();
   }
 
+  // final collect & submit
   form.addEventListener('submit', async function(e) {
     e.preventDefault();
     const rows = list.querySelectorAll('.player-row');
@@ -436,10 +392,7 @@ document.addEventListener('DOMContentLoaded', function() {
         alert((json && (json.message || json.error)) || 'Server error while adding team players.');
         return;
       }
-      if (json.checkoutUrl || json.checkout_url) {
-        window.location.href = json.checkoutUrl || json.checkout_url;
-        return;
-      }
+      if (json.checkoutUrl || json.checkout_url) { window.location.href = json.checkoutUrl || json.checkout_url; return; }
       if (json.success) {
         alert('Team saved successfully.');
         if (json.team_id) window.location.href = '/team/' + json.team_id;
@@ -452,7 +405,12 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 
+  // initial applyLayout after fonts and image ready
+  document.fonts?.ready.then(()=> setTimeout(()=> { if (imgEl && imgEl.complete) applyLayout(); }, 120));
+  if (imgEl) imgEl.addEventListener('load', ()=> setTimeout(applyLayout, 80));
+  window.addEventListener('resize', ()=> setTimeout(applyLayout, 120));
 });
 </script>
+
 
 @endsection
