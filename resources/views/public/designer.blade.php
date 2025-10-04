@@ -114,7 +114,7 @@
         <div class="mb-2">
           <select id="np-size" name="size" class="form-select" required>
             <option value="">Select Size</option>
-            <option value="S">S</option><option value="M">M</option><option value="L">L</option><option value="XL">XL</option>
+            <option value="S">S</option><option value="M">M</option><option value="L">L</option><option value="XL">XL</option><option value="2XL">2XL</option>
           </select>
         </div>
         <div class="mb-2">
@@ -128,12 +128,15 @@
   </div>
 </div>
 
-<script> window.layoutSlots = {!! json_encode($layoutSlots ?? [], JSON_NUMERIC_CHECK) !!}; </script>
+<script> window.layoutSlots = {!! json_encode($layoutSlots ?? [], JSON_NUMERIC_CHECK) !!}; /* define window.variantMap in server side if available: e.g. {"S":"45229263159492","M":"45229263159493"} */ </script>
+
+<!-- Inject server-side variant map (controller must pass $variantMap) -->
 <script>
   window.variantMap = {!! json_encode($variantMap ?? [], JSON_UNESCAPED_SLASHES) !!};
   console.log('Injected variantMap:', window.variantMap);
 </script>
 
+<!-- Robust helpers: convert ids, normalize, ensure gid -->
 <script>
 function toGidIfNeeded(v){
   if(!v) return '';
@@ -189,16 +192,79 @@ function debugVariant(){
   const btn = $('np-atc-btn'), form = $('np-atc-form'), addTeam = $('btn-add-team');
   const layout = (typeof window.layoutSlots === 'object' && window.layoutSlots !== null) ? window.layoutSlots : {};
 
+  const NAME_RE = /^[A-Za-z ]{1,12}$/, NUM_RE = /^\d{1,3}$/;
+
   function applyFont(val){
     const map = {bebas:'font-bebas', anton:'font-anton', oswald:'font-oswald', impact:'font-impact'};
     const cls = map[val] || 'font-bebas';
     [pvName, pvNum].forEach(el => { if(el) el.className = 'np-overlay ' + cls; });
   }
 
+  function computeStageSize(){
+    if (!baseImg || !stage) return null;
+    const stageRect = stage.getBoundingClientRect();
+    const imgRect = baseImg.getBoundingClientRect();
+    return {
+      offsetLeft: Math.round(imgRect.left - stageRect.left),
+      offsetTop: Math.round(imgRect.top - stageRect.top),
+      imgW: Math.max(1,imgRect.width), imgH: Math.max(1,imgRect.height),
+      stageW: Math.max(1, stageRect.width), stageH: Math.max(1, stageRect.height)
+    };
+  }
+
+  function placeOverlay(el, slot, slotKey){
+    if(!el || !slot) return;
+    const s = computeStageSize();
+    if(!s) return;
+
+    const centerX = Math.round(s.offsetLeft + ((slot.left_pct||0)/100) * s.imgW + ((slot.width_pct||0)/200)*s.imgW);
+    const centerY = Math.round(s.offsetTop  + ((slot.top_pct||0)/100)  * s.imgH + ((slot.height_pct||0)/200)*s.imgH);
+    const areaWpx = Math.max(8, Math.round(((slot.width_pct||10)/100) * s.imgW));
+    const areaHpx = Math.max(8, Math.round(((slot.height_pct||10)/100) * s.imgH));
+
+    el.style.position = 'absolute';
+    el.style.left = centerX + 'px';
+    el.style.top  = centerY + 'px';
+    el.style.width = areaWpx + 'px';
+    el.style.height = areaHpx + 'px';
+    el.style.transform = 'translate(-50%,-50%) rotate(' + ((slot.rotation||0)) + 'deg)';
+    el.style.display = 'flex';
+    el.style.alignItems = 'center';
+    el.style.justifyContent = 'center';
+    el.style.boxSizing = 'border-box';
+    el.style.padding = '0 6px';
+    el.style.whiteSpace = 'nowrap';
+    el.style.overflow = 'hidden';
+    el.style.pointerEvents = 'none';
+    el.style.zIndex = (slotKey === 'number' ? 60 : 50);
+
+    const text = (el.textContent || '').toString().trim() || (slotKey === 'number' ? '09' : 'NAME');
+    const chars = Math.max(1, text.length);
+    const isMobile = window.innerWidth <= 767;
+    const heightCandidate = Math.floor(areaHpx * (slotKey === 'number' ? (isMobile?1.05:1) : 1));
+    const avgCharRatio = 0.48;
+    const widthCap = Math.floor((areaWpx * 0.95) / (chars * avgCharRatio));
+    let numericShrink = (slotKey === 'number') ? (isMobile ? 1.0 : 0.98) : 1.0;
+    let fontSize = Math.floor(Math.min(heightCandidate, widthCap) * numericShrink);
+    const maxAllowed = Math.max(14, Math.floor(s.stageW * (isMobile ? 0.45 : 0.32)));
+    fontSize = Math.max(8, Math.min(fontSize, maxAllowed));
+    fontSize = Math.floor(fontSize * 1.10);
+    el.style.fontSize = fontSize + 'px';
+    el.style.lineHeight = '1';
+    el.style.fontWeight = '700';
+
+    let attempts = 0;
+    while (el.scrollWidth > el.clientWidth && fontSize > 7 && attempts < 30) {
+      fontSize = Math.max(7, Math.floor(fontSize * 0.92));
+      el.style.fontSize = fontSize + 'px';
+      attempts++;
+    }
+  }
+
   function applyLayout(){
     if (!baseImg || !baseImg.complete) return;
-    if (layout && layout.name) { pvName.style.left='50%'; pvName.style.top='45%'; pvName.style.transform='translate(-50%,-50%)'; }
-    if (layout && layout.number) { pvNum.style.left='50%'; pvNum.style.top='65%'; pvNum.style.transform='translate(-50%,-50%)'; }
+    if (layout && layout.name) placeOverlay(pvName, layout.name, 'name'); else { pvName.style.left='50%'; pvName.style.top='45%'; pvName.style.transform='translate(-50%,-50%)'; }
+    if (layout && layout.number) placeOverlay(pvNum, layout.number, 'number'); else { pvNum.style.left='50%'; pvNum.style.top='65%'; pvNum.style.transform='translate(-50%,-50%)'; }
   }
 
   function syncPreview(){
@@ -213,17 +279,19 @@ function debugVariant(){
     if (nm) nm.value = (numEl ? (numEl.value||'') : '').replace(/\D/g,'').trim();
     if (f) f.value = fontEl ? fontEl.value : '';
     if (c) c.value = colorEl ? colorEl.value : '';
+    // ensure variant updated from size whenever hidden sync runs
     ensureVariantGid();
   }
 
-  // events
-  if (nameEl) nameEl.addEventListener('input', ()=>{ syncPreview(); syncHidden(); });
-  if (numEl) numEl.addEventListener('input', e=>{ e.target.value = e.target.value.replace(/\D/g,'').slice(0,3); syncPreview(); syncHidden(); });
+  // events: add updateATCState calls
+  if (nameEl) nameEl.addEventListener('input', ()=>{ syncPreview(); syncHidden(); updateATCState(); });
+  if (numEl) numEl.addEventListener('input', e=>{ e.target.value = e.target.value.replace(/\D/g,'').slice(0,3); syncPreview(); syncHidden(); updateATCState(); });
   if (fontEl) fontEl.addEventListener('change', ()=>{ applyFont(fontEl.value); syncHidden(); syncPreview(); });
   if (colorEl) colorEl.addEventListener('input', ()=>{ if(pvName) pvName.style.color = colorEl.value; if(pvNum) pvNum.style.color = colorEl.value; syncHidden(); });
 
+  // when size changes, update variant gid and ATC state
   const sizeEl = $('np-size');
-  sizeEl?.addEventListener('change', ()=> { ensureVariantGid(); });
+  sizeEl?.addEventListener('change', ()=> { ensureVariantGid(); updateATCState(); });
 
   document.querySelectorAll('.np-swatch').forEach(b=>{
     b.addEventListener('click', ()=>{
@@ -236,6 +304,17 @@ function debugVariant(){
     });
   });
 
+  // ATC state function with console debug
+  function updateATCState(){
+  if(!btn) return;
+  const okName = NAME_RE.test(document.getElementById('np-name')?.value || '');
+  const okNum  = NUM_RE.test(document.getElementById('np-num')?.value || '');
+  const size = document.getElementById('np-size')?.value || '';
+  const gid = ensureVariantGid();
+  console.log('updateATCState ->', { okName, okNum, size, gid });
+}
+
+  // add team button behaviour
   if (addTeam) addTeam.addEventListener('click', function(e){ e.preventDefault();
     const params = new URLSearchParams();
     if ($('np-product-id')?.value) params.set('product_id', $('np-product-id').value);
@@ -254,11 +333,59 @@ function debugVariant(){
   if (pvNum && colorEl) pvNum.style.color = colorEl.value;
   syncPreview();
   syncHidden();
-  
+  updateATCState();
+
+  // layout / font readiness
   baseImg.addEventListener('load', ()=> setTimeout(applyLayout, 80));
   window.addEventListener('resize', ()=> setTimeout(applyLayout, 80));
   window.addEventListener('orientationchange', ()=> setTimeout(applyLayout, 200));
   document.fonts?.ready.then(()=> setTimeout(applyLayout, 120));
+
+  // submit handler (html2canvas + fetch)
+  form?.addEventListener('submit', async function(evt){
+    evt.preventDefault();
+    const size = $('np-size')?.value || '';
+    if (!size) { alert('Please select a size.'); return; }
+    if (!(NAME_RE.test(nameEl.value||'') && NUM_RE.test(numEl.value||''))) { alert('Please enter valid Name and Number'); return; }
+
+    // sync hidden data + ensure variant gid
+    syncHidden();
+    const gid = ensureVariantGid();
+    console.log('DEBUG before submit - variant_id =', document.getElementById('np-variant-id')?.value, 'shopifyProductId:', $('np-shopify-product-id')?.value);
+    debugVariant();
+
+    if (btn) { btn.disabled = true; btn.textContent = 'Preparing...'; }
+
+    try {
+      const canvas = await html2canvas(stage, { useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1 });
+      const dataUrl = canvas.toDataURL('image/png');
+      $('np-preview-hidden').value = dataUrl;
+
+      const fd = new FormData(form);
+      const token = document.querySelector('input[name="_token"]')?.value || '';
+
+      // Debug: log what we will post (do not leave in prod if it leaks sensitive data)
+      console.log('Submitting add-to-cart form; formData keys:');
+      for (const k of fd.keys()) console.log(k, fd.get(k));
+
+      const resp = await fetch(form.action, { method: 'POST', body: fd, credentials: 'same-origin', headers: { 'X-CSRF-TOKEN': token, 'Accept':'application/json' } });
+      if (resp.redirected) { window.location.href = resp.url; return; }
+      const data = await resp.json().catch(()=>null);
+      console.log('AddToCart response:', resp.status, data);
+
+      if (!resp.ok) {
+        alert((data && (data.error||data.message)) || 'Add to cart failed');
+        return;
+      }
+      if (data && data.checkoutUrl) { window.location.href = data.checkoutUrl; return; }
+      alert('Added to cart.');
+    } catch(err) {
+      console.error('ATC exception', err);
+      alert('Something went wrong. See console for details');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Add to Cart'; }
+    }
+  });
 
 })();
 </script>
