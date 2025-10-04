@@ -338,71 +338,106 @@ function ensureVariantGid(){
 
   // handle form submit: create preview -> upload -> submit to cart
   form?.addEventListener('submit', async function(evt){
-    evt.preventDefault();
+  evt.preventDefault();
 
-    const size = $('np-size')?.value || '';
-    if (!size) { alert('Please select a size.'); return; }
-    if (!(NAME_RE.test(nameEl.value||'') && NUM_RE.test(numEl.value||''))) { alert('Please enter valid Name and Number'); return; }
+  // basic validation
+  const size = document.getElementById('np-size')?.value || '';
+  if (!size) { alert('Please select a size.'); return; }
+  const nameVal = (document.getElementById('np-name')?.value||'').trim();
+  const numVal  = (document.getElementById('np-num')?.value||'').trim();
+  if (!nameVal || !/^[A-Za-z ]{1,12}$/.test(nameVal) || !/^\d{1,3}$/.test(numVal)) {
+    alert('Please enter valid Name and Number');
+    return;
+  }
 
-    syncHidden();
+  // keep UI responsive
+  if (btn) { btn.disabled = true; btn.textContent = 'Adding…'; }
 
-    // numeric variant id resolution
-    let numeric = '';
-    const hiddenVal = document.getElementById('np-variant-id')?.value || '';
-    if (/^\d+$/.test(hiddenVal)) numeric = hiddenVal;
-    else if (/\/\d+$/.test(hiddenVal)) numeric = hiddenVal.split('/').pop();
-    else {
-      const mapped = window.variantMap && (window.variantMap[size] || window.variantMap[size.toUpperCase()] || window.variantMap[size.toLowerCase()]) || '';
-      numeric = (mapped && mapped.toString().startsWith('gid://')) ? mapped.split('/').pop() : mapped;
+  // ensure hidden inputs / variant are synced
+  syncHidden();
+  const rawVariant = (document.getElementById('np-variant-id')?.value || '').toString().trim();
+  let numericVariant = '';
+
+  if (/^\d+$/.test(rawVariant)) {
+    numericVariant = rawVariant;
+  } else if (/\/\d+$/.test(rawVariant)) {
+    numericVariant = rawVariant.split('/').pop();
+  } else {
+    // fallback: window.variantMap (server-injected must exist)
+    const mapped = (window.variantMap && window.variantMap[size]) ? window.variantMap[size] : '';
+    numericVariant = mapped ? mapped.toString().replace(/\D/g,'') : '';
+  }
+
+  if (!numericVariant) {
+    if (btn) { btn.disabled = false; btn.textContent = 'Add to Cart'; }
+    alert('Variant id missing or invalid. Please reselect size.');
+    return;
+  }
+
+  // prepare properties - these become cart line properties in Shopify
+  const properties = {
+    "Name": nameVal.toUpperCase(),
+    "Number": numVal,
+    "Font": (document.getElementById('np-font')?.value||''),
+    "Color": (document.getElementById('np-color')?.value||''),
+  };
+
+  // optionally prepare preview via html2canvas (may be large - optional)
+  try {
+    const canvas = await html2canvas(stage, { useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1 });
+    let dataUrl = canvas.toDataURL('image/png');
+    // if it's extremely long, drop it or upload server-side; here we store trimmed
+    if (dataUrl.length > 70000) {
+      console.warn('Preview too large, not including full data URL in properties.');
+      properties["Preview"] = '[preview-too-large]';
+    } else {
+      properties["Preview"] = dataUrl;
     }
+  } catch (err) {
+    console.warn('html2canvas failed — continuing without preview', err);
+  }
 
-    if (!numeric || !/^\d+$/.test(numeric)) { alert('Variant id missing or invalid. Please reselect size.'); return; }
+  // Build body for /cart/add.js - use URLSearchParams to mimic form
+  const body = new URLSearchParams();
+  body.append('id', numericVariant);       // numeric variant id
+  body.append('quantity', (document.getElementById('np-qty')?.value || '1'));
 
-    // generate preview image (html2canvas)
-    let previewUrl = '';
-    try {
-      const canvas = await html2canvas(stage, { useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1 });
-      const dataUrl = canvas.toDataURL('image/png');
+  // Add properties as properties[Key]
+  for (const k in properties) {
+    if (!Object.prototype.hasOwnProperty.call(properties, k)) continue;
+    body.append(`properties[${k}]`, properties[k]);
+  }
 
-      // If small enough, upload to server to get public URL (recommended)
-      if (dataUrl && dataUrl.length < 5000000) { // 5MB limit heuristic
-        const uploaded = await uploadPreviewToServer(dataUrl);
-        if (uploaded) previewUrl = uploaded;
-      } else {
-        console.warn('Preview too large or no preview — skipping upload.');
-      }
-    } catch (err) {
-      console.warn('html2canvas preview generation failed', err);
-    }
+  try {
+    // POST to storefront add endpoint (returns JSON)
+    const resp = await fetch('/cart/add.js', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+      },
+      body: body.toString()
+    });
 
-    // build properties (use previewUrl if present)
-    const properties = {
-      "Name": (nameEl?.value||'').toUpperCase().trim(),
-      "Number": (numEl?.value||'').replace(/\D/g,'').trim(),
-      "Font": fontEl?.value || '',
-      "Color": colorEl?.value || ''
-    };
-    if (previewUrl) properties["PreviewUrl"] = previewUrl;
-
-    const qty = parseInt($('np-qty')?.value || '1', 10) || 1;
-
-    // disable button & show preparing text
-    if (btn) { btn.disabled = true; btn.textContent = 'Preparing...'; }
-
-    // submit to storefront cart
-    try {
-      submitToShopifyStorefront({
-        variantNumericId: numeric,
-        quantity: qty,
-        props: properties
-      });
-      // browser will navigate to cart page
-    } catch (err) {
-      console.error('submitToShopifyStorefront failed', err);
-      alert('Failed to add to cart. See console for details.');
+    if (!resp.ok) {
+      const errText = await resp.text().catch(()=>null);
+      console.error('Add to cart failed', resp.status, errText);
+      alert('Unable to add to cart. Please try again.');
       if (btn) { btn.disabled = false; btn.textContent = 'Add to Cart'; }
+      return;
     }
-  });
+
+    // success -> redirect to checkout page
+    // optional: you can redirect to cart first by using '/cart' instead
+    window.location.href = '/checkout';
+
+  } catch (e) {
+    console.error('Add to cart exception', e);
+    alert('Something went wrong. See console for details.');
+    if (btn) { btn.disabled = false; btn.textContent = 'Add to Cart'; }
+  }
+});
 
 })();
 </script>
