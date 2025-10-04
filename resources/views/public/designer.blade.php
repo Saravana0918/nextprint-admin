@@ -34,44 +34,27 @@
       z-index: 9999;
     }
 
-    /* ensure overlay does not create its own box or background */
-    .np-overlay::before, .np-overlay::after { content: none; }
-
-    /* swatches */
     .np-swatch { width:28px; height:28px; border-radius:50%; border:1px solid #ccc; cursor:pointer; display:inline-block; }
     .np-swatch.active { outline: 2px solid rgba(0,0,0,0.08); box-shadow: 0 2px 6px rgba(0,0,0,0.06); }
 
-    /* default page styles */
     body { background-color: #929292; }
     .body-padding{ padding-top: 100px; }
     .right-layout{ padding-top:350px; }
 
-    /* mobile specific: keep overlays on image, inputs below */
     @media (max-width: 767px) {
       body { background-image: url('/images/stadium-bg.jpg'); background-size: cover; background-position: center center; background-repeat: no-repeat; min-height: 100vh; margin-top: -70px; }
       body::before { content: ""; position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 5; pointer-events: none; }
       .container, .row, .np-stage, header, main, footer { position: relative; z-index: 10; }
-
-      /* inputs: visible below the stage (normal flow) */
       .np-col input.form-control, .np-col select.form-select { z-index: 100020; position: relative; }
-
-      /* keep overlays visually *on* the image (no white box) */
       .np-stage::after { content: ""; position: absolute; left: 12px; right: 12px; top: 12px; bottom: 12px; border-radius: 8px; background: rgba(0,0,0,0.06); z-index: 15; pointer-events: none; }
-
-      /* Add-to-cart floating button */
       #np-atc-btn { position: fixed !important; top: 12px !important; right: 12px !important; z-index: 100050 !important; width: 130px !important; height: 44px !important; border-radius: 28px !important; box-shadow: 0 6px 18px rgba(0,0,0,0.25) !important; font-weight: 700 !important; }
-      .mobile-layout{
-        margin-top : -330px;
-      }
+      .mobile-layout{ margin-top : -330px; }
     }
     @media (min-width: 768px) {
       .vt-icons { display: none !important; }
     }
-
-    /* accessibility focus styles */
     input:focus, select:focus { outline: 3px solid rgba(13,110,253,0.12); }
     .desktop-display{ color : white ;}
-
   </style>
 </head>
 <body class="body-padding">
@@ -88,7 +71,6 @@
         <div class="np-stage" id="np-stage">
           <img id="np-base" crossorigin="anonymous" src="{{ $img }}" alt="Preview"
                onerror="this.onerror=null;this.src='{{ asset('images/placeholder.png') }}'">
-          <!-- OVERLAYS: these are always *on the image* -->
           <div id="np-prev-name" class="np-overlay font-bebas" aria-hidden="true"></div>
           <div id="np-prev-num"  class="np-overlay font-bebas" aria-hidden="true"></div>
         </div>
@@ -146,18 +128,19 @@
   </div>
 </div>
 
-<script> window.layoutSlots = {!! json_encode($layoutSlots ?? [], JSON_NUMERIC_CHECK) !!}; window.personalizationSupported = {{ !empty($layoutSlots) ? 'true' : 'false' }}; </script>
+<script> window.layoutSlots = {!! json_encode($layoutSlots ?? [], JSON_NUMERIC_CHECK) !!}; /* define window.variantMap in server side if available: e.g. {"S":"45229263159492","M":"45229263159493"} */ </script>
+
+<!-- helper to convert numeric variant id to Shopify gid and ensure hidden is set -->
 <script>
-/* add this near the top of your existing script (once) */
 function toGidIfNeeded(v){
   if(!v) return '';
   v = v.toString().trim();
   if(v.startsWith('gid://')) return v;
+  // if it already looks like a numeric id, produce gid
   return 'gid://shopify/ProductVariant/' + v;
 }
 
 function ensureVariantGid() {
-  // take mapping from window.variantMap (if present) otherwise from hidden field
   const size = (document.getElementById('np-size')?.value || '').toString();
   let mapped = '';
   if (window.variantMap && size) {
@@ -167,16 +150,16 @@ function ensureVariantGid() {
   if(!mapped && hidden) mapped = hidden.value || '';
   const gid = toGidIfNeeded(mapped);
   if(hidden) hidden.value = gid;
+  console.log('ensureVariantGid -> selected size:', size, 'mapped:', mapped, 'final gid:', gid);
   return gid;
 }
-
 function debugVariant() {
   console.log('variantMap:', window.variantMap);
   console.log('np-variant-id (hidden):', document.getElementById('np-variant-id')?.value);
   console.log('shopify_product_id:', document.getElementById('np-shopify-product-id')?.value);
 }
-
 </script>
+
 <script>
 (function(){
   const $ = id => document.getElementById(id);
@@ -232,13 +215,10 @@ function debugVariant() {
     el.style.pointerEvents = 'none';
     el.style.zIndex = (slotKey === 'number' ? 60 : 50);
 
-    // font-size calc
     const text = (el.textContent || '').toString().trim() || (slotKey === 'number' ? '09' : 'NAME');
     const chars = Math.max(1, text.length);
     const isMobile = window.innerWidth <= 767;
-    const heightFactorName = 1.00;
-    const heightFactorNumber = isMobile ? 1.05 : 1.00;
-    const heightCandidate = Math.floor(areaHpx * (slotKey === 'number' ? heightFactorNumber : heightFactorName));
+    const heightCandidate = Math.floor(areaHpx * (slotKey === 'number' ? (isMobile?1.05:1) : 1));
     const avgCharRatio = 0.48;
     const widthCap = Math.floor((areaWpx * 0.95) / (chars * avgCharRatio));
     let numericShrink = (slotKey === 'number') ? (isMobile ? 1.0 : 0.98) : 1.0;
@@ -250,7 +230,6 @@ function debugVariant() {
     el.style.lineHeight = '1';
     el.style.fontWeight = '700';
 
-    // shrink if overflow
     let attempts = 0;
     while (el.scrollWidth > el.clientWidth && fontSize > 7 && attempts < 30) {
       fontSize = Math.max(7, Math.floor(fontSize * 0.92));
@@ -261,10 +240,8 @@ function debugVariant() {
 
   function applyLayout(){
     if (!baseImg || !baseImg.complete) return;
-    if (layout && layout.name) placeOverlay(pvName, layout.name, 'name');
-    else { pvName.style.left='50%'; pvName.style.top='45%'; pvName.style.transform='translate(-50%,-50%)'; }
-    if (layout && layout.number) placeOverlay(pvNum, layout.number, 'number');
-    else { pvNum.style.left='50%'; pvNum.style.top='65%'; pvNum.style.transform='translate(-50%,-50%)'; }
+    if (layout && layout.name) placeOverlay(pvName, layout.name, 'name'); else { pvName.style.left='50%'; pvName.style.top='45%'; pvName.style.transform='translate(-50%,-50%)'; }
+    if (layout && layout.number) placeOverlay(pvNum, layout.number, 'number'); else { pvNum.style.left='50%'; pvNum.style.top='65%'; pvNum.style.transform='translate(-50%,-50%)'; }
   }
 
   function syncPreview(){
@@ -279,15 +256,19 @@ function debugVariant() {
     if (nm) nm.value = (numEl ? (numEl.value||'') : '').replace(/\D/g,'').trim();
     if (f) f.value = fontEl ? fontEl.value : '';
     if (c) c.value = colorEl ? colorEl.value : '';
-    const size = $('np-size')?.value || '';
-    if (window.variantMap && size) $('np-variant-id').value = window.variantMap[size] || '';
+    // ensure variant updated from size whenever hidden sync runs
+    ensureVariantGid();
   }
 
-  // events
+  // events: add updateATCState calls
   if (nameEl) nameEl.addEventListener('input', ()=>{ syncPreview(); syncHidden(); updateATCState(); });
   if (numEl) numEl.addEventListener('input', e=>{ e.target.value = e.target.value.replace(/\D/g,'').slice(0,3); syncPreview(); syncHidden(); updateATCState(); });
   if (fontEl) fontEl.addEventListener('change', ()=>{ applyFont(fontEl.value); syncHidden(); syncPreview(); });
   if (colorEl) colorEl.addEventListener('input', ()=>{ if(pvName) pvName.style.color = colorEl.value; if(pvNum) pvNum.style.color = colorEl.value; syncHidden(); });
+
+  // when size changes, update variant gid and ATC state
+  const sizeEl = $('np-size');
+  sizeEl?.addEventListener('change', ()=> { ensureVariantGid(); updateATCState(); });
 
   document.querySelectorAll('.np-swatch').forEach(b=>{
     b.addEventListener('click', ()=>{
@@ -300,16 +281,17 @@ function debugVariant() {
     });
   });
 
+  // ATC state function with console debug
   function updateATCState(){
-  if(!btn) return;
-  const okName = NAME_RE.test(document.getElementById('np-name')?.value || '');
-  const okNum  = NUM_RE.test(document.getElementById('np-num')?.value || '');
-  const size = document.getElementById('np-size')?.value || '';
-  console.log('updateATCState ->', { okName, okNum, size });
-  btn.disabled = !(okName && okNum && size);
-}
+    if(!btn) return;
+    const okName = NAME_RE.test(document.getElementById('np-name')?.value || '');
+    const okNum  = NUM_RE.test(document.getElementById('np-num')?.value || '');
+    const size = document.getElementById('np-size')?.value || '';
+    console.log('updateATCState ->', { okName, okNum, size, variantHidden: document.getElementById('np-variant-id')?.value });
+    btn.disabled = !(okName && okNum && size);
+  }
 
-  // add team button
+  // add team button behaviour
   if (addTeam) addTeam.addEventListener('click', function(e){ e.preventDefault();
     const params = new URLSearchParams();
     if ($('np-product-id')?.value) params.set('product_id', $('np-product-id').value);
@@ -330,36 +312,56 @@ function debugVariant() {
   syncHidden();
   updateATCState();
 
-  // apply layout after image loaded + on resize + after fonts ready
+  // layout / font readiness
   baseImg.addEventListener('load', ()=> setTimeout(applyLayout, 80));
   window.addEventListener('resize', ()=> setTimeout(applyLayout, 80));
   window.addEventListener('orientationchange', ()=> setTimeout(applyLayout, 200));
   document.fonts?.ready.then(()=> setTimeout(applyLayout, 120));
 
-  // submit handler (html2canvas)
+  // submit handler (html2canvas + fetch)
   form?.addEventListener('submit', async function(evt){
     evt.preventDefault();
     const size = $('np-size')?.value || '';
     if (!size) { alert('Please select a size.'); return; }
     if (!(NAME_RE.test(nameEl.value||'') && NUM_RE.test(numEl.value||''))) { alert('Please enter valid Name and Number'); return; }
+
+    // sync hidden data + ensure variant gid
     syncHidden();
-    ensureVariantGid();
-    console.log('DEBUG before submit - variant_id =', document.getElementById('np-variant-id')?.value);
+    const gid = ensureVariantGid();
+    console.log('DEBUG before submit - variant_id =', document.getElementById('np-variant-id')?.value, 'shopifyProductId:', $('np-shopify-product-id')?.value);
+    debugVariant();
+
     if (btn) { btn.disabled = true; btn.textContent = 'Preparing...'; }
+
     try {
       const canvas = await html2canvas(stage, { useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1 });
       const dataUrl = canvas.toDataURL('image/png');
       $('np-preview-hidden').value = dataUrl;
+
       const fd = new FormData(form);
       const token = document.querySelector('input[name="_token"]')?.value || '';
+
+      // Debug: log what we will post (do not leave in prod if it leaks sensitive data)
+      console.log('Submitting add-to-cart form; formData keys:');
+      for (const k of fd.keys()) console.log(k, fd.get(k));
+
       const resp = await fetch(form.action, { method: 'POST', body: fd, credentials: 'same-origin', headers: { 'X-CSRF-TOKEN': token, 'Accept':'application/json' } });
       if (resp.redirected) { window.location.href = resp.url; return; }
       const data = await resp.json().catch(()=>null);
-      if (!resp.ok) { alert((data && (data.error||data.message)) || 'Add to cart failed'); return; }
+      console.log('AddToCart response:', resp.status, data);
+
+      if (!resp.ok) {
+        alert((data && (data.error||data.message)) || 'Add to cart failed');
+        return;
+      }
       if (data && data.checkoutUrl) { window.location.href = data.checkoutUrl; return; }
       alert('Added to cart.');
-    } catch(err) { console.error(err); alert('Something went wrong'); }
-    finally { if (btn) { btn.disabled = false; btn.textContent = 'Add to Cart'; } }
+    } catch(err) {
+      console.error('ATC exception', err);
+      alert('Something went wrong. See console for details');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Add to Cart'; }
+    }
   });
 
 })();
