@@ -306,14 +306,65 @@ function debugVariant(){
 
   // ATC state function with console debug
   function updateATCState(){
-    if(!btn) return;
-    const okName = NAME_RE.test(document.getElementById('np-name')?.value || '');
-    const okNum  = NUM_RE.test(document.getElementById('np-num')?.value || '');
-    const size = document.getElementById('np-size')?.value || '';
-    const gid = ensureVariantGid();
-    console.log('updateATCState ->', { okName, okNum, size, gid });
-    btn.disabled = !(okName && okNum && size && gid);
+  const btn = document.getElementById('np-atc-btn');
+  if(!btn) return;
+  const name = (document.getElementById('np-name')?.value || '').toString();
+  const num  = (document.getElementById('np-num')?.value || '').toString();
+  const size = (document.getElementById('np-size')?.value || '').toString();
+
+  const okName = /^[A-Za-z ]{1,12}$/.test(name);
+  const okNum  = /^\d{1,3}$/.test(num);
+
+  // ensure variant gid recalculated now
+  let gid = '';
+  try {
+    gid = (typeof ensureVariantGid === 'function') ? ensureVariantGid() : (document.getElementById('np-variant-id')?.value || '');
+  } catch(e) {
+    gid = document.getElementById('np-variant-id')?.value || '';
   }
+
+  // Debug
+  console.log('updateATCState ->', { okName, okNum, size, gid });
+
+  // enable only when all conditions satisfied
+  btn.disabled = !(okName && okNum && size && gid);
+}
+
+// Ensure listeners call updateATCState everywhere
+(function attachATCListeners(){
+  const inputs = ['np-name','np-num','np-size','np-font','np-color'];
+  inputs.forEach(id=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    const ev = (id==='np-size' || id==='np-font') ? 'change' : 'input';
+    el.addEventListener(ev, function(){
+      // keep preview & hidden sync behavior consistent
+      try { if(id === 'np-name') { /* nothing */ } } catch(e) {}
+      // recalc layout/hidden where needed
+      if (id === 'np-name' || id === 'np-num') { syncPreview(); syncHidden(); }
+      if (id === 'np-font') { applyFont(el.value); syncHidden(); syncPreview(); }
+      if (id === 'np-color') { if(document.getElementById('np-prev-name')) document.getElementById('np-prev-name').style.color = el.value; if(document.getElementById('np-prev-num')) document.getElementById('np-prev-num').style.color = el.value; syncHidden(); }
+      if (id === 'np-size') { ensureVariantGid(); }
+      // finally update button state
+      setTimeout(updateATCState, 20);
+    });
+  });
+
+  // swatches
+  document.querySelectorAll('.np-swatch').forEach(b => b.addEventListener('click', function(){
+    document.querySelectorAll('.np-swatch').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    const colorEl = document.getElementById('np-color');
+    if(colorEl) colorEl.value = b.dataset.color;
+    if(document.getElementById('np-prev-name')) document.getElementById('np-prev-name').style.color = b.dataset.color;
+    if(document.getElementById('np-prev-num')) document.getElementById('np-prev-num').style.color = b.dataset.color;
+    syncHidden();
+    setTimeout(updateATCState, 20);
+  }));
+
+  // run initial state calc
+  setTimeout(updateATCState, 60);
+})();
 
   // add team button behaviour
   if (addTeam) addTeam.addEventListener('click', function(e){ e.preventDefault();
