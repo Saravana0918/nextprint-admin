@@ -130,30 +130,53 @@
 
 <script> window.layoutSlots = {!! json_encode($layoutSlots ?? [], JSON_NUMERIC_CHECK) !!}; /* define window.variantMap in server side if available: e.g. {"S":"45229263159492","M":"45229263159493"} */ </script>
 
-<!-- helper to convert numeric variant id to Shopify gid and ensure hidden is set -->
+<!-- Inject server-side variant map (controller must pass $variantMap) -->
+<script>
+  window.variantMap = {!! json_encode($variantMap ?? [], JSON_UNESCAPED_SLASHES) !!};
+  console.log('Injected variantMap:', window.variantMap);
+</script>
+
+<!-- Robust helpers: convert ids, normalize, ensure gid -->
 <script>
 function toGidIfNeeded(v){
   if(!v) return '';
   v = v.toString().trim();
   if(v.startsWith('gid://')) return v;
-  // if it already looks like a numeric id, produce gid
-  return 'gid://shopify/ProductVariant/' + v;
+  const numeric = v.replace(/[^\d]/g,'');
+  if(!numeric) return '';
+  return 'gid://shopify/ProductVariant/' + numeric;
 }
 
-function ensureVariantGid() {
+function stripGid(v){
+  if(!v) return '';
+  v = v.toString().trim();
+  if(v.includes('/')) {
+    const parts = v.split('/');
+    return parts[parts.length-1] || '';
+  }
+  return v;
+}
+
+function ensureVariantGid(){
   const size = (document.getElementById('np-size')?.value || '').toString();
   let mapped = '';
   if (window.variantMap && size) {
-    mapped = window.variantMap[size] || window.variantMap[size.toUpperCase()] || '';
+    mapped = window.variantMap[size] || window.variantMap[size.toUpperCase()] || window.variantMap[size.toLowerCase()] || '';
+  }
+  if(mapped && mapped.toString().startsWith('gid://')){
+    mapped = stripGid(mapped);
   }
   const hidden = document.getElementById('np-variant-id');
-  if(!mapped && hidden) mapped = hidden.value || '';
-  const gid = toGidIfNeeded(mapped);
+  let fallback = hidden ? hidden.value : '';
+  if (fallback && fallback.startsWith('gid://')) fallback = stripGid(fallback);
+  const finalNumeric = mapped || fallback || '';
+  const gid = toGidIfNeeded(finalNumeric);
   if(hidden) hidden.value = gid;
-  console.log('ensureVariantGid -> selected size:', size, 'mapped:', mapped, 'final gid:', gid);
+  console.log('ensureVariantGid -> size:', size, 'mapped:', mapped, 'fallback:', fallback, 'finalNumeric:', finalNumeric, 'finalGid:', gid);
   return gid;
 }
-function debugVariant() {
+
+function debugVariant(){
   console.log('variantMap:', window.variantMap);
   console.log('np-variant-id (hidden):', document.getElementById('np-variant-id')?.value);
   console.log('shopify_product_id:', document.getElementById('np-shopify-product-id')?.value);
@@ -287,8 +310,9 @@ function debugVariant() {
     const okName = NAME_RE.test(document.getElementById('np-name')?.value || '');
     const okNum  = NUM_RE.test(document.getElementById('np-num')?.value || '');
     const size = document.getElementById('np-size')?.value || '';
-    console.log('updateATCState ->', { okName, okNum, size, variantHidden: document.getElementById('np-variant-id')?.value });
-    btn.disabled = !(okName && okNum && size);
+    const gid = ensureVariantGid();
+    console.log('updateATCState ->', { okName, okNum, size, gid });
+    btn.disabled = !(okName && okNum && size && gid);
   }
 
   // add team button behaviour
