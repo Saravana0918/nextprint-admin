@@ -11,10 +11,11 @@ use App\Models\Product;
 use App\Http\Controllers\ShopifyCartController;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 class TeamController extends Controller
 {
-    public function create(Request $request)
+public function create(Request $request)
 {
     $productId = $request->query('product_id');
     $product = null;
@@ -22,7 +23,7 @@ class TeamController extends Controller
         $product = Product::find($productId);
     }
 
-    // prefill from query (existing)
+    // prefill values (unchanged)
     $prefill = [
         'name'   => $request->query('prefill_name', ''),
         'number' => $request->query('prefill_number', ''),
@@ -31,92 +32,68 @@ class TeamController extends Controller
         'size'   => $request->query('prefill_size', ''),
     ];
 
-    // default fallback layoutSlots (safe fallback if we can't find area data)
+    // default slots (fallback)
     $defaultLayout = [
         'name' => ['left_pct'=>67, 'top_pct'=>18, 'width_pct'=>22, 'height_pct'=>8, 'rotation'=>0],
         'number' => ['left_pct'=>62, 'top_pct'=>48, 'width_pct'=>30, 'height_pct'=>18, 'rotation'=>0]
     ];
 
-    // If no product, just return view with prefill and default layout
     if (!$product) {
         return view('team.create', [
-            'product' => $product,
+            'product' => null,
             'prefill' => $prefill,
             'layoutSlots' => $defaultLayout
         ]);
     }
 
-    // STEP 1: attempt to locate decoration area row for this product
-    $area = null;
+    // STEP A: fetch candidate decoration areas for this product
+    $areas = collect();
 
-    // 1a) If product model has a relation like areas or decorationAreas, try it
+    // A1: try model relation if exists
     try {
         if (method_exists($product, 'areas')) {
-            $rel = $product->areas()->get();
-            if ($rel->count()) {
-                // prefer area with handle/back-like name if available
-                $area = $rel->firstWhere('handle', 'back') ?? $rel->first();
-            }
+            $areas = $product->areas()->get();
         } elseif (method_exists($product, 'decorationAreas')) {
-            $rel = $product->decorationAreas()->get();
-            if ($rel->count()) {
-                $area = $rel->firstWhere('handle', 'back') ?? $rel->first();
-            }
+            $areas = $product->decorationAreas()->get();
         }
     } catch (\Throwable $e) {
-        // ignore relation errors
-        Log::debug('TeamController.create: relation check failed: '.$e->getMessage());
+        Log::debug('Team.create: product relation read failed: ' . $e->getMessage());
     }
 
-    // 1b) If not found, try common DB tables (adaptive)
-    if (!$area) {
-        $possibleTables = ['product_areas','product_view_areas','view_areas','areas','decoration_areas'];
-        foreach ($possibleTables as $tbl) {
+    // A2: fallback to common tables if relation returned nothing
+    if ($areas->isEmpty()) {
+        $candidateTables = ['product_areas','product_view_areas','view_areas','areas','decoration_areas'];
+        foreach ($candidateTables as $tbl) {
             try {
-                if (Schema::hasTable($tbl)) {
-                    // look for a row matching the product id (or view_id)
-                    $row = DB::table($tbl)
-                        ->where(function($q) use ($product) {
-                            // try product_id column if exists
-                            $cols = Schema::getColumnListing(DB::getTablePrefix() . 'product_areas');
-                            // (we'll attempt generic queries; some tables may store product_id or product_view_id)
-                        })
-                        ->where(function($q) use ($product, $tbl) {
-                            // Try product_id column if present
-                            if (Schema::hasColumn($tbl, 'product_id')) {
-                                $q->orWhere('product_id', $product->id);
-                            }
-                            // Try product_view_id or view_id fallback
-                            if (Schema::hasColumn($tbl, 'product_view_id')) {
-                                $q->orWhere('product_view_id', $product->id);
-                            }
-                            if (Schema::hasColumn($tbl, 'view_id')) {
-                                $q->orWhere('view_id', $product->id);
-                            }
-                        })
-                        ->first();
-                    if ($row) { $area = $row; break; }
+                if (!Schema::hasTable($tbl)) continue;
+                // build query dynamically depending on available columns
+                $q = DB::table($tbl);
+                if (Schema::hasColumn($tbl, 'product_id')) {
+                    $q->where('product_id', $product->id);
+                } elseif (Schema::hasColumn($tbl, 'product_view_id')) {
+                    $q->where('product_view_id', $product->id);
+                } elseif (Schema::hasColumn($tbl, 'view_id')) {
+                    $q->where('view_id', $product->id);
+                } else {
+                    // try generic match by product id column name presence elsewhere
+                    $q->whereRaw('1 = 0'); // no-op to avoid accidental large selects
+                }
+
+                $rows = $q->get();
+                if ($rows && $rows->count() > 0) {
+                    $areas = collect($rows);
+                    break;
                 }
             } catch (\Throwable $e) {
-                // swallow table checking errors, continue
+                // ignore and continue
             }
         }
     }
 
-    // 1c) If still nothing, attempt to find any area rows by product id in DB (last resort)
-    if (!$area) {
-        try {
-            $area = DB::table('product_areas')->where('product_id', $product->id)->first();
-        } catch (\Throwable $e) {
-            // ignore
-        }
-    }
+    // STEP B: determine image original dims (prefer stored fields)
+    $imgW = $product->image_width ?? $product->orig_width ?? $product->width ?? null;
+    $imgH = $product->image_height ?? $product->orig_height ?? $product->height ?? null;
 
-    // STEP 2: determine image original dimensions (prefer product fields if available)
-    $imgW = $product->image_width ?? $product->orig_width ?? null;
-    $imgH = $product->image_height ?? $product->orig_height ?? null;
-
-    // If not present, try to fetch via getimagesize from the stored URL (works if accessible and not blocked)
     if (empty($imgW) || empty($imgH)) {
         try {
             $imgUrl = $product->image_url ?? $product->preview_src ?? null;
@@ -128,74 +105,183 @@ class TeamController extends Controller
                 }
             }
         } catch (\Throwable $e) {
-            // swallow
+            // ignore
         }
     }
 
-    // final fallback
     if (empty($imgW) || empty($imgH)) {
         $imgW = 1200;
         $imgH = 800;
     }
 
-    // STEP 3: compute layoutSlots from $area if found
+    // STEP C: build layoutSlots based on detected areas (prefer 'back' handle/name)
     $layoutSlots = $defaultLayout;
 
-    if ($area) {
-        // area might already have percent columns or pixel columns.
-        // Common column names: x, y, width, height OR left_pct, top_pct, width_pct, height_pct
-        $hasPercent = (property_exists($area, 'left_pct') && property_exists($area, 'top_pct'))
-                      || (isset($area->left_pct) && isset($area->top_pct));
-
-        if ($hasPercent) {
-            // use stored percents directly
-            $left = floatval($area->left_pct);
-            $top  = floatval($area->top_pct);
-            $wPct = floatval($area->width_pct ?? $area->w_pct ?? $area->width_percent ?? $area->width ?? 30);
-            $hPct = floatval($area->height_pct ?? $area->h_pct ?? $area->height_percent ?? $area->height ?? 20);
-        } else {
-            // assume pixel coords exist: x,y,width,height (or left,top,w,h)
-            $x = $area->x ?? $area->left ?? $area->px_x ?? null;
-            $y = $area->y ?? $area->top ?? $area->px_y ?? null;
-            $w = $area->width ?? $area->w ?? $area->px_w ?? null;
-            $h = $area->height ?? $area->h ?? $area->px_h ?? null;
-
-            if ($x !== null && $y !== null && $w !== null && $h !== null) {
-                $left = ($x / $imgW) * 100;
-                $top  = ($y / $imgH) * 100;
-                $wPct = ($w / $imgW) * 100;
-                $hPct = ($h / $imgH) * 100;
-            } else {
-                // if unknown shape, fallback to center/back region heuristics
-                $left = 60; $top = 30; $wPct = 30; $hPct = 40;
+    if ($areas->isNotEmpty()) {
+        // prefer explicit 'back' area by handle/name if present
+        $backArea = $areas->first(function($a) {
+            $nameKeys = ['handle','name','area_name','key','label'];
+            foreach ($nameKeys as $k) {
+                if (isset($a->$k) && is_string($a->$k) && stripos($a->$k, 'back') !== false) return true;
             }
+            return false;
+        });
+
+        // if no labelled back area, pick two areas: top-most (smaller y) => name, bottom-most => number
+        if (!$backArea) {
+            // if dataset contains multiple boxes, choose two by Y coordinate
+            // normalize to objects with numeric top (y) if available
+            $withCoords = $areas->map(function($a) {
+                // prefer percent fields if available
+                $left_pct = $a->left_pct ?? $a->x_pct ?? null;
+                $top_pct  = $a->top_pct  ?? $a->y_pct ?? null;
+                $w_pct    = $a->width_pct ?? $a->w_pct ?? null;
+                $h_pct    = $a->height_pct ?? $a->h_pct ?? null;
+
+                // pixel fields
+                $x = $a->x ?? $a->left ?? $a->px_x ?? null;
+                $y = $a->y ?? $a->top ?? $a->px_y ?? null;
+                $w = $a->width ?? $a->w ?? $a->px_w ?? null;
+                $h = $a->height ?? $a->h ?? $a->px_h ?? null;
+
+                return (object)[
+                    'raw' => $a,
+                    'left_pct'  => $left_pct !== null ? floatval($left_pct) : null,
+                    'top_pct'   => $top_pct  !== null ? floatval($top_pct)  : null,
+                    'width_pct' => $w_pct    !== null ? floatval($w_pct)    : null,
+                    'height_pct'=> $h_pct    !== null ? floatval($h_pct)    : null,
+                    'x' => $x !== null ? floatval($x) : null,
+                    'y' => $y !== null ? floatval($y) : null,
+                    'w' => $w !== null ? floatval($w) : null,
+                    'h' => $h !== null ? floatval($h) : null,
+                ];
+            });
+
+            // try to compute top in percent for sorting
+            $withCoords = $withCoords->map(function($o) use ($imgW, $imgH) {
+                if ($o->top_pct === null) {
+                    if ($o->y !== null) $o->top_pct = ($o->y / $imgH) * 100;
+                    else $o->top_pct = null;
+                }
+                return $o;
+            });
+
+            // filter out those without any top info
+            $cand = $withCoords->filter(function($o){ return $o->top_pct !== null; });
+
+            if ($cand->count() >= 2) {
+                // sort by top_pct ascending -> top boxes first
+                $sorted = $cand->sortBy('top_pct')->values();
+                $upper = $sorted->first();
+                $lower = $sorted->last();
+                $areasForSlots = [$upper, $lower];
+            } else {
+                // fallback: use the single area we have for both name & number with heuristics
+                $single = $withCoords->first();
+                $areasForSlots = [$single, $single];
+            }
+        } else {
+            // backArea found: use it and split into name/number internally
+            $areasForSlots = [ (object)['raw' => $backArea] , (object)['raw' => $backArea] ];
         }
 
-        // Build two slots inside this area: name (upper) and number (lower)
-        $centerX = $left + ($wPct * 0.5);
-        $nameTop = $top + ($hPct * 0.20);   // top 20% area for name
-        $numTop  = $top + ($hPct * 0.62);   // lower 62% area for number
+        // compute percent values for the bounding area(s)
+        // prefer reading percents if present, otherwise convert pixels -> percents using imgW/imgH
+        $prepareSlotFrom = function($entry) use ($imgW, $imgH) {
+            $raw = $entry->raw;
+            // detect percent fields
+            if (isset($raw->left_pct) && isset($raw->top_pct) && isset($raw->width_pct) && isset($raw->height_pct)) {
+                return [
+                    'left' => floatval($raw->left_pct),
+                    'top'  => floatval($raw->top_pct),
+                    'w'    => floatval($raw->width_pct),
+                    'h'    => floatval($raw->height_pct)
+                ];
+            }
+            // else if pixel fields
+            $x = $raw->x ?? $raw->left ?? $raw->px_x ?? null;
+            $y = $raw->y ?? $raw->top ?? $raw->px_y ?? null;
+            $w = $raw->width ?? $raw->w ?? $raw->px_w ?? null;
+            $h = $raw->height ?? $raw->h ?? $raw->px_h ?? null;
 
-        $layoutSlots = [
-            'name' => [
-                'left_pct'  => round($centerX, 3),
-                'top_pct'   => round($nameTop, 3),
-                'width_pct' => round(max(8, $wPct * 0.88), 3),
-                'height_pct'=> round(max(6, $hPct * 0.22), 3),
-                'rotation'  => 0
-            ],
-            'number' => [
-                'left_pct'  => round($centerX, 3),
-                'top_pct'   => round($numTop, 3),
-                'width_pct' => round(max(8, $wPct * 0.94), 3),
-                'height_pct'=> round(max(8, $hPct * 0.36), 3),
-                'rotation'  => 0
-            ]
-        ];
-    }
+            if ($x !== null && $y !== null && $w !== null && $h !== null) {
+                return [
+                    'left' => ($x / $imgW) * 100,
+                    'top'  => ($y / $imgH) * 100,
+                    'w'    => ($w / $imgW) * 100,
+                    'h'    => ($h / $imgH) * 100
+                ];
+            }
 
-    // Debug logging (optional, remove in production)
-    Log::debug('Team.create layoutSlots', ['product_id' => $product->id ?? null, 'layoutSlots' => $layoutSlots, 'imgW' => $imgW, 'imgH' => $imgH]);
+            // no clear coords -> fallback
+            return [ 'left' => 60, 'top' => 30, 'w' => 30, 'h' => 40 ];
+        };
+
+        // compute a merged area if both upper & lower are same (split)
+        $upperSrc = $areasForSlots[0];
+        $lowerSrc = $areasForSlots[1];
+
+        $upperArea = $prepareSlotFrom($upperSrc);
+        $lowerArea = $prepareSlotFrom($lowerSrc);
+
+        // If both came from same area, we'll split vertically: name top 20%, number bottom 36% (tweakable)
+        if ($upperSrc === $lowerSrc) {
+            $left = $upperArea['left'];
+            $top = $upperArea['top'];
+            $wPct = $upperArea['w'];
+            $hPct = $upperArea['h'];
+
+            $centerX = $left + ($wPct * 0.5);
+            $nameTop = $top + ($hPct * 0.18);
+            $numTop  = $top + ($hPct * 0.62);
+
+            $layoutSlots = [
+                'name' => [
+                    'left_pct'  => round($centerX, 3),
+                    'top_pct'   => round($nameTop, 3),
+                    'width_pct' => round(max(8, $wPct * 0.88), 3),
+                    'height_pct'=> round(max(6, $hPct * 0.22), 3),
+                    'rotation'  => 0
+                ],
+                'number' => [
+                    'left_pct'  => round($centerX, 3),
+                    'top_pct'   => round($numTop, 3),
+                    'width_pct' => round(max(8, $wPct * 0.94), 3),
+                    'height_pct'=> round(max(8, $hPct * 0.36), 3),
+                    'rotation'  => 0
+                ]
+            ];
+        } else {
+            // If two distinct boxes (upper & lower), compute center for each
+            $centerUpperX = $upperArea['left'] + ($upperArea['w'] * 0.5);
+            $centerLowerX = $lowerArea['left'] + ($lowerArea['w'] * 0.5);
+
+            $layoutSlots = [
+                'name' => [
+                    'left_pct'  => round($centerUpperX, 3),
+                    'top_pct'   => round($upperArea['top'] + ($upperArea['h'] * 0.18), 3),
+                    'width_pct' => round(max(8, $upperArea['w'] * 0.9), 3),
+                    'height_pct'=> round(max(6, $upperArea['h'] * 0.28), 3),
+                    'rotation'  => 0
+                ],
+                'number' => [
+                    'left_pct'  => round($centerLowerX, 3),
+                    'top_pct'   => round($lowerArea['top'] + ($lowerArea['h'] * 0.45), 3),
+                    'width_pct' => round(max(8, $lowerArea['w'] * 0.9), 3),
+                    'height_pct'=> round(max(8, $lowerArea['h'] * 0.5), 3),
+                    'rotation'  => 0
+                ]
+            ];
+        }
+    } // end areas->isNotEmpty()
+
+    // debug
+    Log::debug('Team.create computed layoutSlots', [
+        'product_id' => $product->id ?? null,
+        'imgW' => $imgW, 'imgH' => $imgH,
+        'layoutSlots' => $layoutSlots,
+        'foundAreasCount' => $areas->count()
+    ]);
 
     return view('team.create', [
         'product' => $product,
@@ -203,7 +289,6 @@ class TeamController extends Controller
         'layoutSlots' => $layoutSlots
     ]);
 }
-
     public function store(Request $request)
     {
         $data = $request->validate([
