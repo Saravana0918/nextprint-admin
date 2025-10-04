@@ -9,28 +9,68 @@
   $layoutSlots = $layoutSlots ?? null;
 @endphp
 
+<!-- copy same stage CSS as designer so measurements match exactly -->
+<style>
+  /* fonts (ensure same families as designer) */
+  .font-bebas{font-family:'Bebas Neue', Impact, 'Arial Black', sans-serif;}
+  .font-anton{font-family:'Anton', Impact, 'Arial Black', sans-serif;}
+  .font-oswald{font-family:'Oswald', Arial, sans-serif;}
+  .font-impact{font-family:Impact, 'Arial Black', sans-serif;}
+
+  /* match designer stage exactly */
+  .np-stage { position: relative; width: 100%; max-width: 534px; margin: 0 auto; background:#fff; border-radius:8px; padding:8px; min-height: 320px; box-sizing: border-box; overflow: visible; }
+  .np-stage img { width:100%; height:auto; border-radius:6px; display:block; }
+
+  /* overlay styling (same as designer) */
+  .np-overlay {
+    position: absolute;
+    color: #D4AF37;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    text-align: center;
+    text-shadow: 0 3px 10px rgba(0,0,0,0.65);
+    pointer-events: none;
+    white-space: nowrap;
+    line-height: 1;
+    transform-origin: center center;
+    z-index: 9999;
+  }
+
+  /* responsive rules - same breakpoints as designer */
+  @media (max-width: 767px) {
+    /* mobile look from designer - keep stage width fixed so overlay mapping predictable */
+    .np-stage { width: 320px !important; height: 420px !important; }
+    .np-stage img { width: 320px !important; height: 420px !important; object-fit: contain !important; }
+  }
+
+  /* page specific layout */
+  .main-flex { align-items: flex-start; }
+  @media (max-width: 991px) {
+    .main-flex { flex-direction: column !important; }
+    .preview-col { order: 1; width: 100% !important; margin-bottom: 1rem; }
+    .form-col { order: 2; width: 100% !important; }
+  }
+</style>
+
 <div class="container py-4">
   <div class="d-flex align-items-start gap-4 main-flex">
-    <!-- PREVIEW COLUMN -->
+    <!-- PREVIEW COLUMN (uses designer-like .np-stage) -->
     <div class="preview-col" style="width:534px; flex-shrink:0;">
       <div class="card">
         <div class="card-body text-center" style="position:relative;">
-          <div id="player-stage" class="np-stage" style="position:relative; display:inline-block; width:100%;">
+          <div id="player-stage" class="np-stage" aria-hidden="false">
             <img id="player-base"
                  src="{{ $img }}"
                  alt="{{ $product->name ?? 'Product' }}"
-                 onerror="this.onerror=null;this.src='{{ asset('images/placeholder.png') }}'"
-                 style="width:100%; height:auto; display:block; object-fit:contain;">
+                 crossorigin="anonymous"
+                 onerror="this.onerror=null;this.src='{{ asset('images/placeholder.png') }}'">
 
-            <!-- overlays -->
-            <div id="overlay-name" class="np-overlay" aria-hidden="true"
-                 style="font-weight:800; color:#D4AF37; z-index:30; text-transform:uppercase; pointer-events:none;">
-              NAME
-            </div>
-            <div id="overlay-number" class="np-overlay" aria-hidden="true"
-                 style="font-weight:900; color:#D4AF37; z-index:35; text-transform:uppercase; pointer-events:none;">
-              NUMBER
-            </div>
+            <div id="overlay-name" class="np-overlay font-bebas" aria-hidden="true"
+                 style="z-index:30; pointer-events:none; font-weight:800;">NAME</div>
+
+            <div id="overlay-number" class="np-overlay font-bebas" aria-hidden="true"
+                 style="z-index:35; pointer-events:none; font-weight:900;">NUMBER</div>
           </div>
 
           <h5 class="card-title mt-3">{{ $product->name ?? 'Product' }}</h5>
@@ -57,9 +97,7 @@
           <a href="{{ url()->previous() }}" class="btn btn-secondary">Back</a>
         </div>
 
-        <div id="players-list" class="mb-4">
-          <!-- JS inserts rows here -->
-        </div>
+        <div id="players-list" class="mb-4"></div>
 
         <input type="hidden" id="team-preview-data" name="team_preview_data" value="">
       </form>
@@ -73,20 +111,15 @@
   window.layoutSlots = {!! json_encode($layoutSlots ?? [], JSON_NUMERIC_CHECK) !!};
 </script>
 
+<!-- row template (same as you had) -->
 <template id="player-row-template">
   <div class="card mb-2 p-2 player-row">
     <div class="d-flex gap-2 align-items-start row-controls">
       <input name="players[][number]" class="form-control w-25 player-number" placeholder="00" maxlength="3" inputmode="numeric" />
       <input name="players[][name]" class="form-control player-name" placeholder="PLAYER NAME" maxlength="12" />
       <select name="players[][size]" class="form-select w-25 player-size">
-        <option value="">Size</option>
-        <option value="XS">XS</option>
-        <option value="S">S</option>
-        <option value="M">M</option>
-        <option value="L">L</option>
-        <option value="XL">XL</option>
+        <option value="">Size</option><option value="XS">XS</option><option value="S">S</option><option value="M">M</option><option value="L">L</option><option value="XL">XL</option>
       </select>
-
       <input type="hidden" name="players[][font]" class="player-font">
       <input type="hidden" name="players[][color]" class="player-color">
       <button type="button" class="btn btn-danger btn-remove">Remove</button>
@@ -94,55 +127,6 @@
     </div>
   </div>
 </template>
-
-<style>
-  /* match designer stage styles so positioning calculations match */
-  .np-stage {
-    position: relative;
-    width: 100%;
-    max-width: 534px;
-    margin: 0 auto;
-    background: #fff;
-    border-radius: 8px;
-    padding: 8px;          /* IMPORTANT: same inner padding as designer */
-    min-height: 320px;
-    box-sizing: border-box;
-    overflow: visible;
-  }
-  .np-stage img { width:100%; height:auto; border-radius:6px; display:block; object-fit:contain; }
-
-  /* base overlay helper */
-  .np-overlay {
-    position: absolute;
-    text-align: center;
-    white-space: nowrap;
-    line-height: 1;
-    transform-origin: center center;
-    pointer-events: none;
-  }
-
-  /* responsive layout: force same mobile stage size as designer */
-  @media (max-width: 991px) {
-    .main-flex { flex-direction: column !important; }
-    .preview-col { order: 1; width: 100% !important; margin-bottom: 1rem; }
-    .form-col { order: 2; width: 100% !important; }
-
-    /* force the same mobile stage / image dimensions as designer so overlay mapping is identical */
-    #player-stage, .np-stage {
-      width: 320px !important;
-      height: 420px !important;
-      margin: 0 auto 1rem !important;
-      padding: 8px !important;
-    }
-    #player-base, .np-stage img {
-      width: 320px !important;
-      height: 420px !important;
-      object-fit: contain !important;
-    }
-  }
-
-  .player-row.preview-active { box-shadow: 0 0 0 3px rgba(20,120,220,0.08); border-color: rgba(20,120,220,0.12); }
-</style>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -165,28 +149,29 @@ document.addEventListener('DOMContentLoaded', function() {
                  };
 
   function computeStageSize(stage, img) {
-    if(!stage || !img) return null;
+    if (!stage || !img) return null;
     const stageRect = stage.getBoundingClientRect();
     const imgRect = img.getBoundingClientRect();
     return {
       offsetLeft: Math.round(imgRect.left - stageRect.left),
       offsetTop: Math.round(imgRect.top - stageRect.top),
-      imgW: Math.max(1, imgRect.width), imgH: Math.max(1, imgRect.height),
-      stageW: Math.max(1, stageRect.width), stageH: Math.max(1, stageRect.height)
+      imgW: Math.max(1, imgRect.width),
+      imgH: Math.max(1, imgRect.height),
+      stageW: Math.max(1, stageRect.width),
+      stageH: Math.max(1, stageRect.height)
     };
   }
 
   function placeOverlay(el, slot, slotKey) {
-    if(!el || !slot) return;
+    if (!el || !slot) return;
     const s = computeStageSize(stageEl, imgEl);
-    if(!s) return;
+    if (!s) return;
 
     const centerX = Math.round(s.offsetLeft + ((slot.left_pct||50)/100) * s.imgW + ((slot.width_pct||0)/200) * s.imgW);
     const centerY = Math.round(s.offsetTop  + ((slot.top_pct||50)/100)  * s.imgH + ((slot.height_pct||0)/200) * s.imgH);
     const areaWpx = Math.max(8, Math.round(((slot.width_pct||10)/100) * s.imgW));
     const areaHpx = Math.max(8, Math.round(((slot.height_pct||10)/100) * s.imgH));
 
-    el.style.position = 'absolute';
     el.style.left = centerX + 'px';
     el.style.top  = centerY + 'px';
     el.style.width = areaWpx + 'px';
@@ -201,7 +186,7 @@ document.addEventListener('DOMContentLoaded', function() {
     el.style.boxSizing = 'border-box';
     el.style.padding = '0 6px';
 
-    // font sizing
+    // font sizing logic (same as designer)
     const txt = (el.textContent || '').toString().trim() || (slotKey === 'number' ? '09' : 'NAME');
     const chars = Math.max(1, txt.length);
     const isMobile = window.innerWidth <= 767;
@@ -215,6 +200,7 @@ document.addEventListener('DOMContentLoaded', function() {
     el.style.fontSize = fs + 'px';
     el.style.lineHeight = '1';
     el.style.fontWeight = '700';
+
     let attempts = 0;
     while (el.scrollWidth > el.clientWidth && fs > 7 && attempts < 30) {
       fs = Math.max(7, Math.floor(fs * 0.92));
@@ -226,11 +212,11 @@ document.addEventListener('DOMContentLoaded', function() {
   function applyLayout() {
     if (!imgEl || !imgEl.complete) return;
 
-    // apply prefill text
+    // prefill text
     if (pf.prefill_name || pf.name) ovName.textContent = (pf.prefill_name || pf.name || '').toString().toUpperCase();
     if (pf.prefill_number || pf.number) ovNum.textContent = (pf.prefill_number || pf.number || '').toString().replace(/\D/g,'').slice(0,3);
 
-    // apply prefill font & color if present
+    // prefill font & color
     if (pf.prefill_font || pf.font) {
       const map = {bebas: "Bebas Neue, sans-serif", oswald: "Oswald, sans-serif", anton: "Anton, sans-serif", impact: "Impact, Arial"};
       const key = (pf.prefill_font || pf.font).toString().toLowerCase();
@@ -246,52 +232,22 @@ document.addEventListener('DOMContentLoaded', function() {
     placeOverlay(ovNum, layout.number, 'number');
   }
 
-  // debug helper (run in console)
+  // debug helper: open console and call teamOverlayDebug()
   window.teamOverlayDebug = function() {
     console.log('layoutSlots', layout);
     console.log('stageRect', stageEl?.getBoundingClientRect(), 'imgRect', imgEl?.getBoundingClientRect());
     console.log('compute', computeStageSize(stageEl, imgEl));
   };
 
-  /* ===== ensure mobile stage/img sizes match designer and re-run layout ===== */
-  function adjustStageForViewport() {
-    try {
-      const vw = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
-      if (vw <= 991) {
-        const w = (vw <= 420) ? 280 : 320;
-        const h = (vw <= 420) ? 380 : 420;
-        stageEl.style.width = w + 'px';
-        stageEl.style.height = h + 'px';
-        imgEl.style.width = w + 'px';
-        imgEl.style.height = h + 'px';
-        stageEl.style.padding = '8px';
-      } else {
-        stageEl.style.width = '';
-        stageEl.style.height = '';
-        imgEl.style.width = '';
-        imgEl.style.height = '';
-        stageEl.style.padding = '';
-      }
-    } catch (e) {
-      console.warn('adjustStageForViewport error', e);
-    }
-  }
-
-  // call adjust & layout at key times
-  function runAdjustAndLayout(delay = 120) {
-    adjustStageForViewport();
-    setTimeout(()=> { if (typeof applyLayout === 'function') applyLayout(); }, delay);
-  }
-
+  // trigger layout at right times
   if (imgEl) {
-    if (imgEl.complete) runAdjustAndLayout(100);
-    else imgEl.addEventListener('load', ()=> runAdjustAndLayout(100));
+    if (imgEl.complete) setTimeout(applyLayout, 80);
+    else imgEl.addEventListener('load', ()=> setTimeout(applyLayout, 80));
   }
-  window.addEventListener('resize', ()=> runAdjustAndLayout(140));
-  window.addEventListener('orientationchange', ()=> runAdjustAndLayout(220));
-  document.fonts?.ready.then(()=> runAdjustAndLayout(140));
+  window.addEventListener('resize', ()=> setTimeout(applyLayout, 120));
+  document.fonts?.ready.then(()=> setTimeout(applyLayout, 120));
 
-  /* ===== rows & preview wiring (unchanged behaviour) ===== */
+  /* ===== rows & preview wiring (unchanged) ===== */
   function enforceLimits(input) {
     if (!input) return;
     if (input.classList.contains('player-number')) {
@@ -309,13 +265,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const last = rows[rows.length - 1];
     const numEl = last.querySelector('.player-number');
     const nameEl = last.querySelector('.player-name');
-    const sizeEl = last.querySelector('.player-size');
     const fontHidden = last.querySelector('.player-font');
     const colorHidden = last.querySelector('.player-color');
 
     if (vals.number) numEl.value = vals.number;
     if (vals.name) nameEl.value = vals.name;
-    if (vals.size) sizeEl.value = vals.size;
     if (vals.font) fontHidden.value = vals.font;
     if (vals.color) colorHidden.value = vals.color;
 
@@ -323,9 +277,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     last.querySelector('.btn-remove').addEventListener('click', ()=> {
       last.remove();
-      if (!list.querySelector('.player-row')) {
-        ovName.textContent = ''; ovNum.textContent = ''; applyLayout();
-      }
+      if (!list.querySelector('.player-row')) { ovName.textContent = ''; ovNum.textContent = ''; applyLayout(); }
     });
 
     last.querySelector('.btn-preview').addEventListener('click', ()=> {
@@ -345,7 +297,6 @@ document.addEventListener('DOMContentLoaded', function() {
       applyLayout();
     });
 
-    // live preview on focus/input
     nameEl.addEventListener('focus', ()=> { last.classList.add('preview-active'); ovName.textContent = (nameEl.value||'').toUpperCase().slice(0,12); ovNum.textContent = (numEl.value||'').replace(/\D/g,'').slice(0,3); applyLayout(); });
     numEl.addEventListener('focus', ()=> { last.classList.add('preview-active'); ovName.textContent = (nameEl.value||'').toUpperCase().slice(0,12); ovNum.textContent = (numEl.value||'').replace(/\D/g,'').slice(0,3); applyLayout(); });
 
@@ -357,7 +308,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
   addBtn.addEventListener('click', ()=> createRow());
 
-  // initial rows from prefill
   if ((pf.prefill_name && pf.prefill_name.length) || (pf.prefill_number && pf.prefill_number.length)) {
     createRow({
       name: (pf.prefill_name || pf.name || '').toString().toUpperCase().slice(0,12),
@@ -371,7 +321,6 @@ document.addEventListener('DOMContentLoaded', function() {
     createRow();
   }
 
-  // form submit: collect players and POST JSON
   form.addEventListener('submit', async function(e) {
     e.preventDefault();
     const rows = list.querySelectorAll('.player-row');
@@ -418,8 +367,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 
-  // initial applyLayout after fonts ready (and image)
-  document.fonts?.ready.then(()=> setTimeout(()=> { if (imgEl.complete) applyLayout(); }, 120));
 });
 </script>
 
