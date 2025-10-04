@@ -272,12 +272,15 @@
   });
 
   function updateATCState(){
-    if (!btn) return;
-    const okName = NAME_RE.test(nameEl?.value || '');
-    const okNum  = NUM_RE.test(numEl?.value || '');
-    const size = $('np-size')?.value || '';
-    btn.disabled = !(okName && okNum && size);
+  // Always enable Add to Cart button
+  try {
+    if (btn) btn.disabled = false;
+  } catch (err) {
+    // if something unexpected, ensure button not stuck disabled
+    if (btn) btn.disabled = false;
+    console.warn('updateATCState fallback', err);
   }
+}
 
   // add team button
   if (addTeam) {
@@ -333,7 +336,7 @@
     if (!size) { alert('Please select a size.'); return; }
     if (!(NAME_RE.test(nameEl.value||'') && NUM_RE.test(numEl.value||''))) { alert('Please enter valid Name and Number'); return; }
     syncHidden();
-    if (btn) { btn.disabled = true; btn.textContent = 'Preparing...'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Add to Cart'; }
     try {
       const canvas = await html2canvas(stage, { useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1 });
       const dataUrl = canvas.toDataURL('image/png');
