@@ -124,6 +124,7 @@
     </div>
   </div>
 </template>
+
 @php
   // Build variantMap server-side (safe: will load variants if not already)
   $variantMap = [];
@@ -135,14 +136,17 @@
       foreach ($variants as $v) {
           $k = trim((string)($v->option_value ?? $v->option_name ?? ''));
           if ($k === '') continue;
+          // store uppercase key for safer lookup in JS
           $variantMap[strtoupper($k)] = (string)($v->shopify_variant_id ?? $v->variant_id ?? '');
       }
   }
 @endphp
 
 <script>
+  // injected by server from DB (keys uppercased)
   window.variantMap = {!! json_encode($variantMap, JSON_UNESCAPED_SLASHES|JSON_NUMERIC_CHECK) !!} || {};
   console.info('team.variantMap:', window.variantMap);
+  // storefront public URL (same as designer)
   window.shopfrontUrl = "{{ env('SHOPIFY_STORE_FRONT_URL', 'https://nextprint.in') }}";
 </script>
 
@@ -388,35 +392,45 @@ document.addEventListener('DOMContentLoaded', function() {
     const rows = list.querySelectorAll('.player-row');
     const players = [];
     rows.forEach(r => {
-  const n = r.querySelector('.player-name')?.value || '';
-  const num = r.querySelector('.player-number')?.value || '';
-  const sz = (r.querySelector('.player-size')?.value || '').toString();
-  const f  = r.querySelector('.player-font')?.value || '';
-  const c  = r.querySelector('.player-color')?.value || '';
-  if (!n && !num) return;
+      const n = r.querySelector('.player-name')?.value || '';
+      const num = r.querySelector('.player-number')?.value || '';
+      const sz = (r.querySelector('.player-size')?.value || '').toString();
+      const f  = r.querySelector('.player-font')?.value || '';
+      const c  = r.querySelector('.player-color')?.value || '';
+      if (!n && !num) return;
 
-  // resolve numeric variant id using window.variantMap (case-insensitive)
-  let variantId = '';
-  try {
-    if (window.variantMap) {
-      variantId = window.variantMap[sz] || window.variantMap[sz.toUpperCase()] || window.variantMap[sz.toLowerCase()] || '';
-    }
-  } catch(e) { variantId = ''; }
+      // robust variant lookup — use uppercase key only
+      let variantId = '';
+      try {
+        const k = (sz || '').toString().trim().toUpperCase();
+        if (k && window.variantMap && Object.prototype.hasOwnProperty.call(window.variantMap, k)) {
+          variantId = window.variantMap[k];
+        }
+      } catch (err) {
+        console.warn('Variant lookup failed for size:', sz, err);
+        variantId = '';
+      }
+      if (!variantId) {
+        console.warn('⚠️ No variant mapping for size:', sz, 'keyUsed:', (sz||'').toString().trim().toUpperCase(), 'variantMap:', window.variantMap);
+      }
 
-  players.push({
-    name: n.toString().toUpperCase().slice(0,12),
-    number: num.toString().replace(/\D/g,'').slice(0,3),
-    size: sz,
-    font: f,
-    color: c,
-    variant_id: variantId  // <-- important: numeric id
-  });
-});
+      players.push({
+        name: n.toString().toUpperCase().slice(0,12),
+        number: num.toString().replace(/\D/g,'').slice(0,3),
+        size: sz,
+        font: f,
+        color: c,
+        variant_id: variantId  // <-- important: numeric id (may be empty -> server will validate)
+      });
+    });
 
     if (players.length === 0) { alert('Add at least one player.'); return; }
 
     const payload = { product_id: form.querySelector('input[name="product_id"]').value || null, players: players };
     try {
+      // debug: log payload (remove in production if noisy)
+      console.info('Players payload before add: ', players);
+
       const token = document.querySelector('input[name="_token"]')?.value || '';
       const resp = await fetch(form.action, {
         method: 'POST',
@@ -426,7 +440,12 @@ document.addEventListener('DOMContentLoaded', function() {
       });
       const json = await resp.json().catch(()=>null);
       if (!resp.ok) {
-        alert((json && (json.message || json.error)) || 'Server error while adding team players.');
+        // show server-provided helpful message if present
+        const message = (json && (json.message || json.error)) || 'Server error while adding team players.';
+        alert(message);
+        if (json && json.missing) {
+          console.warn('Missing variant rows:', json.missing);
+        }
         return;
       }
       if (json.checkoutUrl || json.checkout_url) { window.location.href = json.checkoutUrl || json.checkout_url; return; }
@@ -448,6 +467,5 @@ document.addEventListener('DOMContentLoaded', function() {
   window.addEventListener('resize', ()=> setTimeout(applyLayout, 120));
 });
 </script>
-
 
 @endsection

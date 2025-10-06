@@ -11,9 +11,13 @@ use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Http\Controllers\ShopifyCartController;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Arr;
 
 class TeamController extends Controller
 {
+    /**
+     * Show create team page.
+     */
     public function create(Request $request)
     {
         $productId = $request->query('product_id');
@@ -40,7 +44,7 @@ class TeamController extends Controller
             if (is_array($decoded)) $layoutSlots = $decoded;
         }
 
-        // Build server-side variantMap and pass to view (optional but useful)
+        // Build server-side variantMap and pass to view
         $variantMap = [];
         foreach ($product->variants as $v) {
             $key = trim((string)($v->option_value ?? $v->option_name ?? ''));
@@ -51,6 +55,9 @@ class TeamController extends Controller
         return view('team.create', compact('product','prefill','layoutSlots','variantMap'));
     }
 
+    /**
+     * Store team and attempt to add players to Shopify cart / checkout.
+     */
     public function store(Request $request)
     {
         $data = $request->validate([
@@ -61,7 +68,7 @@ class TeamController extends Controller
             'players.*.size'    => 'nullable|string|max:10',
             'players.*.font'    => 'nullable|string|max:50',
             'players.*.color'   => 'nullable|string|max:20',
-            'players.*.variant_id' => 'nullable', // we'll normalize below
+            'players.*.variant_id' => 'nullable',
         ]);
 
         // Normalize players, ensure variant_id exists if possible
@@ -74,17 +81,16 @@ class TeamController extends Controller
             $size = isset($p['size']) ? trim((string)$p['size']) : null;
             $variantId = isset($p['variant_id']) ? trim((string)$p['variant_id']) : null;
 
-            // If variant_id missing but size present, try to lookup in DB
+            // If variant_id missing but size present, try to lookup in DB (case-insensitive)
             if (empty($variantId) && $size) {
                 $pv = ProductVariant::where('product_id', $data['product_id'])
-                        ->whereRaw('UPPER(option_value) = ?', [strtoupper($size)])
-                        ->first();
+                    ->whereRaw('UPPER(option_value) = ?', [strtoupper($size)])
+                    ->first();
                 if ($pv) {
                     $variantId = (string)$pv->shopify_variant_id;
                 }
             }
 
-            // collect normalized
             $normalizedPlayers[] = [
                 'name' => $name,
                 'number' => $number,
@@ -104,7 +110,7 @@ class TeamController extends Controller
             }
         }
 
-        // If any players are missing variant_id, fail with helpful message (avoid adding invalid cart lines)
+        // If any players are missing variant_id, fail with helpful message
         if (!empty($missingVariantRows)) {
             Log::warning('Team store missing variant ids', ['product_id' => $data['product_id'], 'missing' => $missingVariantRows]);
 
@@ -116,11 +122,10 @@ class TeamController extends Controller
                 ], 422);
             }
 
-            // You can redirect back with old input and an error message
             return back()->withInput()->with('error', 'One or more players are missing size → variant mapping. Please ensure each player has a valid size selected.');
         }
 
-        // At this point all players have variant_id
+        // Save Team
         try {
             $team = Team::create([
                 'product_id' => $data['product_id'],
@@ -135,7 +140,7 @@ class TeamController extends Controller
             return back()->with('error', 'Could not save team. Please try again.');
         }
 
-        // Build players payload for Shopify controller
+        // Build payload for ShopifyCartController
         $playersForShopify = [];
         foreach ($normalizedPlayers as $p) {
             $playersForShopify[] = [
@@ -144,7 +149,7 @@ class TeamController extends Controller
                 'size' => $p['size'],
                 'font' => $p['font'],
                 'color' => $p['color'],
-                'variant_id' => $p['variant_id'], // guaranteed present
+                'variant_id' => $p['variant_id'],
             ];
         }
 
@@ -164,24 +169,10 @@ class TeamController extends Controller
             $shopifyController = app(ShopifyCartController::class);
             $resp = $shopifyController->addToCart(new Request($shopifyPayload));
 
-            // inspect response for debugging
             Log::info('Shopify addToCart resp type: ' . (is_object($resp) ? get_class($resp) : gettype($resp)));
-            if ($resp instanceof JsonResponse) {
-                Log::info('Shopify addToCart json: ', $resp->getData(true));
-            } elseif ($resp instanceof Response) {
-                Log::info('Shopify addToCart content: ' . $resp->getContent());
-            } elseif (is_array($resp)) {
-                Log::info('Shopify addToCart array: ', $resp);
-            } else {
-                Log::info('Shopify addToCart other response: ' . print_r($resp, true));
-            }
 
+            // try to determine checkout URL
             $checkoutUrl = null;
-
-            if ($resp instanceof RedirectResponse) {
-                return $resp;
-            }
-
             if ($resp instanceof JsonResponse) {
                 $json = $resp->getData(true);
                 $checkoutUrl = $json['checkoutUrl'] ?? $json['checkout_url'] ?? null;
@@ -207,16 +198,80 @@ class TeamController extends Controller
                 return redirect()->away($checkoutUrl);
             }
 
+            // If Shopify controller didn't give a checkout URL, redirect to team page
             return redirect()->route('team.show', $team->id)->with('success', 'Team saved. Proceed to cart manually.');
         } catch (\Throwable $e) {
+            // Log the error and payload for debugging
             Log::error('Shopify addToCart failed: ' . $e->getMessage(), [
                 'trace' => $e->getTraceAsString(),
                 'payload' => $shopifyPayload
             ]);
+
+            // If GraphQL/Shopify admin failed with "merchandise does not exist" we can fallback
+            // to returning an auto-submitting HTML that posts to the storefront /cart/add for each line.
+            // This is a browser fallback so admin pages still redirect the user to storefront cart.
+            $message = $e->getMessage();
+
+            // If request expects JSON, return error info
             if ($request->wantsJson() || $request->ajax()) {
-                return response()->json(['success' => false, 'message' => 'Could not add to Shopify cart.'], 500);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Could not add to Shopify cart (admin API). Falling back to client posting method.',
+                    'error' => $message,
+                ], 500);
             }
-            return back()->with('error', 'Could not add to Shopify cart. Please try again.');
+
+            // Prepare fallback HTML form (auto-submit) to post multiple /cart/add lines to the storefront
+            // Use shopfront URL from env
+            $shopfront = rtrim(env('SHOPIFY_STORE_FRONT_URL', 'https://nextprint.in'), '/');
+
+            // Build multiple forms (one per variant) — properties: Name & Number & Size
+            $formsHtml = '';
+            foreach ($playersForShopify as $p) {
+                $variant = $p['variant_id'] ?? null;
+                if (!$variant) continue;
+                $props = [
+                    'properties[Name]' => $p['name'],
+                    'properties[Number]' => $p['number'],
+                    'properties[Size]' => $p['size'],
+                    'properties[Font]' => $p['font'],
+                    'properties[Color]' => $p['color'],
+                    // optionally include team_id
+                    'properties[Team ID]' => (string)$team->id,
+                ];
+                $inputs = '<input type="hidden" name="id" value="' . e($variant) . '"/>' . "\n";
+                $inputs .= '<input type="hidden" name="quantity" value="1"/>' . "\n";
+                foreach ($props as $k => $v) {
+                    $inputs .= '<input type="hidden" name="' . e($k) . '" value="' . e($v) . '"/>' . "\n";
+                }
+
+                $formsHtml .= <<<HTML
+<form method="POST" action="{$shopfront}/cart/add" class="np-fallback-form" style="display:none">
+  {$inputs}
+  <noscript><button type="submit">Add</button></noscript>
+</form>
+
+HTML;
+            }
+
+            // If no fallback forms (no variants), just redirect back with error
+            if (trim($formsHtml) === '') {
+                return back()->with('error', 'Could not add to Shopify cart and fallback unavailable. ' . $message);
+            }
+
+            // Auto-submit script and simple message
+            $html = '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Redirecting to cart...</title></head><body style="font-family:Arial,Helvetica,sans-serif;padding:24px;">';
+            $html .= '<h2>Redirecting to storefront cart...</h2>';
+            $html .= '<p>If your browser does not redirect automatically, click the button below.</p>';
+            $html .= $formsHtml;
+            $html .= '<button id="fallbackContinue" style="display:block;margin-top:16px;padding:10px 16px;font-size:16px">Continue to cart</button>';
+            $html .= '<script>';
+            $html .= '(async function(){ try { const forms = Array.from(document.querySelectorAll(".np-fallback-form")); for (const f of forms) { await fetch(f.action, { method:"POST", body:new URLSearchParams(new FormData(f)), credentials:"include" }); } window.location.href = "' . addslashes($shopfront) . '/cart"; } catch(e) { console.error(e); document.getElementById("fallbackContinue").style.display="block"; } })();';
+            $html .= 'document.getElementById("fallbackContinue").addEventListener("click", function(){ const forms = Array.from(document.querySelectorAll(".np-fallback-form")); for (const f of forms) { f.submit(); } });';
+            $html .= '</script>';
+            $html .= '</body></html>';
+
+            return response($html, 200)->header('Content-Type', 'text/html');
         }
     }
 }
