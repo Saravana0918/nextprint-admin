@@ -147,17 +147,23 @@
 </div>
 
 <script>
+  // keep layoutSlots exposure (existing)
+  window.layoutSlots = {!! json_encode($layoutSlots ?? [], JSON_NUMERIC_CHECK) !!};
+  window.personalizationSupported = {{ !empty($layoutSlots) ? 'true' : 'false' }};
+
+  // storefront public URL (use env var or the actual storefront domain)
+  window.shopfrontUrl = "{{ env('SHOPIFY_STORE_FRONT_URL', 'https://nextprint.in') }}";
+</script>
+<script>
   // Build variant map from server $product variants.
-  // Assumes $product->variants is an array/collection with fields: option1/title and shopify variant id in 'shopify_variant_id' or 'shopify_id' or 'id'.
   (function(){
     const map = {};
     @if(!empty($product) && !empty($product->variants))
       @foreach($product->variants as $v)
         @php
-          // try multiple possible keys where variant id may live
+          // attempt to get numeric variant id from common fields
           $vid = $v['shopify_variant_id'] ?? $v->shopify_variant_id ?? $v->shopify_id ?? $v->id ?? null;
-          // pick option label (option1 or title) to use as key, fallback to position or SKU
-          $label = $v['option1'] ?? $v->option1 ?? ($v['title'] ?? ($v['option_value'] ?? ($v['sku'] ?? '')));
+          $label = $v['option1'] ?? $v->option1 ?? ($v['title'] ?? ($v['sku'] ?? ''));
           $label = (string) ($label ?? '');
           $vid = (string) ($vid ?? '');
         @endphp
@@ -167,9 +173,10 @@
           map["{{ strtolower(addslashes($label)) }}"] = "{{ $vid }}";
         @endif
       @endforeach
+    @else
+      console.warn('No $product->variants available to build variantMap');
     @endif
     window.variantMap = map;
-    // expose shopify product numeric id too (useful)
     window.shopifyProductNumericId = "{{ $product->shopify_product_id ?? $product->shopify_id ?? '' }}";
     console.log('variantMap (server)', window.variantMap, 'shopifyProductNumericId=', window.shopifyProductNumericId);
   })();
@@ -364,100 +371,86 @@
   document.fonts?.ready.then(()=> setTimeout(applyLayout, 120));
 
   // submit handler (posts to storefront /cart/add and redirects to storefront cart)
-  form?.addEventListener('submit', async function(evt){
-    evt.preventDefault();
+  // ===== REPLACE the submit handler with this block =====
+form?.addEventListener('submit', async function(evt){
+  evt.preventDefault();
 
-    const size = $('np-size')?.value || '';
-    if (!size) { alert('Please select a size.'); return; }
-    if (!NAME_RE.test(nameEl.value||'') || !NUM_RE.test(numEl.value||'')) { alert('Please enter valid Name and Number'); return; }
+  const size = $('np-size')?.value || '';
+  if (!size) { alert('Please select a size.'); return; }
+  if (!NAME_RE.test(nameEl.value||'') || !NUM_RE.test(numEl.value||'')) { alert('Please enter valid Name and Number'); return; }
 
-    syncHidden(); // ensures np-variant-id is populated
+  syncHidden(); // ensures np-variant-id is populated
 
-    const variantId = (document.getElementById('np-variant-id') || { value: '' }).value;
-    if (!variantId || !/^\d+$/.test(variantId)) {
-      alert('Variant not selected or invalid. Please re-select size.');
-      return;
-    }
+  const variantId = (document.getElementById('np-variant-id') || { value: '' }).value;
+  if (!variantId || !/^\d+$/.test(variantId)) {
+    alert('Variant not selected or invalid. Please re-select size.');
+    return;
+  }
 
-    if (btn) { btn.disabled = true; btn.textContent = 'Adding...'; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Adding...'; }
 
+  try {
+    // try to capture preview (optional) — failure shouldn't block checkout
     try {
-      try {
-        const canvas = await html2canvas(stage, { useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1 });
-        const dataUrl = canvas.toDataURL('image/png');
-        $('np-preview-hidden').value = dataUrl;
-      } catch(e) {
-        console.warn('html2canvas failed, continuing without preview:', e);
-      }
-
-      const properties = {
-        'Name': $('np-name-hidden')?.value || '',
-        'Number': $('np-num-hidden')?.value || '',
-        'Font': $('np-font-hidden')?.value || '',
-        'Color': $('np-color-hidden')?.value || ''
-      };
-
-      const qty = Math.max(1, parseInt($('np-qty')?.value || '1', 10));
-      const bodyArr = [];
-      bodyArr.push('id=' + encodeURIComponent(variantId));
-      bodyArr.push('quantity=' + encodeURIComponent(qty));
-      for (const k in properties) {
-        bodyArr.push('properties[' + encodeURIComponent(k) + ']=' + encodeURIComponent(properties[k]));
-      }
-
-      // Upload preview image (np-preview-hidden contains dataURL)
-      try {
-        let previewUrl = '';
-        const dataUrl = document.getElementById('np-preview-hidden')?.value || '';
-        if (dataUrl && dataUrl.startsWith('data:image')) {
-          const upResp = await fetch('/save-preview', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-CSRF-TOKEN': document.querySelector('input[name=_token]')?.value || ''
-            },
-            body: JSON.stringify({ image: dataUrl, product_id: document.getElementById('np-product-id')?.value || '' }),
-            credentials: 'same-origin'
-          });
-          const upJson = await upResp.json().catch(()=>null);
-          if (upResp.ok && upJson && upJson.url) previewUrl = upJson.url;
-        }
-        if (previewUrl) {
-          bodyArr.push('properties[' + encodeURIComponent('preview_url') + ']=' + encodeURIComponent(previewUrl));
-        }
-      } catch (e) {
-        console.warn('preview upload failed', e);
-      }
-
-      const body = bodyArr.join('&');
-
-      // POST to storefront cart add (same-origin)
-      const resp = await fetch('/cart/add', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: body,
-        credentials: 'same-origin'
-      });
-
-      // Redirect to storefront cart permalink (always use shopfrontUrl)
-      const shopfront = (window.shopfrontUrl || '').replace(/\/+$/,'');
-      const redirectUrl = shopfront + '/cart/' + variantId + ':' + qty;
-
-      // If response OK, go to storefront cart; otherwise still try permalink
-      if (resp && resp.ok) {
-        window.location.href = redirectUrl;
-        return;
-      } else {
-        window.location.href = redirectUrl;
-        return;
-      }
-    } catch (err) {
-      console.error('Add to cart error', err);
-      alert('Something went wrong adding to cart.');
-    } finally {
-      if (btn) { btn.disabled = false; btn.textContent = 'Add to Cart'; }
+      const canvas = await html2canvas(stage, { useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1 });
+      const dataUrl = canvas.toDataURL('image/png');
+      $('np-preview-hidden').value = dataUrl;
+    } catch(e) {
+      console.warn('html2canvas failed, continuing without preview:', e);
     }
-  });
+
+    // build properties
+    const properties = {
+      'Name': $('np-name-hidden')?.value || '',
+      'Number': $('np-num-hidden')?.value || '',
+      'Font': $('np-font-hidden')?.value || '',
+      'Color': $('np-color-hidden')?.value || ''
+    };
+
+    // optionally upload preview to server and get URL (if you implemented /save-preview)
+    let previewUrl = '';
+    try {
+      const dataUrl = document.getElementById('np-preview-hidden')?.value || '';
+      if (dataUrl && dataUrl.startsWith('data:image')) {
+        const upResp = await fetch('/save-preview', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('input[name=_token]')?.value || ''
+          },
+          body: JSON.stringify({ image: dataUrl, product_id: document.getElementById('np-product-id')?.value || '' }),
+          credentials: 'same-origin'
+        });
+        const upJson = await upResp.json().catch(()=>null);
+        if (upResp.ok && upJson && upJson.url) previewUrl = upJson.url;
+      }
+    } catch (e) {
+      console.warn('preview upload failed', e);
+    }
+    if (previewUrl) properties['preview_url'] = previewUrl;
+
+    // Build a cart permalink to the storefront — this avoids cross-origin POST issues.
+    // Format: https://your-shop.com/cart/VARIANT_ID:QTY?properties[Name]=...&properties[Number]=...
+    const qty = Math.max(1, parseInt($('np-qty')?.value || '1', 10));
+    const shopfront = (window.shopfrontUrl || '').replace(/\/+$/,'');
+    const params = new URLSearchParams();
+    for (const k in properties) {
+      if (properties[k]) params.append('properties['+k+']', properties[k]);
+    }
+
+    const permalink = shopfront + '/cart/' + encodeURIComponent(variantId) + ':' + encodeURIComponent(qty) + (params.toString() ? ('?' + params.toString()) : '');
+    // Redirect the browser to the storefront cart permalink
+    window.location.href = permalink;
+    return;
+
+  } catch (err) {
+    console.error('Add to cart error', err);
+    alert('Something went wrong adding to cart.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Add to Cart'; }
+  }
+});
+
 
 })();
 </script>
