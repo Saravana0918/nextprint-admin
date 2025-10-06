@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Oswald:wght@400;600&display=swap" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
   <style>
     /* fonts */
     .font-bebas{font-family:'Bebas Neue', Impact, 'Arial Black', sans-serif;}
@@ -13,9 +14,11 @@
     .font-oswald{font-family:'Oswald', Arial, sans-serif;}
     .font-impact{font-family:Impact, 'Arial Black', sans-serif;}
 
+    /* stage */
     .np-stage { position: relative; width: 100%; max-width: 534px; margin: 0 auto; background:#fff; border-radius:8px; padding:8px; min-height: 320px; box-sizing: border-box; overflow: visible; }
     .np-stage img { width:100%; height:auto; border-radius:6px; display:block; }
 
+    /* overlays: NO background, sits on top of image */
     .np-overlay {
       position: absolute;
       color: #D4AF37;
@@ -31,27 +34,44 @@
       z-index: 9999;
     }
 
+    /* ensure overlay does not create its own box or background */
     .np-overlay::before, .np-overlay::after { content: none; }
 
+    /* swatches */
     .np-swatch { width:28px; height:28px; border-radius:50%; border:1px solid #ccc; cursor:pointer; display:inline-block; }
     .np-swatch.active { outline: 2px solid rgba(0,0,0,0.08); box-shadow: 0 2px 6px rgba(0,0,0,0.06); }
 
+    /* default page styles */
     body { background-color: #929292; }
     .body-padding{ padding-top: 100px; }
     .right-layout{ padding-top:350px; }
 
+    /* mobile specific: keep overlays on image, inputs below */
     @media (max-width: 767px) {
       body { background-image: url('/images/stadium-bg.jpg'); background-size: cover; background-position: center center; background-repeat: no-repeat; min-height: 100vh; margin-top: -70px; }
       body::before { content: ""; position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 5; pointer-events: none; }
       .container, .row, .np-stage, header, main, footer { position: relative; z-index: 10; }
+
+      /* inputs: visible below the stage (normal flow) */
       .np-col input.form-control, .np-col select.form-select { z-index: 100020; position: relative; }
+
+      /* keep overlays visually *on* the image (no white box) */
       .np-stage::after { content: ""; position: absolute; left: 12px; right: 12px; top: 12px; bottom: 12px; border-radius: 8px; background: rgba(0,0,0,0.06); z-index: 15; pointer-events: none; }
+
+      /* Add-to-cart floating button */
       #np-atc-btn { position: fixed !important; top: 12px !important; right: 12px !important; z-index: 100050 !important; width: 130px !important; height: 44px !important; border-radius: 28px !important; box-shadow: 0 6px 18px rgba(0,0,0,0.25) !important; font-weight: 700 !important; }
-      .mobile-layout{ margin-top : -330px; }
+      .mobile-layout{
+        margin-top : -330px;
+      }
     }
-    @media (min-width: 768px) { .vt-icons { display: none !important; } }
+    @media (min-width: 768px) {
+      .vt-icons { display: none !important; }
+    }
+
+    /* accessibility focus styles */
     input:focus, select:focus { outline: 3px solid rgba(13,110,253,0.12); }
     .desktop-display{ color : white ;}
+
   </style>
 </head>
 <body class="body-padding">
@@ -62,17 +82,20 @@
 
 <div class="container">
   <div class="row g-4">
+    <!-- preview -->
     <div class="col-md-6 np-col order-1 order-md-2">
       <div class="border rounded p-3">
         <div class="np-stage" id="np-stage">
           <img id="np-base" crossorigin="anonymous" src="{{ $img }}" alt="Preview"
                onerror="this.onerror=null;this.src='{{ asset('images/placeholder.png') }}'">
+          <!-- OVERLAYS: these are always *on the image* -->
           <div id="np-prev-name" class="np-overlay font-bebas" aria-hidden="true"></div>
           <div id="np-prev-num"  class="np-overlay font-bebas" aria-hidden="true"></div>
         </div>
       </div>
     </div>
 
+    <!-- controls -->
     <div class="col-md-3 np-col order-2 order-md-1" id="np-controls">
       <input id="np-name" type="text" maxlength="12" class="form-control mb-2 text-center" placeholder="YOUR NAME">
       <input id="np-num"  type="text" maxlength="3" inputmode="numeric" class="form-control mb-2 text-center" placeholder="09">
@@ -92,6 +115,7 @@
       <input id="np-color" type="color" class="form-control form-control-color mt-2" value="#D4AF37">
     </div>
 
+    <!-- purchase + team -->
     <div class="col-md-3 np-col order-3 order-md-3 right-layout mobile-layout">
       <h4 class="desktop-display">{{ $product->name ?? ($product->title ?? 'Product') }}</h4>
 
@@ -105,23 +129,12 @@
         <input type="hidden" name="product_id" id="np-product-id" value="{{ $product->id ?? $product->local_id ?? '' }}">
         <input type="hidden" name="shopify_product_id" id="np-shopify-product-id" value="{{ $product->shopify_product_id ?? $product->shopify_id ?? '' }}">
         <input type="hidden" name="variant_id" id="np-variant-id" value="">
-
-        {{-- Build size select from product variants (server-backed) --}}
-        @php
-          $sizeOptions = collect($product->variants ?? [])->map(function($v){
-              return (string)($v['option1'] ?? $v->option1 ?? $v['title'] ?? '');
-          })->filter()->unique()->values()->all();
-        @endphp
-
         <div class="mb-2">
           <select id="np-size" name="size" class="form-select" required>
             <option value="">Select Size</option>
-            @foreach($sizeOptions as $opt)
-              <option value="{{ $opt }}">{{ $opt }}</option>
-            @endforeach
+            <option value="S">S</option><option value="M">M</option><option value="L">L</option><option value="XL">XL</option>
           </select>
         </div>
-
         <div class="mb-2">
           <input id="np-qty" name="quantity" type="number" min="1" value="1" class="form-control">
         </div>
@@ -134,49 +147,33 @@
 </div>
 
 <script>
-  // expose layoutSlots from server
+  // keep layoutSlots exposure (existing)
   window.layoutSlots = {!! json_encode($layoutSlots ?? [], JSON_NUMERIC_CHECK) !!};
   window.personalizationSupported = {{ !empty($layoutSlots) ? 'true' : 'false' }};
+
+  // TEMP: hardcoded variant map — replace with server-side values later
+  window.variantMap = {
+    "S": "45229263061188",
+    "M": "45229263093956",
+    "L": "45229263126724",
+    "XL": "45229263159492",
+    "2XL": "45229263192260",
+    "3XL": "45229263225028"
+  };
+
+  // storefront public URL (use env var or the actual storefront domain)
   window.shopfrontUrl = "{{ env('SHOPIFY_STORE_FRONT_URL', 'https://nextprint.in') }}";
-</script>
-
-{{-- Robust variantMap builder (uses server-provided $product->variants) --}}
-<script>
-(function(){
-  const map = {};
-  @if(!empty($product) && !empty($product->variants) && count($product->variants) > 0)
-    @foreach($product->variants as $v)
-      @php
-        $raw = $v['shopify_variant_id'] ?? $v->shopify_variant_id ?? $v->shopify_id ?? $v->id ?? null;
-        $label = $v['option1'] ?? $v->option1 ?? ($v['title'] ?? ($v['sku'] ?? ''));
-        $raw = (string)($raw ?? '');
-        $label = (string)($label ?? '');
-        // extract trailing digits if GID style
-        preg_match('/(\d+)$/', $raw, $m);
-        $vid = $m[1] ?? $raw;
-      @endphp
-      @if(!empty($label) && !empty($vid))
-        map["{{ addslashes($label) }}"] = "{{ $vid }}";
-        map["{{ strtoupper(addslashes($label)) }}"] = "{{ $vid }}";
-        map["{{ strtolower(addslashes($label)) }}"] = "{{ $vid }}";
-      @endif
-    @endforeach
-  @else
-    console.warn('No $product->variants available to build variantMap');
-  @endif
-
-  window.variantMap = map;
-  window.shopifyProductNumericId = "{{ $product->shopify_product_id ?? $product->shopify_id ?? '' }}";
-  console.log('variantMap (server)', window.variantMap, 'shopifyProductNumericId=', window.shopifyProductNumericId);
-})();
 </script>
 
 <script>
 (function(){
   const $ = id => document.getElementById(id);
+
   const nameEl  = $('np-name'), numEl = $('np-num'), fontEl = $('np-font'), colorEl = $('np-color');
   const pvName  = $('np-prev-name'), pvNum = $('np-prev-num'), baseImg = $('np-base'), stage = $('np-stage');
-  const btn = $('np-atc-btn'), form = $('np-atc-form'), addTeam = $('btn-add-team'), sizeEl = $('np-size');
+  const btn = $('np-atc-btn'), form = $('np-atc-form'), addTeam = $('btn-add-team');
+  const sizeEl = $('np-size');
+  const layout = (typeof window.layoutSlots === 'object' && window.layoutSlots !== null) ? window.layoutSlots : {};
 
   const NAME_RE = /^[A-Za-z ]{1,12}$/, NUM_RE = /^\d{1,3}$/;
 
@@ -226,30 +223,33 @@
     const text = (el.textContent || '').toString().trim() || (slotKey === 'number' ? '09' : 'NAME');
     const chars = Math.max(1, text.length);
     const isMobile = window.innerWidth <= 767;
-    const heightCandidate = Math.floor(areaHpx * (slotKey === 'number' ? (isMobile?1.05:1.0) : 1.0));
+    const heightFactorName = 1.00;
+    const heightFactorNumber = isMobile ? 1.05 : 1.00;
+    const heightCandidate = Math.floor(areaHpx * (slotKey === 'number' ? heightFactorNumber : heightFactorName));
     const avgCharRatio = 0.48;
     const widthCap = Math.floor((areaWpx * 0.95) / (chars * avgCharRatio));
-    let fs = Math.floor(Math.min(heightCandidate, widthCap));
+    let numericShrink = (slotKey === 'number') ? (isMobile ? 1.0 : 0.98) : 1.0;
+    let fontSize = Math.floor(Math.min(heightCandidate, widthCap) * numericShrink);
     const maxAllowed = Math.max(14, Math.floor(s.stageW * (isMobile ? 0.45 : 0.32)));
-    fs = Math.max(8, Math.min(fs, maxAllowed));
-    fs = Math.floor(fs * 1.08);
-    el.style.fontSize = fs + 'px';
+    fontSize = Math.max(8, Math.min(fontSize, maxAllowed));
+    fontSize = Math.floor(fontSize * 1.10);
+    el.style.fontSize = fontSize + 'px';
     el.style.lineHeight = '1';
     el.style.fontWeight = '700';
 
     let attempts = 0;
-    while (el.scrollWidth > el.clientWidth && fs > 7 && attempts < 30) {
-      fs = Math.max(7, Math.floor(fs * 0.92));
-      el.style.fontSize = fs + 'px';
+    while (el.scrollWidth > el.clientWidth && fontSize > 7 && attempts < 30) {
+      fontSize = Math.max(7, Math.floor(fontSize * 0.92));
+      el.style.fontSize = fontSize + 'px';
       attempts++;
     }
   }
 
   function applyLayout(){
     if (!baseImg || !baseImg.complete) return;
-    if (window.layoutSlots && window.layoutSlots.name) placeOverlay(pvName, window.layoutSlots.name, 'name');
+    if (layout && layout.name) placeOverlay(pvName, layout.name, 'name');
     else { pvName.style.left='50%'; pvName.style.top='45%'; pvName.style.transform='translate(-50%,-50%)'; }
-    if (window.layoutSlots && window.layoutSlots.number) placeOverlay(pvNum, window.layoutSlots.number, 'number');
+    if (layout && layout.number) placeOverlay(pvNum, layout.number, 'number');
     else { pvNum.style.left='50%'; pvNum.style.top='65%'; pvNum.style.transform='translate(-50%,-50%)'; }
   }
 
@@ -266,26 +266,23 @@
     if (f) f.value = fontEl ? fontEl.value : '';
     if (c) c.value = colorEl ? colorEl.value : '';
 
-    // update variant id based on size
     const size = $('np-size')?.value || '';
     if (window.variantMap && size) {
-      const k = size;
-      let variant = window.variantMap[k] || window.variantMap[k.toUpperCase()] || window.variantMap[k.toLowerCase()] || '';
-      // normalize gid->numeric if needed
-      const m = (variant || '').toString().match(/(\d+)$/);
-      variant = m ? m[1] : variant;
-      if ($('np-variant-id')) $('np-variant-id').value = variant;
+      const k = (size || '').toString();
+      $('np-variant-id').value = window.variantMap[k] || window.variantMap[k.toUpperCase()] || window.variantMap[k.toLowerCase()] || '';
     } else {
+      // clear variant id if no mapping
       if ($('np-variant-id')) $('np-variant-id').value = '';
     }
   }
 
-  // events
+  // events: inputs
   if (nameEl) nameEl.addEventListener('input', ()=>{ syncPreview(); syncHidden(); updateATCState(); });
   if (numEl) numEl.addEventListener('input', e=>{ e.target.value = e.target.value.replace(/\D/g,'').slice(0,3); syncPreview(); syncHidden(); updateATCState(); });
   if (fontEl) fontEl.addEventListener('change', ()=>{ applyFont(fontEl.value); syncHidden(); syncPreview(); });
   if (colorEl) colorEl.addEventListener('input', ()=>{ if(pvName) pvName.style.color = colorEl.value; if(pvNum) pvNum.style.color = colorEl.value; syncHidden(); });
 
+  // swatches
   document.querySelectorAll('.np-swatch').forEach(b=>{
     b.addEventListener('click', ()=>{
       document.querySelectorAll('.np-swatch').forEach(x=>x.classList.remove('active'));
@@ -297,17 +294,28 @@
     });
   });
 
-  function updateATCState(){ if (!btn) return; btn.disabled = false; }
+  function updateATCState(){
+    if (!btn) return;
+    btn.disabled = false;
+  }
 
+  // size change listener (ensure variant id is always populated)
   if (sizeEl) {
     sizeEl.addEventListener('change', function(){
+      const sizeVal = (sizeEl.value || '').toString();
+      if (window.variantMap) {
+        const k = sizeVal;
+        const variant = window.variantMap[k] || window.variantMap[k.toUpperCase()] || window.variantMap[k.toLowerCase()] || '';
+        if (document.getElementById('np-variant-id')) document.getElementById('np-variant-id').value = variant;
+      }
       syncHidden();
       syncPreview();
-      console.log('selected size', document.getElementById('np-size').value, 'variant', document.getElementById('np-variant-id').value);
     });
+    // also call once to populate initial value
     try { sizeEl.dispatchEvent(new Event('change')); } catch(e) {}
   }
 
+  // add team button
   if (addTeam) {
     addTeam.addEventListener('click', function(e) {
       e.preventDefault();
@@ -331,6 +339,7 @@
     });
   }
 
+  // init
   applyFont(fontEl?.value || 'bebas');
   if (pvName && colorEl) pvName.style.color = colorEl.value;
   if (pvNum && colorEl) pvNum.style.color = colorEl.value;
@@ -343,14 +352,16 @@
   window.addEventListener('orientationchange', ()=> setTimeout(applyLayout, 200));
   document.fonts?.ready.then(()=> setTimeout(applyLayout, 120));
 
-  // robust submit -> use permalink to avoid cross-origin POST issues
+  // submit handler (posts to storefront /cart/add and redirects to storefront cart)
   form?.addEventListener('submit', async function(evt){
     evt.preventDefault();
+
     const size = $('np-size')?.value || '';
     if (!size) { alert('Please select a size.'); return; }
     if (!NAME_RE.test(nameEl.value||'') || !NUM_RE.test(numEl.value||'')) { alert('Please enter valid Name and Number'); return; }
 
-    syncHidden();
+    syncHidden(); // ensures np-variant-id is populated
+
     const variantId = (document.getElementById('np-variant-id') || { value: '' }).value;
     if (!variantId || !/^\d+$/.test(variantId)) {
       alert('Variant not selected or invalid. Please re-select size.');
@@ -360,7 +371,6 @@
     if (btn) { btn.disabled = true; btn.textContent = 'Adding...'; }
 
     try {
-      // try to capture preview (optional)
       try {
         const canvas = await html2canvas(stage, { useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1 });
         const dataUrl = canvas.toDataURL('image/png');
@@ -376,36 +386,35 @@
         'Color': $('np-color-hidden')?.value || ''
       };
 
-      // optional: attempt preview upload to server -> expects /save-preview route implemented
-      try {
-        const dataUrl = document.getElementById('np-preview-hidden')?.value || '';
-        if (dataUrl && dataUrl.startsWith('data:image')) {
-          const upResp = await fetch('/save-preview', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-CSRF-TOKEN': document.querySelector('input[name=_token]')?.value || ''
-            },
-            body: JSON.stringify({ image: dataUrl, product_id: document.getElementById('np-product-id')?.value || '' }),
-            credentials: 'same-origin'
-          });
-          const upJson = await upResp.json().catch(()=>null);
-          if (upResp.ok && upJson && upJson.url) properties['preview_url'] = upJson.url;
-        }
-      } catch(e){ console.warn('preview upload failed', e); }
-
       const qty = Math.max(1, parseInt($('np-qty')?.value || '1', 10));
-      const shopfront = (window.shopfrontUrl || '').replace(/\/+$/,'');
-      const params = new URLSearchParams();
+      const bodyArr = [];
+      bodyArr.push('id=' + encodeURIComponent(variantId));
+      bodyArr.push('quantity=' + encodeURIComponent(qty));
       for (const k in properties) {
-        if (properties[k]) params.append('properties['+k+']', properties[k]);
+        bodyArr.push('properties[' + encodeURIComponent(k) + ']=' + encodeURIComponent(properties[k]));
       }
+      const body = bodyArr.join('&');
 
-      const permalink = shopfront + '/cart/' + encodeURIComponent(variantId) + ':' + encodeURIComponent(qty) + (params.toString() ? ('?' + params.toString()) : '');
-      console.log('redirecting to permalink', permalink);
-      window.location.href = permalink;
-      return;
+      // POST to storefront cart add (same-origin)
+      const resp = await fetch('/cart/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body,
+        credentials: 'same-origin'
+      });
 
+      // Redirect to storefront cart permalink (always use shopfrontUrl)
+      const shopfront = (window.shopfrontUrl || '').replace(/\/+$/,'');
+      const redirectUrl = shopfront + '/cart/' + variantId + ':' + qty;
+
+      // If response OK, go to storefront cart; otherwise still try permalink
+      if (resp && resp.ok) {
+        window.location.href = redirectUrl;
+        return;
+      } else {
+        window.location.href = redirectUrl;
+        return;
+      }
     } catch (err) {
       console.error('Add to cart error', err);
       alert('Something went wrong adding to cart.');
@@ -418,5 +427,6 @@
 </script>
 
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+
 </body>
 </html>
