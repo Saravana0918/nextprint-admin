@@ -1,15 +1,11 @@
 <?php
-
 namespace App\Models;
-
 use Illuminate\Database\Eloquent\Model;
 
 class ProductVariant extends Model
 {
-    protected $table = 'variants'; // <--- IMPORTANT: match controller/schema checks
-    protected $fillable = ['product_id','shopify_variant_id','option_value','price',
-                           // add any other variant columns like 'option1','sku','price_cents' etc
-                          ];
+    protected $table = 'variants';
+    protected $fillable = ['product_id','shopify_variant_id','option1','option_value','price','sku','quantity'];
 
     public function product()
     {
