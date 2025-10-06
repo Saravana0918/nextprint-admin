@@ -124,19 +124,20 @@
     </div>
   </div>
 </template>
-<script>
-  // TEMP: hardcoded variant map for this product (replace with server-side data later)
-  window.variantMap = {
-    "XS": "45229263061188",
-    "S":  "45229263061188",
-    "M":  "45229263093956",
-    "L":  "45229263126724",
-    "XL": "45229263159492",
-    "2XL":"45229263192260",
-    "3XL":"45229263225028"
-  };
+@php
+  $variantMap = [];
+  if (!empty($product) && $product->relationLoaded('variants')) {
+      foreach ($product->variants as $v) {
+          $key = trim((string)($v->option_value ?? $v->option_name ?? ''));
+          if ($key === '') continue;
+          $variantMap[strtoupper($key)] = (string)($v->shopify_variant_id ?? $v->variant_id ?? '');
+      }
+  }
+@endphp
 
-  // storefront public URL (same as designer)
+<script>
+  window.variantMap = {!! json_encode($variantMap, JSON_UNESCAPED_SLASHES | JSON_NUMERIC_CHECK) !!} || {};
+  console.info('team variantMap', window.variantMap);
   window.shopfrontUrl = "{{ env('SHOPIFY_STORE_FRONT_URL', 'https://nextprint.in') }}";
 </script>
 <script>
