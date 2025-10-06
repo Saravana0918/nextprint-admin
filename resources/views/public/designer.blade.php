@@ -393,6 +393,31 @@
       for (const k in properties) {
         bodyArr.push('properties[' + encodeURIComponent(k) + ']=' + encodeURIComponent(properties[k]));
       }
+
+      // Upload preview image (np-preview-hidden contains dataURL)
+      try {
+        let previewUrl = '';
+        const dataUrl = document.getElementById('np-preview-hidden')?.value || '';
+        if (dataUrl && dataUrl.startsWith('data:image')) {
+          const upResp = await fetch('/save-preview', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRF-TOKEN': document.querySelector('input[name=_token]')?.value || ''
+            },
+            body: JSON.stringify({ image: dataUrl, product_id: document.getElementById('np-product-id')?.value || '' }),
+            credentials: 'same-origin'
+          });
+          const upJson = await upResp.json().catch(()=>null);
+          if (upResp.ok && upJson && upJson.url) previewUrl = upJson.url;
+        }
+        if (previewUrl) {
+          bodyArr.push('properties[' + encodeURIComponent('preview_url') + ']=' + encodeURIComponent(previewUrl));
+        }
+      } catch (e) {
+        console.warn('preview upload failed', e);
+      }
+
       const body = bodyArr.join('&');
 
       // POST to storefront cart add (same-origin)
