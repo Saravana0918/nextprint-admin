@@ -124,18 +124,22 @@
     </div>
   </div>
 </template>
-<script>
-  // TEMP: hardcoded variant map for this product (replace with server-side data later)
-  window.variantMap = {
-    "XS": "45229263061188",
-    "S":  "45229263061188",
-    "M":  "45229263093956",
-    "L":  "45229263126724",
-    "XL": "45229263159492",
-    "2XL":"45229263192260",
-    "3XL":"45229263225028"
-  };
+@php
+  $variantMap = [];
+  if (!empty($product) && $product->relationLoaded('variants')) {
+      foreach ($product->variants as $v) {
+          $key = trim((string)($v->option_value ?? $v->option_name ?? ''));
+          if ($key === '') continue;
+          // store uppercase key for safer lookup
+          $variantMap[strtoupper($key)] = (string)($v->shopify_variant_id ?? $v->variant_id ?? '');
+      }
+  }
+@endphp
 
+<script>
+  // injected by server from DB (keys uppercased)
+  window.variantMap = {!! json_encode($variantMap, JSON_UNESCAPED_SLASHES|JSON_NUMERIC_CHECK) !!} || {};
+  console.info('team.variantMap:', window.variantMap);
   // storefront public URL (same as designer)
   window.shopfrontUrl = "{{ env('SHOPIFY_STORE_FRONT_URL', 'https://nextprint.in') }}";
 </script>
@@ -375,65 +379,82 @@ document.addEventListener('DOMContentLoaded', function() {
     createRow();
   }
 
-  // final collect & submit
-  form.addEventListener('submit', async function(e) {
-    e.preventDefault();
-    const rows = list.querySelectorAll('.player-row');
-    const players = [];
-    rows.forEach(r => {
-  const n = r.querySelector('.player-name')?.value || '';
-  const num = r.querySelector('.player-number')?.value || '';
-  const sz = (r.querySelector('.player-size')?.value || '').toString();
-  const f  = r.querySelector('.player-font')?.value || '';
-  const c  = r.querySelector('.player-color')?.value || '';
-  if (!n && !num) return;
+ // --- robust team submit: sequentially add each player to storefront cart ---
+form.addEventListener('submit', async function(e) {
+  e.preventDefault();
 
-  // resolve numeric variant id using window.variantMap (case-insensitive)
-  let variantId = '';
-  try {
-    if (window.variantMap) {
-      variantId = window.variantMap[sz] || window.variantMap[sz.toUpperCase()] || window.variantMap[sz.toLowerCase()] || '';
-    }
-  } catch(e) { variantId = ''; }
+  const rows = list.querySelectorAll('.player-row');
+  const players = [];
 
-  players.push({
-    name: n.toString().toUpperCase().slice(0,12),
-    number: num.toString().replace(/\D/g,'').slice(0,3),
-    size: sz,
-    font: f,
-    color: c,
-    variant_id: variantId  // <-- important: numeric id
-  });
-});
-
-    if (players.length === 0) { alert('Add at least one player.'); return; }
-
-    const payload = { product_id: form.querySelector('input[name="product_id"]').value || null, players: players };
+  rows.forEach(r => {
+    const n = (r.querySelector('.player-name')?.value || '').toString().toUpperCase().slice(0,12);
+    const num = (r.querySelector('.player-number')?.value || '').toString().replace(/\D/g,'').slice(0,3);
+    const sz = (r.querySelector('.player-size')?.value || '').toString();
+    if (!n && !num) return;
+    let variantId = '';
     try {
-      const token = document.querySelector('input[name="_token"]')?.value || '';
-      const resp = await fetch(form.action, {
+      // try multiple key casings
+      variantId = window.variantMap[sz] || window.variantMap[sz.toUpperCase()] || window.variantMap[sz.toLowerCase()] || '';
+    } catch (e) { variantId = ''; }
+    players.push({ name: n, number: num, size: sz, variant_id: variantId });
+  });
+
+  if (players.length === 0) { alert('Add at least one player.'); return; }
+
+  // debug: inspect payload
+  console.log('Players payload before add:', players);
+
+  // validate variant ids
+  const missing = players.filter(p => !p.variant_id || !/^\d+$/.test(p.variant_id));
+  if (missing.length) {
+    console.warn('Missing variant ids for these rows:', missing);
+    alert('Some rows have no variant mapping. Open console to see details.');
+    return;
+  }
+
+  // disable form UI while adding
+  const originalBtn = addBtn; // reuse addBtn variable if exists
+  // disable all buttons to prevent double submit
+  document.querySelectorAll('button, input, select').forEach(el => el.disabled = true);
+
+  try {
+    for (const p of players) {
+      const bodyArr = [];
+      bodyArr.push('id=' + encodeURIComponent(p.variant_id));
+      bodyArr.push('quantity=1');
+
+      // attach properties per line
+      bodyArr.push('properties[' + encodeURIComponent('Name') + ']=' + encodeURIComponent(p.name));
+      bodyArr.push('properties[' + encodeURIComponent('Number') + ']=' + encodeURIComponent(p.number));
+      bodyArr.push('properties[' + encodeURIComponent('Size') + ']=' + encodeURIComponent(p.size));
+
+      const body = bodyArr.join('&');
+
+      const resp = await fetch('/cart/add', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': token },
-        body: JSON.stringify(payload),
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body,
         credentials: 'same-origin'
       });
-      const json = await resp.json().catch(()=>null);
+
       if (!resp.ok) {
-        alert((json && (json.message || json.error)) || 'Server error while adding team players.');
-        return;
+        const txt = await resp.text().catch(()=>null);
+        throw new Error('Cart add failed for variant ' + p.variant_id + ': ' + resp.status + ' ' + (txt || ''));
       }
-      if (json.checkoutUrl || json.checkout_url) { window.location.href = json.checkoutUrl || json.checkout_url; return; }
-      if (json.success) {
-        alert('Team saved successfully.');
-        if (json.team_id) window.location.href = '/team/' + json.team_id;
-        return;
-      }
-      alert('Saved. Refresh to continue.');
-    } catch(err) {
-      console.error(err);
-      alert('Network/server error. Check console.');
+      // small delay optional to avoid shopify rate quirks (uncomment if needed)
+      // await new Promise(r => setTimeout(r, 150));
     }
-  });
+
+    // all added — redirect to shopfront cart page
+    const shopfront = (window.shopfrontUrl || '').replace(/\/+$/,'');
+    window.location.href = shopfront + '/cart';
+  } catch (err) {
+    console.error('Error adding team items to cart:', err);
+    alert('Error adding team items to cart. Check console for details.');
+    // re-enable UI so user can try again
+    document.querySelectorAll('button, input, select').forEach(el => el.disabled = false);
+  }
+});
 
   // initial applyLayout after fonts and image ready
   document.fonts?.ready.then(()=> setTimeout(()=> { if (imgEl && imgEl.complete) applyLayout(); }, 120));
