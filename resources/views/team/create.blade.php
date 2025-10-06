@@ -416,7 +416,6 @@ form.addEventListener('submit', async function(e) {
     if (!n && !num) return;
     let variantId = '';
     try {
-      // try multiple key casings
       variantId = window.variantMap[sz] || window.variantMap[sz.toUpperCase()] || window.variantMap[sz.toLowerCase()] || '';
     } catch (e) { variantId = ''; }
     players.push({ name: n, number: num, size: sz, variant_id: variantId });
@@ -424,10 +423,9 @@ form.addEventListener('submit', async function(e) {
 
   if (players.length === 0) { alert('Add at least one player.'); return; }
 
-  // debug: inspect payload
   console.log('Players payload before add:', players);
 
-  // validate variant ids
+  // Validate variant ids (we require mapping before proceeding)
   const missing = players.filter(p => !p.variant_id || !/^\d+$/.test(p.variant_id));
   if (missing.length) {
     console.warn('Missing variant ids for these rows:', missing);
@@ -435,47 +433,99 @@ form.addEventListener('submit', async function(e) {
     return;
   }
 
-  // disable form UI while adding
-  const originalBtn = addBtn; // reuse addBtn variable if exists
-  // disable all buttons to prevent double submit
+  // Decide whether we are on storefront host or admin host
+  let shopfrontHost = '';
+  try { shopfrontHost = (new URL(window.shopfrontUrl)).host; } catch(e) { shopfrontHost = window.location.host; }
+  const isOnStorefront = (window.location.host === shopfrontHost);
+
+  // disable UI while processing
   document.querySelectorAll('button, input, select').forEach(el => el.disabled = true);
 
-  try {
-    for (const p of players) {
-      const bodyArr = [];
-      bodyArr.push('id=' + encodeURIComponent(p.variant_id));
-      bodyArr.push('quantity=1');
+  if (!isOnStorefront) {
+    // ON ADMIN SUBDOMAIN: send to server (team.store) which will call Shopify and return checkoutUrl
+    try {
+      const token = document.querySelector('input[name="_token"]')?.value || '';
+      const payload = {
+        product_id: form.querySelector('input[name="product_id"]')?.value || null,
+        players: players
+      };
 
-      // attach properties per line
-      bodyArr.push('properties[' + encodeURIComponent('Name') + ']=' + encodeURIComponent(p.name));
-      bodyArr.push('properties[' + encodeURIComponent('Number') + ']=' + encodeURIComponent(p.number));
-      bodyArr.push('properties[' + encodeURIComponent('Size') + ']=' + encodeURIComponent(p.size));
-
-      const body = bodyArr.join('&');
-
-      const resp = await fetch('/cart/add', {
+      const resp = await fetch(form.action, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: body,
-        credentials: 'same-origin'
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-CSRF-TOKEN': token
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify(payload)
       });
 
-      if (!resp.ok) {
-        const txt = await resp.text().catch(()=>null);
-        throw new Error('Cart add failed for variant ' + p.variant_id + ': ' + resp.status + ' ' + (txt || ''));
-      }
-      // small delay optional to avoid shopify rate quirks (uncomment if needed)
-      // await new Promise(r => setTimeout(r, 150));
-    }
+      const json = await resp.json().catch(()=>null);
 
-    // all added — redirect to shopfront cart page
-    const shopfront = (window.shopfrontUrl || '').replace(/\/+$/,'');
-    window.location.href = shopfront + '/cart';
-  } catch (err) {
-    console.error('Error adding team items to cart:', err);
-    alert('Error adding team items to cart. Check console for details.');
-    // re-enable UI so user can try again
-    document.querySelectorAll('button, input, select').forEach(el => el.disabled = false);
+      if (!resp.ok) {
+        console.error('Server returned error adding team:', resp.status, json);
+        alert((json && (json.message || json.error)) || 'Server error while adding team. Check console.');
+        // re-enable UI
+        document.querySelectorAll('button, input, select').forEach(el => el.disabled = false);
+        return;
+      }
+
+      // server responded OK: redirect to checkoutUrl if present, else to team page
+      const checkoutUrl = json?.checkoutUrl || json?.checkout_url || null;
+      if (checkoutUrl) {
+        window.location.href = checkoutUrl;
+        return;
+      }
+      if (json?.success && json?.team_id) {
+        window.location.href = '/team/' + json.team_id;
+        return;
+      }
+
+      alert('Team added. Redirecting to cart.');
+      window.location.href = (window.shopfrontUrl || '/').replace(/\/+$/,'') + '/cart';
+      return;
+
+    } catch (err) {
+      console.error('Error adding team items via server:', err);
+      alert('Error adding team items to cart. Check console for details.');
+      document.querySelectorAll('button, input, select').forEach(el => el.disabled = false);
+      return;
+    }
+  } else {
+    // ON STOREFRONT: do the old client-side /cart/add flow (same-origin)
+    try {
+      for (const p of players) {
+        const bodyArr = [];
+        bodyArr.push('id=' + encodeURIComponent(p.variant_id));
+        bodyArr.push('quantity=1');
+        bodyArr.push('properties[' + encodeURIComponent('Name') + ']=' + encodeURIComponent(p.name));
+        bodyArr.push('properties[' + encodeURIComponent('Number') + ']=' + encodeURIComponent(p.number));
+        bodyArr.push('properties[' + encodeURIComponent('Size') + ']=' + encodeURIComponent(p.size));
+        const body = bodyArr.join('&');
+
+        const resp = await fetch('/cart/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: body,
+          credentials: 'same-origin'
+        });
+
+        if (!resp.ok) {
+          const txt = await resp.text().catch(()=>null);
+          throw new Error('Cart add failed for variant ' + p.variant_id + ': ' + resp.status + ' ' + (txt || ''));
+        }
+      }
+
+      const shopfront = (window.shopfrontUrl || '').replace(/\/+$/,'');
+      window.location.href = shopfront + '/cart';
+      return;
+    } catch (err) {
+      console.error('Error adding team items to cart:', err);
+      alert('Error adding team items to cart. Check console for details.');
+      document.querySelectorAll('button, input, select').forEach(el => el.disabled = false);
+      return;
+    }
   }
 });
 
