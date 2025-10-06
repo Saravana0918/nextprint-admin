@@ -14,24 +14,24 @@ use Illuminate\Support\Facades\Log;
 class TeamController extends Controller
 {
     public function create(Request $request)
-        {
-            $product = Product::find($request->query('product_id'));
-            $prefill = $request->only(['prefill_name','prefill_number','prefill_font','prefill_color','prefill_size']);
+{
+    // eager-load variants
+    $product = Product::with('variants')->find($request->query('product_id'));
+    $prefill = $request->only(['prefill_name','prefill_number','prefill_font','prefill_color','prefill_size']);
 
-            $layoutSlots = [];
-            // prefer DB saved slots
-            if ($product && !empty($product->layout_slots)) {
-                $layoutSlots = is_array($product->layout_slots) ? $product->layout_slots : json_decode($product->layout_slots, true);
-            }
-            // fallback to URL-passed slots (quick test)
-            if (empty($layoutSlots) && $request->has('layoutSlots')) {
-                $raw = urldecode($request->query('layoutSlots'));
-                $decoded = json_decode($raw, true);
-                if (is_array($decoded)) $layoutSlots = $decoded;
-            }
+    $layoutSlots = [];
+    if ($product && !empty($product->layout_slots)) {
+        $layoutSlots = is_array($product->layout_slots) ? $product->layout_slots : json_decode($product->layout_slots, true);
+    }
+    if (empty($layoutSlots) && $request->has('layoutSlots')) {
+        $raw = urldecode($request->query('layoutSlots'));
+        $decoded = json_decode($raw, true);
+        if (is_array($decoded)) $layoutSlots = $decoded;
+    }
 
-            return view('team.create', compact('product','prefill','layoutSlots'));
-        }
+    return view('team.create', compact('product','prefill','layoutSlots'));
+}
+
 
     public function store(Request $request)
 {
