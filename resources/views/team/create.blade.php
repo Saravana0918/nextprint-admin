@@ -7,6 +7,34 @@
   $img = $product->image_url ?? ($product->preview_src ?? asset('images/placeholder.png'));
   $prefill = $prefill ?? [];
   $layoutSlots = $layoutSlots ?? null;
+
+  // build size options (preserve order of variants as returned)
+  $sizeOptions = [];
+  if (!empty($product) && $product->relationLoaded('variants') && $product->variants->count()) {
+      foreach ($product->variants as $v) {
+          $val = trim((string)($v->option_value ?? $v->option_name ?? ''));
+          if ($val === '') continue;
+          // don't duplicate
+          if (!in_array($val, $sizeOptions, true)) $sizeOptions[] = $val;
+      }
+  }
+
+  // render HTML for options (safe-escaped)
+  $sizeOptionsHtml = '<option value="">Size</option>';
+  foreach ($sizeOptions as $opt) {
+      $escaped = e($opt);
+      $sizeOptionsHtml .= "<option value=\"{$escaped}\">{$escaped}</option>";
+  }
+
+  // server-side variantMap used by JS to resolve variant IDs
+  $variantMap = [];
+  if (!empty($product) && $product->relationLoaded('variants')) {
+      foreach ($product->variants as $v) {
+          $key = trim((string)($v->option_value ?? $v->option_name ?? ''));
+          if ($key === '') continue;
+          $variantMap[strtoupper($key)] = (string)($v->shopify_variant_id ?? $v->variant_id ?? '');
+      }
+  }
 @endphp
 
 <!-- copy same stage CSS as designer so measurements match exactly -->
@@ -38,8 +66,8 @@
   }
 
   .preview-col .card-body {
-  padding: 0.75rem 1rem;      /* designer-ish padding; tweak if needed */
-  } 
+    padding: 0.75rem 1rem;      /* designer-ish padding; tweak if needed */
+  }
 
   /* page specific layout */
   .main-flex { align-items: flex-start; }
@@ -108,21 +136,14 @@
   window.layoutSlots = {!! json_encode($layoutSlots ?? [], JSON_NUMERIC_CHECK) !!};
 </script>
 
-<!-- row template (same as you had) -->
+<!-- row template (dynamic sizes injected into template) -->
 <template id="player-row-template">
   <div class="card mb-2 p-2 player-row">
     <div class="d-flex gap-2 align-items-start row-controls">
       <input name="players[][number]" class="form-control w-25 player-number" placeholder="00" maxlength="3" inputmode="numeric" />
       <input name="players[][name]" class="form-control player-name" placeholder="PLAYER NAME" maxlength="12" />
       <select name="players[][size]" class="form-select w-25 player-size">
-        <option value="">Size</option>
-        <option value="XS">XS</option>
-        <option value="S">S</option>
-        <option value="M">M</option>
-        <option value="L">L</option>
-        <option value="XL">XL</option>
-        <option value="XL">2XL</option>
-        <option value="XL">3XL</option>
+        {!! $sizeOptionsHtml !!}
       </select>
       <input type="hidden" name="players[][font]" class="player-font">
       <input type="hidden" name="players[][color]" class="player-color">
@@ -131,22 +152,14 @@
     </div>
   </div>
 </template>
-@php
-  $variantMap = [];
-  if (!empty($product) && $product->relationLoaded('variants')) {
-      foreach ($product->variants as $v) {
-          $key = trim((string)($v->option_value ?? $v->option_name ?? ''));
-          if ($key === '') continue;
-          $variantMap[strtoupper($key)] = (string)($v->shopify_variant_id ?? $v->variant_id ?? '');
-      }
-  }
-@endphp
 
 <script>
+  // expose variantMap and shopfrontUrl for client resolution
   window.variantMap = {!! json_encode($variantMap, JSON_UNESCAPED_SLASHES | JSON_NUMERIC_CHECK) !!} || {};
   console.info('team variantMap', window.variantMap);
   window.shopfrontUrl = "{{ env('SHOPIFY_STORE_FRONT_URL', 'https://nextprint.in') }}";
 </script>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
   const list = document.getElementById('players-list');
@@ -389,30 +402,30 @@ document.addEventListener('DOMContentLoaded', function() {
     const rows = list.querySelectorAll('.player-row');
     const players = [];
     rows.forEach(r => {
-  const n = r.querySelector('.player-name')?.value || '';
-  const num = r.querySelector('.player-number')?.value || '';
-  const sz = (r.querySelector('.player-size')?.value || '').toString();
-  const f  = r.querySelector('.player-font')?.value || '';
-  const c  = r.querySelector('.player-color')?.value || '';
-  if (!n && !num) return;
+      const n = r.querySelector('.player-name')?.value || '';
+      const num = r.querySelector('.player-number')?.value || '';
+      const sz = (r.querySelector('.player-size')?.value || '').toString();
+      const f  = r.querySelector('.player-font')?.value || '';
+      const c  = r.querySelector('.player-color')?.value || '';
+      if (!n && !num) return;
 
-  // resolve numeric variant id using window.variantMap (case-insensitive)
-  let variantId = '';
-  try {
-    if (window.variantMap) {
-      variantId = window.variantMap[sz] || window.variantMap[sz.toUpperCase()] || window.variantMap[sz.toLowerCase()] || '';
-    }
-  } catch(e) { variantId = ''; }
+      // resolve numeric variant id using window.variantMap (case-insensitive)
+      let variantId = '';
+      try {
+        if (window.variantMap) {
+          variantId = window.variantMap[sz] || window.variantMap[sz.toUpperCase()] || window.variantMap[sz.toLowerCase()] || '';
+        }
+      } catch(e) { variantId = ''; }
 
-  players.push({
-    name: n.toString().toUpperCase().slice(0,12),
-    number: num.toString().replace(/\D/g,'').slice(0,3),
-    size: sz,
-    font: f,
-    color: c,
-    variant_id: variantId  // <-- important: numeric id
-  });
-});
+      players.push({
+        name: n.toString().toUpperCase().slice(0,12),
+        number: num.toString().replace(/\D/g,'').slice(0,3),
+        size: sz,
+        font: f,
+        color: c,
+        variant_id: variantId  // <-- important: numeric id
+      });
+    });
 
     if (players.length === 0) { alert('Add at least one player.'); return; }
 
@@ -449,6 +462,5 @@ document.addEventListener('DOMContentLoaded', function() {
   window.addEventListener('resize', ()=> setTimeout(applyLayout, 120));
 });
 </script>
-
 
 @endsection
