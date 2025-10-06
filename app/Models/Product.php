@@ -17,6 +17,11 @@ class Product extends Model
         return $this->belongsTo(ShopifyProduct::class, 'shopify_product_id', 'id');
     }
 
+    public function variants()
+    {
+        return $this->hasMany(\App\Models\ProductVariant::class, 'product_id', 'id');
+    }
+
         public function printMethods()
     {
         return $this->belongsToMany(
