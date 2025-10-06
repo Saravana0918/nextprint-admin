@@ -147,21 +147,16 @@
 </div>
 
 <script>
-  // keep layoutSlots exposure (existing)
   window.layoutSlots = {!! json_encode($layoutSlots ?? [], JSON_NUMERIC_CHECK) !!};
   window.personalizationSupported = {{ !empty($layoutSlots) ? 'true' : 'false' }};
 
-  // TEMP: hardcoded variant map — replace with server-side values later
-  window.variantMap = {
-    "S": "45229263061188",
-    "M": "45229263093956",
-    "L": "45229263126724",
-    "XL": "45229263159492",
-    "2XL": "45229263192260",
-    "3XL": "45229263225028"
-  };
+  // ✅ Dynamic variantMap pulled from DB
+  window.variantMap = {!! json_encode(
+    $product->variants->pluck('shopify_variant_id', 'option_value'),
+    JSON_UNESCAPED_SLASHES | JSON_NUMERIC_CHECK
+  ) !!};
 
-  // storefront public URL (use env var or the actual storefront domain)
+  // storefront public URL
   window.shopfrontUrl = "{{ env('SHOPIFY_STORE_FRONT_URL', 'https://nextprint.in') }}";
 </script>
 
