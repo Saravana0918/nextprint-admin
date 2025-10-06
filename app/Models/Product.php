@@ -12,6 +12,12 @@ class Product extends Model
         return $this->hasMany(ProductView::class);
     }
 
+     public function variants()
+    {
+        // table foreign key is product_id by default
+        return $this->hasMany(ProductVariant::class, 'product_id', 'id');
+    }
+
     public function shopifyProduct()
     {
         return $this->belongsTo(ShopifyProduct::class, 'shopify_product_id', 'id');
