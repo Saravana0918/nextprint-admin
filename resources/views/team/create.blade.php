@@ -126,20 +126,43 @@
 </template>
 @php
   $variantMap = [];
-  if (!empty($product) && $product->relationLoaded('variants')) {
-      foreach ($product->variants as $v) {
+
+  if (!empty($product)) {
+      // Try to use whatever is already loaded
+      if (! $product->relationLoaded('variants')) {
+          try { $product->load('variants'); } catch (\Throwable $e) { /* ignore */ }
+      }
+
+      $variants = $product->variants ?? collect();
+
+      // Fallback: query directly if collection empty
+      if (empty($variants) || $variants->count() === 0) {
+          $variants = \App\Models\ProductVariant::where('product_id', $product->id)->get();
+      }
+
+      foreach ($variants as $v) {
           $key = trim((string)($v->option_value ?? $v->option_name ?? ''));
           if ($key === '') continue;
-          // store uppercase key for safer lookup
           $variantMap[strtoupper($key)] = (string)($v->shopify_variant_id ?? $v->variant_id ?? '');
       }
   }
 @endphp
 
 <script>
-  // injected by server from DB (keys uppercased)
   window.variantMap = {!! json_encode($variantMap, JSON_UNESCAPED_SLASHES|JSON_NUMERIC_CHECK) !!} || {};
   console.info('team.variantMap:', window.variantMap);
+
+  // DEBUG helper (temporary - remove after testing)
+  (function(){
+    const dbg = document.createElement('pre');
+    dbg.id = 'debug-variantmap';
+    dbg.style.cssText = 'position:fixed;bottom:8px;left:8px;z-index:99999;background:rgba(0,0,0,0.7);color:#fff;padding:8px;border-radius:6px;font-size:12px;max-width:380px;max-height:240px;overflow:auto;';
+    dbg.textContent = 'variantMap: ' + JSON.stringify(window.variantMap, null, 2);
+    document.addEventListener('DOMContentLoaded', ()=> {
+      document.body.appendChild(dbg);
+    });
+  })();
+
   // storefront public URL (same as designer)
   window.shopfrontUrl = "{{ env('SHOPIFY_STORE_FRONT_URL', 'https://nextprint.in') }}";
 </script>
