@@ -153,12 +153,12 @@
 
   // TEMP: hardcoded variant map — replace with server-side values later
   window.variantMap = {
-    "S": "45229263061188",
-    "M": "45229263093956",
-    "L": "45229263126724",
-    "XL": "45229263159492",
-    "2XL": "45229263192260",
-    "3XL": "45229263225028"
+    "S": "45235242041540",
+    "M": "45235242074308",
+    "L": "45235242107076",
+    "XL": "45235242139844",
+    "2XL": "45235242172612",
+    "3XL": "45235242205380"
   };
 
   // storefront public URL (use env var or the actual storefront domain)
