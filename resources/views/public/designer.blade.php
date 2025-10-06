@@ -132,7 +132,10 @@
         <div class="mb-2">
           <select id="np-size" name="size" class="form-select" required>
             <option value="">Select Size</option>
-            <option value="S">S</option><option value="M">M</option><option value="L">L</option><option value="XL">XL</option>
+            <option value="S">S</option>
+            <option value="M">M</option>
+            <option value="L">L</option>
+            <option value="XL">XL</option>
           </select>
         </div>
         <div class="mb-2">
@@ -155,13 +158,12 @@
   window.shopfrontUrl = "{{ env('SHOPIFY_STORE_FRONT_URL', 'https://nextprint.in') }}";
 </script>
 <script>
-  // Build variant map from server $product variants.
+  // Build variant map from server $product->variants (copy-paste this block)
   (function(){
     const map = {};
-    @if(!empty($product) && !empty($product->variants))
+    @if(!empty($product) && !empty($product->variants) && count($product->variants) > 0)
       @foreach($product->variants as $v)
         @php
-          // attempt to get numeric variant id from common fields
           $vid = $v['shopify_variant_id'] ?? $v->shopify_variant_id ?? $v->shopify_id ?? $v->id ?? null;
           $label = $v['option1'] ?? $v->option1 ?? ($v['title'] ?? ($v['sku'] ?? ''));
           $label = (string) ($label ?? '');
@@ -176,6 +178,7 @@
     @else
       console.warn('No $product->variants available to build variantMap');
     @endif
+
     window.variantMap = map;
     window.shopifyProductNumericId = "{{ $product->shopify_product_id ?? $product->shopify_id ?? '' }}";
     console.log('variantMap (server)', window.variantMap, 'shopifyProductNumericId=', window.shopifyProductNumericId);

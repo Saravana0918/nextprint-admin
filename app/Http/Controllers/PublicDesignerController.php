@@ -216,4 +216,12 @@ class PublicDesignerController extends Controller
             'displayPrice' => (float)$displayPrice,
         ]);
     }
+
+    // Example in DesignerController.php
+public function showDesigner($id) {
+    // ensure variants relation is eager loaded
+    $product = Product::with('variants')->find($id);
+    if (!$product) abort(404);
+    return view('designer', compact('product'));
+}
 }
