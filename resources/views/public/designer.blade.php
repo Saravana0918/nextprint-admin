@@ -147,23 +147,34 @@
 </div>
 
 <script>
-  // keep layoutSlots exposure (existing)
-  window.layoutSlots = {!! json_encode($layoutSlots ?? [], JSON_NUMERIC_CHECK) !!};
-  window.personalizationSupported = {{ !empty($layoutSlots) ? 'true' : 'false' }};
-
-  // TEMP: hardcoded variant map — replace with server-side values later
-  window.variantMap = {
-    "S": "45235242041540",
-    "M": "45235242074308",
-    "L": "45235242107076",
-    "XL": "45235242139844",
-    "2XL": "45235242172612",
-    "3XL": "45235242205380"
-  };
-
-  // storefront public URL (use env var or the actual storefront domain)
-  window.shopfrontUrl = "{{ env('SHOPIFY_STORE_FRONT_URL', 'https://nextprint.in') }}";
+  // Build variant map from server $product variants.
+  // Assumes $product->variants is an array/collection with fields: option1/title and shopify variant id in 'shopify_variant_id' or 'shopify_id' or 'id'.
+  (function(){
+    const map = {};
+    @if(!empty($product) && !empty($product->variants))
+      @foreach($product->variants as $v)
+        @php
+          // try multiple possible keys where variant id may live
+          $vid = $v['shopify_variant_id'] ?? $v->shopify_variant_id ?? $v->shopify_id ?? $v->id ?? null;
+          // pick option label (option1 or title) to use as key, fallback to position or SKU
+          $label = $v['option1'] ?? $v->option1 ?? ($v['title'] ?? ($v['option_value'] ?? ($v['sku'] ?? '')));
+          $label = (string) ($label ?? '');
+          $vid = (string) ($vid ?? '');
+        @endphp
+        @if($vid && $label)
+          map["{{ addslashes($label) }}"] = "{{ $vid }}";
+          map["{{ strtoupper(addslashes($label)) }}"] = "{{ $vid }}";
+          map["{{ strtolower(addslashes($label)) }}"] = "{{ $vid }}";
+        @endif
+      @endforeach
+    @endif
+    window.variantMap = map;
+    // expose shopify product numeric id too (useful)
+    window.shopifyProductNumericId = "{{ $product->shopify_product_id ?? $product->shopify_id ?? '' }}";
+    console.log('variantMap (server)', window.variantMap, 'shopifyProductNumericId=', window.shopifyProductNumericId);
+  })();
 </script>
+
 
 <script>
 (function(){
