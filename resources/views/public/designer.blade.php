@@ -129,18 +129,27 @@
         <input type="hidden" name="product_id" id="np-product-id" value="{{ $product->id ?? $product->local_id ?? '' }}">
         <input type="hidden" name="shopify_product_id" id="np-shopify-product-id" value="{{ $product->shopify_product_id ?? $product->shopify_id ?? '' }}">
         <input type="hidden" name="variant_id" id="np-variant-id" value="">
+
+        {{-- -- DYNAMIC SIZE DROPDOWN (populated from DB) --}}
+        @php
+          // Build a size options array using variantMap keys or product->variants fallback
+          $sizeOptions = [];
+          // If $product->variants is loaded, build from that (preserves original values)
+          if (!empty($product) && $product->relationLoaded('variants') && $product->variants->count()) {
+              $sizeOptions = $product->variants->pluck('option_value')->map(fn($x)=>trim((string)$x))->unique()->values()->all();
+          }
+          // Ensure uppercasing when building variantMap later - but display original option_value casing
+        @endphp
+
         <div class="mb-2">
           <select id="np-size" name="size" class="form-select" required>
             <option value="">Select Size</option>
-            <option value="S">XS</option>
-            <option value="S">S</option>
-            <option value="M">M</option>
-            <option value="L">L</option>
-            <option value="XL">XL</option>
-            <option value="XL">2XL</option>
-            <option value="XL">3XL</option>
+            @foreach($sizeOptions as $opt)
+              <option value="{{ $opt }}">{{ $opt }}</option>
+            @endforeach
           </select>
         </div>
+
         <div class="mb-2">
           <input id="np-qty" name="quantity" type="number" min="1" value="1" class="form-control">
         </div>
@@ -153,14 +162,16 @@
 </div>
 
 @php
-  // Build a robust variant map server-side
+  // Build a robust variant map server-side: KEY => shopify_variant_id
+  // We normalize keys to the exact option_value as stored (and uppercase lookup will be used in JS)
   $variantMap = [];
   if (!empty($product) && $product->relationLoaded('variants')) {
       foreach ($product->variants as $v) {
-          // prefer option_value else option_name, trim and uppercase the key
-          $key = trim((string)($v->option_value ?? $v->option_name ?? ''));
-          if ($key === '') continue;
-          $variantMap[strtoupper($key)] = (string)($v->shopify_variant_id ?? $v->variant_id ?? '');
+          $rawKey = trim((string)($v->option_value ?? $v->option_name ?? $v->title ?? ''));
+          if ($rawKey === '') continue;
+          // store both original and uppercase mapping in JS will do uppercase lookup
+          $variantMap[strtoupper($rawKey)] = (string)($v->shopify_variant_id ?? $v->variant_id ?? $v->id ?? '');
+          // Also build a display map so we can match exact casing if needed
       }
   }
 @endphp
@@ -175,7 +186,6 @@
 
   window.shopfrontUrl = "{{ env('SHOPIFY_STORE_FRONT_URL', 'https://nextprint.in') }}";
 </script>
-
 
 <script>
 (function(){
@@ -281,6 +291,7 @@
     const size = $('np-size')?.value || '';
     if (window.variantMap && size) {
       const k = (size || '').toString();
+      // try direct, then uppercase, then lowercase
       $('np-variant-id').value = window.variantMap[k] || window.variantMap[k.toUpperCase()] || window.variantMap[k.toLowerCase()] || '';
     } else {
       // clear variant id if no mapping
@@ -323,11 +334,21 @@
       syncHidden();
       syncPreview();
     });
+
+    // If there's a prefill (like Add Team Players passing in a prefill_size), set it now
+    try {
+      // window.prefill may be injected by Team page; gracefully handle if not set
+      var prefillSize = (window.prefill && (window.prefill.prefill_size || window.prefill.size)) ? (window.prefill.prefill_size || window.prefill.size) : null;
+      if (prefillSize && sizeEl.querySelector('option[value="'+prefillSize+'"]')) {
+        sizeEl.value = prefillSize;
+      }
+    } catch(e) { /* ignore */ }
+
     // also call once to populate initial value
     try { sizeEl.dispatchEvent(new Event('change')); } catch(e) {}
   }
 
-  // add team button
+  // add team button (navigates to team.create with prefill)
   if (addTeam) {
     addTeam.addEventListener('click', function(e) {
       e.preventDefault();
