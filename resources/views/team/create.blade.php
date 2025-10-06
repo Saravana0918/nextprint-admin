@@ -115,7 +115,14 @@
       <input name="players[][number]" class="form-control w-25 player-number" placeholder="00" maxlength="3" inputmode="numeric" />
       <input name="players[][name]" class="form-control player-name" placeholder="PLAYER NAME" maxlength="12" />
       <select name="players[][size]" class="form-select w-25 player-size">
-        <option value="">Size</option><option value="XS">XS</option><option value="S">S</option><option value="M">M</option><option value="L">L</option><option value="XL">XL</option>
+        <option value="">Size</option>
+        <option value="XS">XS</option>
+        <option value="S">S</option>
+        <option value="M">M</option>
+        <option value="L">L</option>
+        <option value="XL">XL</option>
+        <option value="XL">2XL</option>
+        <option value="XL">3XL</option>
       </select>
       <input type="hidden" name="players[][font]" class="player-font">
       <input type="hidden" name="players[][color]" class="player-color">
