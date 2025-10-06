@@ -448,12 +448,21 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         return;
       }
-      if (json.checkoutUrl || json.checkout_url) { window.location.href = json.checkoutUrl || json.checkout_url; return; }
-      if (json.success) {
-        alert('Team saved successfully.');
-        if (json.team_id) window.location.href = '/team/' + json.team_id;
-        return;
-      }
+      if (json.checkoutUrl || json.checkout_url) {
+  window.location.href = json.checkoutUrl || json.checkout_url;
+  return;
+}
+
+if (json.success && json.checkoutUrl) {
+  window.location.href = json.checkoutUrl;
+  return;
+}
+
+if (json.success) {
+  // fallback only if checkoutUrl is missing
+  window.location.href = '/team/' + (json.team_id || '');
+  return;
+}
       alert('Saved. Refresh to continue.');
     } catch(err) {
       console.error(err);

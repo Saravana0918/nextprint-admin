@@ -186,20 +186,24 @@ class TeamController extends Controller
                 $checkoutUrl = $resp;
             }
 
-            if ($request->wantsJson() || $request->ajax()) {
-                return response()->json([
-                    'success' => true,
-                    'team_id' => $team->id,
-                    'checkoutUrl' => $checkoutUrl,
-                ], 200);
-            }
+            // ✅ If checkout URL exists → directly redirect to checkout (no alert)
+if (!empty($checkoutUrl)) {
+    return redirect()->away($checkoutUrl);
+}
 
-            if (!empty($checkoutUrl)) {
-                return redirect()->away($checkoutUrl);
-            }
+// ✅ If checkout URL missing but it's AJAX, return success JSON
+if ($request->wantsJson() || $request->ajax()) {
+    return response()->json([
+        'success' => true,
+        'team_id' => $team->id,
+        'message' => 'Team saved successfully.',
+        'checkoutUrl' => $checkoutUrl,
+    ], 200);
+}
 
-            // If Shopify controller didn't give a checkout URL, redirect to team page
-            return redirect()->route('team.show', $team->id)->with('success', 'Team saved. Proceed to cart manually.');
+// ✅ Otherwise, fallback to view page (optional)
+return redirect()->route('team.show', $team->id)
+                 ->with('success', 'Team saved successfully.');
         } catch (\Throwable $e) {
             // Log the error and payload for debugging
             Log::error('Shopify addToCart failed: ' . $e->getMessage(), [
