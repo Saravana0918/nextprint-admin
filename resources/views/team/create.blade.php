@@ -11,17 +11,14 @@
 
 <!-- copy same stage CSS as designer so measurements match exactly -->
 <style>
-  /* fonts (ensure same families as designer) */
   .font-bebas{font-family:'Bebas Neue', Impact, 'Arial Black', sans-serif;}
   .font-anton{font-family:'Anton', Impact, 'Arial Black', sans-serif;}
   .font-oswald{font-family:'Oswald', Arial, sans-serif;}
   .font-impact{font-family:Impact, 'Arial Black', sans-serif;}
 
-  /* match designer stage exactly */
   .np-stage { position: relative; width: 100%; max-width: 534px; margin: 0 auto; background:#fff; border-radius:8px; padding:8px; min-height: 320px; box-sizing: border-box; overflow: visible; }
   .np-stage img { width:100%; height:auto; border-radius:6px; display:block; }
 
-  /* overlay styling (same as designer) */
   .np-overlay {
     position: absolute;
     color: #D4AF37;
@@ -37,11 +34,8 @@
     z-index: 9999;
   }
 
-  .preview-col .card-body {
-  padding: 0.75rem 1rem;      /* designer-ish padding; tweak if needed */
-  } 
+  .preview-col .card-body { padding: 0.75rem 1rem; }
 
-  /* page specific layout */
   .main-flex { align-items: flex-start; }
   @media (max-width: 991px) {
     .main-flex { flex-direction: column !important; }
@@ -52,7 +46,6 @@
 
 <div class="container py-4">
   <div class="d-flex align-items-start gap-4 main-flex">
-    <!-- PREVIEW COLUMN (uses designer-like .np-stage) -->
     <div class="preview-col" style="width:534px; flex-shrink:0;">
       <div class="card">
         <div class="card-body text-center" style="position:relative;">
@@ -75,7 +68,6 @@
       </div>
     </div>
 
-    <!-- FORM COLUMN -->
     <div class="flex-grow-1 form-col">
       <h3 class="mb-3">Add Team Players for: {{ $product->name ?? 'Product' }}</h3>
 
@@ -108,14 +100,14 @@
   window.layoutSlots = {!! json_encode($layoutSlots ?? [], JSON_NUMERIC_CHECK) !!};
 </script>
 
-<!-- row template (same as you had) -->
 <template id="player-row-template">
   <div class="card mb-2 p-2 player-row">
     <div class="d-flex gap-2 align-items-start row-controls">
       <input name="players[][number]" class="form-control w-25 player-number" placeholder="00" maxlength="3" inputmode="numeric" />
       <input name="players[][name]" class="form-control player-name" placeholder="PLAYER NAME" maxlength="12" />
       <select name="players[][size]" class="form-select w-25 player-size">
-        <option value="">Size</option><option value="XS">XS</option><option value="S">S</option><option value="M">M</option><option value="L">L</option><option value="XL">XL</option>
+        <option value="">Size</option>
+        <option value="XS">XS</option><option value="S">S</option><option value="M">M</option><option value="L">L</option><option value="XL">XL</option>
       </select>
       <input type="hidden" name="players[][font]" class="player-font">
       <input type="hidden" name="players[][color]" class="player-color">
@@ -126,7 +118,7 @@
 </template>
 
 @php
-  // Build variantMap server-side (safe: will load variants if not already)
+  // Build variantMap server-side from DB variants (keys uppercased)
   $variantMap = [];
   if (!empty($product)) {
       if (! $product->relationLoaded('variants')) {
@@ -136,17 +128,15 @@
       foreach ($variants as $v) {
           $k = trim((string)($v->option_value ?? $v->option_name ?? ''));
           if ($k === '') continue;
-          // store uppercase key for safer lookup in JS
           $variantMap[strtoupper($k)] = (string)($v->shopify_variant_id ?? $v->variant_id ?? '');
       }
   }
 @endphp
 
 <script>
-  // injected by server from DB (keys uppercased)
+  // variantMap injected (case-insensitive lookup possible)
   window.variantMap = {!! json_encode($variantMap, JSON_UNESCAPED_SLASHES|JSON_NUMERIC_CHECK) !!} || {};
   console.info('team.variantMap:', window.variantMap);
-  // storefront public URL (same as designer)
   window.shopfrontUrl = "{{ env('SHOPIFY_STORE_FRONT_URL', 'https://nextprint.in') }}";
 </script>
 
@@ -209,7 +199,6 @@ document.addEventListener('DOMContentLoaded', function() {
     el.style.boxSizing = 'border-box';
     el.style.padding = '0 6px';
 
-    // font sizing
     const txt = (el.textContent || '').toString().trim() || (slotKey === 'number' ? '09' : 'NAME');
     const chars = Math.max(1, txt.length);
     const isMobile = window.innerWidth <= 767;
@@ -235,7 +224,6 @@ document.addEventListener('DOMContentLoaded', function() {
   function applyLayout() {
     if (!imgEl || !imgEl.complete) return;
 
-    // apply prefill font & color if present (only initial)
     if (pf.prefill_font || pf.font) {
       const map = {bebas: "Bebas Neue, sans-serif", oswald: "Oswald, sans-serif", anton: "Anton, sans-serif", impact: "Impact, Arial"};
       const key = (pf.prefill_font || pf.font).toString().toLowerCase();
@@ -247,12 +235,10 @@ document.addEventListener('DOMContentLoaded', function() {
       if (c) { ovName.style.color = c; ovNum.style.color = c; }
     }
 
-    // position overlays according to layout slots
     placeOverlay(ovName, layout.name, 'name');
     placeOverlay(ovNum, layout.number, 'number');
   }
 
-  // robust recalculation helper (ResizeObserver + events)
   (function addReliableRecalc() {
     try {
       if ('ResizeObserver' in window) {
@@ -273,7 +259,6 @@ document.addEventListener('DOMContentLoaded', function() {
     } catch (err) { console.warn('recalc helper failed', err); }
   })();
 
-  // ---- preview rendering for a row (reusable) ----
   function renderRowPreview(row) {
     if (!row) return;
     const nameEl = row.querySelector('.player-name');
@@ -284,7 +269,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const nm = (nameEl?.value || '').toUpperCase().slice(0,12);
     const nu = (numEl?.value || '').replace(/\D/g,'').slice(0,3);
 
-    // apply per-row font if provided
     if (fontHidden?.value) {
       const fm = fontHidden.value.toLowerCase();
       const familyMap = {bebas: "Bebas Neue, sans-serif", oswald: "Oswald, sans-serif", anton:"Anton, sans-serif", impact:"Impact, Arial"};
@@ -293,23 +277,19 @@ document.addEventListener('DOMContentLoaded', function() {
       ovNum.style.fontFamily = fam;
     }
 
-    // apply per-row color if provided
     if (colorHidden?.value) {
       ovName.style.color = colorHidden.value;
       ovNum.style.color = colorHidden.value;
     }
 
-    // set overlay text & mark active row
     ovName.textContent = nm || 'NAME';
     ovNum.textContent = nu || '09';
     list.querySelectorAll('.player-row').forEach(r => r.classList.remove('preview-active'));
     row.classList.add('preview-active');
 
-    // reposition overlays
     applyLayout();
   }
 
-  // helper: attach input limits
   function enforceLimits(input) {
     if (!input) return;
     if (input.classList.contains('player-number')) {
@@ -320,7 +300,14 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-  // create a new row and wire UI
+  // --- helper to lookup variant id from window.variantMap (case-insensitive) ---
+  function getVariantIdBySize(size) {
+    if (!size || !window.variantMap) return '';
+    const s = (size || '').toString().trim();
+    return window.variantMap[s] || window.variantMap[s.toUpperCase()] || window.variantMap[s.toLowerCase()] || '';
+  }
+
+  // create a new row and wire UI (improved: attach variant hidden input & auto-assign)
   function createRow(vals = {}) {
     const node = tpl.content.cloneNode(true);
     list.appendChild(node);
@@ -340,7 +327,21 @@ document.addEventListener('DOMContentLoaded', function() {
 
     enforceLimits(numEl); enforceLimits(nameEl);
 
-    // wire remove click (per-row)
+    // create hidden variant field for this row and auto-assign when size changes
+    const variantHidden = document.createElement('input');
+    variantHidden.type = 'hidden';
+    variantHidden.name = 'players[][variant_id]';
+    last.querySelector('.row-controls').appendChild(variantHidden);
+
+    const assignVariant = () => {
+      const vid = getVariantIdBySize(sizeEl.value);
+      variantHidden.value = vid || '';
+      // debug log - remove in production if not needed
+      console.debug('row assignVariant:', sizeEl.value, '=>', vid);
+    };
+    sizeEl.addEventListener('change', assignVariant);
+    assignVariant(); // initial assign
+
     last.querySelector('.btn-remove').addEventListener('click', ()=> {
       last.remove();
       if (!list.querySelector('.player-row')) { ovName.textContent = ''; ovNum.textContent = ''; applyLayout(); }
@@ -350,20 +351,17 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     });
 
-    // wire focus => auto preview for this row
     nameEl.addEventListener('focus', ()=> renderRowPreview(last));
     numEl.addEventListener('focus', ()=> renderRowPreview(last));
     nameEl.addEventListener('input', ()=> { if (last.classList.contains('preview-active')) renderRowPreview(last); });
     numEl.addEventListener('input', ()=> { if (last.classList.contains('preview-active')) renderRowPreview(last); });
 
-    // auto-focus and auto-preview new row
     nameEl.focus();
     renderRowPreview(last);
 
     return last;
   }
 
-  // event delegation for Preview buttons (works for dynamic rows)
   list.addEventListener('click', function(evt) {
     const btn = evt.target.closest('.btn-preview');
     if (!btn) return;
@@ -374,7 +372,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
   addBtn.addEventListener('click', ()=> createRow());
 
-  // initial rows from prefill (if provided)
   if ((pf.prefill_name && pf.prefill_name.length) || (pf.prefill_number && pf.prefill_number.length)) {
     createRow({
       name: (pf.prefill_name || pf.name || '').toString().toUpperCase().slice(0,12),
@@ -386,7 +383,7 @@ document.addEventListener('DOMContentLoaded', function() {
     createRow();
   }
 
-  // final collect & submit
+  // final collect & submit (ensures variant_id present using server-injected map)
   form.addEventListener('submit', async function(e) {
     e.preventDefault();
     const rows = list.querySelectorAll('.player-row');
@@ -397,22 +394,15 @@ document.addEventListener('DOMContentLoaded', function() {
       const sz = (r.querySelector('.player-size')?.value || '').toString();
       const f  = r.querySelector('.player-font')?.value || '';
       const c  = r.querySelector('.player-color')?.value || '';
-      if (!n && !num) return;
-
-      // robust variant lookup — use uppercase key only
+      // hidden variant field created per row
+      const variantHidden = r.querySelector('input[name="players[][variant_id]"]');
       let variantId = '';
-      try {
-        const k = (sz || '').toString().trim().toUpperCase();
-        if (k && window.variantMap && Object.prototype.hasOwnProperty.call(window.variantMap, k)) {
-          variantId = window.variantMap[k];
-        }
-      } catch (err) {
-        console.warn('Variant lookup failed for size:', sz, err);
-        variantId = '';
-      }
+      if (variantHidden) variantId = (variantHidden.value || '').toString();
+      // fallback: lookup from window.variantMap
       if (!variantId) {
-        console.warn('⚠️ No variant mapping for size:', sz, 'keyUsed:', (sz||'').toString().trim().toUpperCase(), 'variantMap:', window.variantMap);
+        variantId = getVariantIdBySize(sz);
       }
+      if (!n && !num) return;
 
       players.push({
         name: n.toString().toUpperCase().slice(0,12),
@@ -420,17 +410,27 @@ document.addEventListener('DOMContentLoaded', function() {
         size: sz,
         font: f,
         color: c,
-        variant_id: variantId  // <-- important: numeric id (may be empty -> server will validate)
+        variant_id: variantId || ''
       });
     });
 
     if (players.length === 0) { alert('Add at least one player.'); return; }
 
-    const payload = { product_id: form.querySelector('input[name="product_id"]').value || null, players: players };
-    try {
-      // debug: log payload (remove in production if noisy)
-      console.info('Players payload before add: ', players);
+    // if any player missing variant_id, show helpful message and stop (server also validates)
+    const missing = players.filter(p => !p.variant_id || !/^\d+$/.test(p.variant_id));
+    if (missing.length) {
+      console.warn('Missing variant ids for some rows:', missing);
+      alert('Some rows are missing a size→variant mapping. Please choose a valid size for all rows.');
+      return;
+    }
 
+    const payload = { 
+      product_id: form.querySelector('input[name="product_id"]').value || null, 
+      shopify_product_id: form.querySelector('input[name="shopify_product_id"]').value || null,
+      players: players 
+    };
+
+    try {
       const token = document.querySelector('input[name="_token"]')?.value || '';
       const resp = await fetch(form.action, {
         method: 'POST',
@@ -440,29 +440,16 @@ document.addEventListener('DOMContentLoaded', function() {
       });
       const json = await resp.json().catch(()=>null);
       if (!resp.ok) {
-        // show server-provided helpful message if present
-        const message = (json && (json.message || json.error)) || 'Server error while adding team players.';
-        alert(message);
-        if (json && json.missing) {
-          console.warn('Missing variant rows:', json.missing);
-        }
+        alert((json && (json.message || json.error)) || 'Server error while adding team players.');
         return;
       }
-      if (json.checkoutUrl || json.checkout_url) {
-  window.location.href = json.checkoutUrl || json.checkout_url;
-  return;
-}
-
-if (json.success && json.checkoutUrl) {
-  window.location.href = json.checkoutUrl;
-  return;
-}
-
-if (json.success) {
-  // fallback only if checkoutUrl is missing
-  window.location.href = '/team/' + (json.team_id || '');
-  return;
-}
+      // redirect to checkout if controller returned checkoutUrl
+      if (json.checkoutUrl || json.checkout_url) { window.location.href = json.checkoutUrl || json.checkout_url; return; }
+      if (json.success) {
+        alert('Team saved successfully.');
+        if (json.team_id) window.location.href = '/team/' + json.team_id;
+        return;
+      }
       alert('Saved. Refresh to continue.');
     } catch(err) {
       console.error(err);
@@ -470,7 +457,6 @@ if (json.success) {
     }
   });
 
-  // initial applyLayout after fonts and image ready
   document.fonts?.ready.then(()=> setTimeout(()=> { if (imgEl && imgEl.complete) applyLayout(); }, 120));
   if (imgEl) imgEl.addEventListener('load', ()=> setTimeout(applyLayout, 80));
   window.addEventListener('resize', ()=> setTimeout(applyLayout, 120));
