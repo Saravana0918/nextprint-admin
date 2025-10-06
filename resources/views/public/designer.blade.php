@@ -146,19 +146,30 @@
   </div>
 </div>
 
+@php
+  // Build a robust variant map server-side
+  $variantMap = [];
+  if (!empty($product) && $product->relationLoaded('variants')) {
+      foreach ($product->variants as $v) {
+          // prefer option_value else option_name, trim and uppercase the key
+          $key = trim((string)($v->option_value ?? $v->option_name ?? ''));
+          if ($key === '') continue;
+          $variantMap[strtoupper($key)] = (string)($v->shopify_variant_id ?? $v->variant_id ?? '');
+      }
+  }
+@endphp
+
 <script>
   window.layoutSlots = {!! json_encode($layoutSlots ?? [], JSON_NUMERIC_CHECK) !!};
   window.personalizationSupported = {{ !empty($layoutSlots) ? 'true' : 'false' }};
 
-  // ✅ Dynamic variantMap pulled from DB
-  window.variantMap = {!! json_encode(
-    $product->variants->pluck('shopify_variant_id', 'option_value'),
-    JSON_UNESCAPED_SLASHES | JSON_NUMERIC_CHECK
-  ) !!};
+  // dynamic variant map injected from DB (keys uppercased)
+  window.variantMap = {!! json_encode($variantMap, JSON_UNESCAPED_SLASHES | JSON_NUMERIC_CHECK) !!} || {};
+  console.info('variantMap:', window.variantMap);
 
-  // storefront public URL
   window.shopfrontUrl = "{{ env('SHOPIFY_STORE_FRONT_URL', 'https://nextprint.in') }}";
 </script>
+
 
 <script>
 (function(){

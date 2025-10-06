@@ -21,20 +21,24 @@ class PublicDesignerController extends Controller
         $product = null;
 
         if ($productId) {
+            // If looks like a Shopify product id (long numeric), prefer shopify_product_id
             if (ctype_digit((string)$productId) && strlen((string)$productId) >= 8) {
                 $product = Product::with(['views','views.areas','variants'])
                             ->where('shopify_product_id', $productId)
                             ->first();
 
                 if (! $product) {
+                    // fallback: local primary key
                     $product = Product::with(['views','views.areas','variants'])->find((int)$productId);
                 }
             } else {
+                // short numeric likely local id
                 if (ctype_digit((string)$productId)) {
                     $product = Product::with(['views','views.areas','variants'])->find((int)$productId);
                 }
             }
 
+            // fallback: try matching across useful columns
             if (!$product) {
                 $query = Product::with(['views','views.areas','variants']);
                 $cols = [];
@@ -92,9 +96,7 @@ class PublicDesignerController extends Controller
             if ($h     <= 1) $h    *= 100;
 
             $slotKey = null;
-            if (!empty($a->slot_key)) {
-                $slotKey = strtolower(trim($a->slot_key));
-            }
+            if (!empty($a->slot_key)) $slotKey = strtolower(trim($a->slot_key));
 
             if (!$slotKey && !empty($a->name)) {
                 $n = strtolower($a->name);
@@ -151,9 +153,6 @@ class PublicDesignerController extends Controller
 
             if ($displayPrice === null && method_exists($product, 'variants')) {
                 if ($product->relationLoaded('variants')) {
-                    foreach ($product->variants as $v) {
-                        \Log::info("designer: variant sample id=" . ($v->id ?? 'n/a') . " price=" . ($v->price ?? 'n/a'));
-                    }
                     $variantPrices = [];
                     foreach ($product->variants as $v) {
                         if (!empty($v->price) && (float)$v->price > 0) {
@@ -188,7 +187,7 @@ class PublicDesignerController extends Controller
 
         if ($displayPrice === null) $displayPrice = 0.00;
 
-        // Log if no variants for debugging (helpful)
+        // Debug log if no variants for inspection
         if ($product->relationLoaded('variants') && $product->variants->count() === 0) {
             \Log::warning("designer: product {$product->id} has no variants loaded");
         }
