@@ -74,61 +74,76 @@ public function bulkSave(Request $req, Product $product, ProductView $view)
         'areas.*.slot_key'      => 'nullable|string',
     ]);
 
-    // 🔥 Clear old areas
-    PrintArea::where('product_view_id', $view->id)->delete();
+    \DB::beginTransaction();
+    try {
+        // clear old areas (full replace). If you want update-in-place, change this logic.
+        PrintArea::where('product_view_id', $view->id)->delete();
 
-    foreach ($data['areas'] as $a) {
-        $row = new PrintArea(['product_view_id' => $view->id]);
+        foreach ($data['areas'] as $a) {
+            $row = new PrintArea(['product_view_id' => $view->id]);
 
-        $row->template_id   = $a['template_id']   ?? null;
-        $row->mask_svg_path = $a['mask_svg_path'] ?? null;
+            $row->template_id   = $a['template_id']   ?? null;
 
-        // ✅ Single vs Collage handling
-        // If the view has valid non-zero view_width_pct/height_pct we
-// convert relative sub-view % → global %. Otherwise assume the
-// incoming values are already absolute percentages and use them.
-if (!empty($view->view_width_pct) && !empty($view->view_height_pct)) {
-    // defensive numeric casts
-    $vw = floatval($view->view_width_pct);
-    $vh = floatval($view->view_height_pct);
-    $vl = floatval($view->view_left_pct);
-    $vt = floatval($view->view_top_pct);
+            // normalize mask path: store only relative path (no host)
+            if (!empty($a['mask_svg_path'])) {
+                $mask = $a['mask_svg_path'];
+                // if the incoming value is a full URL, strip to filename/path
+                $mask = preg_replace('#^https?://[^/]+/files/#', '', $mask);
+                $mask = preg_replace('#^/files/#', '', $mask);
+                $row->mask_svg_path = $mask;
+            } else {
+                $row->mask_svg_path = null;
+            }
 
-    // convert only when view percentages make sense (>0)
-    if ($vw > 0 && $vh > 0) {
-        $row->left_pct   = round($vl + (floatval($a['left_pct']) * $vw / 100.0), 5);
-        $row->top_pct    = round($vt + (floatval($a['top_pct'])  * $vh / 100.0), 5);
-        $row->width_pct  = round(floatval($a['width_pct'])  * $vw / 100.0, 5);
-        $row->height_pct = round(floatval($a['height_pct']) * $vh / 100.0, 5);
-    } else {
-        // fallback — treat incoming as absolute %
-        $row->left_pct   = round(floatval($a['left_pct']), 5);
-        $row->top_pct    = round(floatval($a['top_pct']), 5);
-        $row->width_pct  = round(floatval($a['width_pct']), 5);
-        $row->height_pct = round(floatval($a['height_pct']), 5);
+            // convert percentages (same as your code)
+            if (!empty($view->view_width_pct) && !empty($view->view_height_pct)) {
+                $vw = floatval($view->view_width_pct);
+                $vh = floatval($view->view_height_pct);
+                $vl = floatval($view->view_left_pct);
+                $vt = floatval($view->view_top_pct);
+                if ($vw > 0 && $vh > 0) {
+                    $row->left_pct   = round($vl + (floatval($a['left_pct']) * $vw / 100.0), 5);
+                    $row->top_pct    = round($vt + (floatval($a['top_pct'])  * $vh / 100.0), 5);
+                    $row->width_pct  = round(floatval($a['width_pct'])  * $vw / 100.0, 5);
+                    $row->height_pct = round(floatval($a['height_pct']) * $vh / 100.0, 5);
+                } else {
+                    $row->left_pct   = round(floatval($a['left_pct']), 5);
+                    $row->top_pct    = round(floatval($a['top_pct']), 5);
+                    $row->width_pct  = round(floatval($a['width_pct']), 5);
+                    $row->height_pct = round(floatval($a['height_pct']), 5);
+                }
+            } else {
+                $row->left_pct   = round(floatval($a['left_pct']), 5);
+                $row->top_pct    = round(floatval($a['top_pct']), 5);
+                $row->width_pct  = round(floatval($a['width_pct']), 5);
+                $row->height_pct = round(floatval($a['height_pct']), 5);
+            }
+
+            $row->rotation = $a['rotation'] ?? 0;
+
+            // save slot_key as well (important for designer)
+            $row->slot_key = $a['slot_key'] ?? null;
+
+            // name fallback
+            $row->name = !empty($a['name'])
+                ? $a['name']
+                : (!empty($a['slot_key']) ? ucfirst($a['slot_key']) : 'Area');
+
+            // legacy fields (kept zero)
+            $row->x_mm = $row->y_mm = $row->width_mm = $row->height_mm = 0;
+            $row->dpi  = 0;
+
+            $row->save();
+        }
+
+        \DB::commit();
+        return response()->json(['ok' => true]);
+    } catch (\Throwable $e) {
+        \DB::rollBack();
+        \Log::error('Areas bulk save failed: '.$e->getMessage(), ['trace'=>$e->getTraceAsString(), 'payload'=>$data]);
+        return response()->json(['ok'=>false,'error'=>'save_failed'], 500);
     }
-} else {
-    // no view percentages defined — use incoming values as-is
-    $row->left_pct   = round(floatval($a['left_pct']), 5);
-    $row->top_pct    = round(floatval($a['top_pct']), 5);
-    $row->width_pct  = round(floatval($a['width_pct']), 5);
-    $row->height_pct = round(floatval($a['height_pct']), 5);
 }
 
-
-        $row->rotation   = $a['rotation'] ?? 0;
-
-        $row->name = !empty($a['name'])
-            ? $a['name']
-            : (!empty($a['slot_key']) ? ucfirst($a['slot_key']) : 'Area');
-
-        $row->x_mm = $row->y_mm = $row->width_mm = $row->height_mm = 0;
-        $row->dpi  = 0;
-
-        $row->save();
-    }
-
-    return response()->json(['ok' => true]);
-}
 
 }
