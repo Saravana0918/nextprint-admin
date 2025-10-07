@@ -17,6 +17,7 @@
     /* stage */
     .np-stage { position: relative; width: 100%; max-width: 534px; margin: 0 auto; background:#fff; border-radius:8px; padding:8px; min-height: 320px; box-sizing: border-box; overflow: visible; }
     .np-stage img { width:100%; height:auto; border-radius:6px; display:block; }
+    .np-mask { position:absolute; pointer-events:none; z-index:40; transform-origin:center center; image-rendering:optimizeQuality; }
 
     /* overlays: NO background, sits on top of image */
     .np-overlay {
@@ -294,7 +295,56 @@
     else { pvName.style.left='50%'; pvName.style.top='45%'; pvName.style.transform='translate(-50%,-50%)'; }
     if (layout && layout.number) placeOverlay(pvNum, layout.number, 'number');
     else { pvNum.style.left='50%'; pvNum.style.top='65%'; pvNum.style.transform='translate(-50%,-50%)'; }
+    renderMasks();
   }
+
+  // === ADD THIS FUNCTION to render SVG mask areas ===
+function renderMasks() {
+  const layout = window.layoutSlots || {};
+  const stage = document.getElementById('np-stage');
+  const baseImg = document.getElementById('np-base');
+  if (!layout || !stage || !baseImg) return;
+
+  const stageRect = stage.getBoundingClientRect();
+  const imgRect = baseImg.getBoundingClientRect();
+  const s = {
+    offsetLeft: Math.round(imgRect.left - stageRect.left),
+    offsetTop: Math.round(imgRect.top - stageRect.top),
+    imgW: Math.max(1,imgRect.width),
+    imgH: Math.max(1,imgRect.height)
+  };
+
+  Object.keys(layout).forEach(key => {
+    const slot = layout[key];
+    if (!slot || !slot.mask) return;
+
+    const id = 'mask-' + key;
+    let el = document.getElementById(id);
+    if (!el) {
+      el = document.createElement('img');
+      el.id = id;
+      el.src = slot.mask;
+      el.className = 'np-mask';
+      el.style.position = 'absolute';
+      el.style.pointerEvents = 'none';
+      el.style.zIndex = 40;
+      el.style.opacity = 1;
+      el.style.objectFit = 'contain';
+      stage.appendChild(el);
+    }
+
+    const cx = Math.round(s.offsetLeft + ((slot.left_pct||0)/100)*s.imgW + ((slot.width_pct||0)/200)*s.imgW);
+    const cy = Math.round(s.offsetTop + ((slot.top_pct||0)/100)*s.imgH + ((slot.height_pct||0)/200)*s.imgH);
+    const wpx = Math.round(((slot.width_pct||10)/100)*s.imgW);
+    const hpx = Math.round(((slot.height_pct||10)/100)*s.imgH);
+
+    el.style.left = (cx - wpx/2) + 'px';
+    el.style.top = (cy - hpx/2) + 'px';
+    el.style.width = wpx + 'px';
+    el.style.height = hpx + 'px';
+    el.style.transform = 'rotate(' + (slot.rotation||0) + 'deg)';
+  });
+}
 
   function syncPreview(){
     if (pvName && nameEl) pvName.textContent = (nameEl.value || 'NAME').toUpperCase();

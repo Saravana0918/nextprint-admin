@@ -1,12 +1,11 @@
 <?php
-// file: app/Http/Controllers/PublicDesignerController.php
-
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\Product;
 use App\Models\ProductView;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 
 class PublicDesignerController extends Controller
 {
@@ -16,7 +15,7 @@ class PublicDesignerController extends Controller
         $viewId    = $request->query('view_id');
 
         // ----------------------------
-        // product lookup (robust) - eager load variants
+        // product lookup (robust) - eager load variants, views and view->areas
         // ----------------------------
         $product = null;
 
@@ -80,7 +79,7 @@ class PublicDesignerController extends Controller
         $areas = $view ? ($view->relationLoaded('areas') ? $view->areas : $view->areas()->get()) : collect([]);
 
         // ----------------------------
-        // Build layoutSlots with server-side normalization
+        // Build layoutSlots with server-side normalization (including mask svg public URL)
         // ----------------------------
         $layoutSlots = [];
 
@@ -95,6 +94,7 @@ class PublicDesignerController extends Controller
             if ($w     <= 1) $w    *= 100;
             if ($h     <= 1) $h    *= 100;
 
+            // determine slot key (prefer explicit slot_key, then heuristics by name)
             $slotKey = null;
             if (!empty($a->slot_key)) $slotKey = strtolower(trim($a->slot_key));
 
@@ -114,26 +114,40 @@ class PublicDesignerController extends Controller
                 else $slotKey = 'number';
             }
 
+            // mask svg public URL
+            $maskUrl = null;
+            if (!empty($a->mask_svg_path)) {
+                // If path stored in storage disk
+                try {
+                    $maskUrl = Storage::disk('public')->url($a->mask_svg_path);
+                } catch (\Throwable $e) {
+                    // fallback to /files/<path> (you already use this pattern)
+                    $maskUrl = url('/files/' . ltrim($a->mask_svg_path, '/'));
+                }
+            }
+
             $layoutSlots[$slotKey] = [
-                'id' => $a->id,
-                'left_pct'  => round($left, 6),
-                'top_pct'   => round($top, 6),
-                'width_pct' => round($w, 6),
-                'height_pct'=> round($h, 6),
-                'rotation'  => (int)($a->rotation ?? 0),
-                'name'      => $a->name ?? null,
-                'slot_key'  => $a->slot_key ?? null,
+                'id'         => $a->id,
+                'left_pct'   => round($left, 6),
+                'top_pct'    => round($top, 6),
+                'width_pct'  => round($w, 6),
+                'height_pct' => round($h, 6),
+                'rotation'   => (int)($a->rotation ?? 0),
+                'name'       => $a->name ?? null,
+                'slot_key'   => $a->slot_key ?? null,
+                'mask'       => $maskUrl,
             ];
         }
 
+        // ensure both keys exist (fallback defaults)
         if (!isset($layoutSlots['name'])) {
             $layoutSlots['name'] = [
-                'id' => null, 'left_pct' => 10, 'top_pct' => 5, 'width_pct' => 60, 'height_pct' => 8, 'rotation' => 0
+                'id' => null, 'left_pct' => 10, 'top_pct' => 5, 'width_pct' => 60, 'height_pct' => 8, 'rotation' => 0, 'mask' => null
             ];
         }
         if (!isset($layoutSlots['number'])) {
             $layoutSlots['number'] = [
-                'id' => null, 'left_pct' => 10, 'top_pct' => 75, 'width_pct' => 30, 'height_pct' => 10, 'rotation' => 0
+                'id' => null, 'left_pct' => 10, 'top_pct' => 75, 'width_pct' => 30, 'height_pct' => 10, 'rotation' => 0, 'mask' => null
             ];
         }
 
@@ -141,7 +155,6 @@ class PublicDesignerController extends Controller
         // compute a safe display price (robust)
         // ----------------------------
         $displayPrice = null;
-
         try {
             \Log::info("designer: product id={$product->id} shopify_product_id={$product->shopify_product_id} min_price=" . ($product->min_price ?? 'NULL') . " price=" . ($product->price ?? 'NULL'));
 
@@ -186,11 +199,6 @@ class PublicDesignerController extends Controller
         }
 
         if ($displayPrice === null) $displayPrice = 0.00;
-
-        // Debug log if no variants for inspection
-        if ($product->relationLoaded('variants') && $product->variants->count() === 0) {
-            \Log::warning("designer: product {$product->id} has no variants loaded");
-        }
 
         return view('public.designer', [
             'product' => $product,
