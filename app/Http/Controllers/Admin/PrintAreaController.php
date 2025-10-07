@@ -58,6 +58,7 @@ class PrintAreaController extends Controller
 
 public function bulkSave(Request $req, Product $product, ProductView $view)
 {
+    \Log::info('BULK SAVE CALLED', ['product'=>$product->id ?? null, 'view'=>$view->id ?? null, 'payload'=> $req->all()]);
     $data = $req->validate([
         'stage_w' => 'nullable|numeric',
         'stage_h' => 'nullable|numeric',
