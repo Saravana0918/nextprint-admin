@@ -83,61 +83,62 @@ class PublicDesignerController extends Controller
         // ----------------------------
         $layoutSlots = [];
 
-        foreach ($areas as $a) {
-            $left  = (float)($a->left_pct ?? 0);
-            $top   = (float)($a->top_pct ?? 0);
-            $w     = (float)($a->width_pct ?? 10);
-            $h     = (float)($a->height_pct ?? 10);
+foreach ($areas as $a) {
+    // prefer explicit percent values, fallback to mm→percent if you stored mm; here assume pct fields exist
+    $left  = (float)($a->left_pct ?? $a->x_mm ?? 0);
+    $top   = (float)($a->top_pct ?? $a->y_mm ?? 0);
+    $w     = (float)($a->width_pct ?? $a->width_mm ?? 10);
+    $h     = (float)($a->height_pct ?? $a->height_mm ?? 10);
 
-            if ($left <= 1) $left *= 100;
-            if ($top   <= 1) $top  *= 100;
-            if ($w     <= 1) $w    *= 100;
-            if ($h     <= 1) $h    *= 100;
+    // If any value looks like fraction (0..1) convert to percent
+    if ($left <= 1) $left *= 100;
+    if ($top   <= 1) $top  *= 100;
+    if ($w     <= 1) $w    *= 100;
+    if ($h     <= 1) $h    *= 100;
 
-            // determine slot key (prefer explicit slot_key, then heuristics by name)
-            $slotKey = null;
-            if (!empty($a->slot_key)) $slotKey = strtolower(trim($a->slot_key));
+    // mask_url - build a public URL if mask_svg_path exists
+    $mask = null;
+    if (!empty($a->mask_svg_path)) {
+        // If you are storing path like "area_shapes/xxx.svg" in storage/app/public you can use:
+        // $mask = Storage::disk('public')->url($a->mask_svg_path);
+        // or if you serve via /files/ path:
+        $mask = strpos($a->mask_svg_path, '/files/') === 0 ? $a->mask_svg_path : ('/files/' . ltrim($a->mask_svg_path, '/'));
+    }
 
-            if (!$slotKey && !empty($a->name)) {
-                $n = strtolower($a->name);
-                if (strpos($n, 'name') !== false) $slotKey = 'name';
-                if (strpos($n, 'num') !== false || strpos($n, 'no') !== false || strpos($n,'number') !== false) $slotKey = 'number';
-            }
+    // slot key & name
+    $slotKey = null;
+    if (!empty($a->slot_key)) $slotKey = strtolower(trim($a->slot_key));
+    if (!$slotKey && !empty($a->name)) {
+        $n = strtolower($a->name);
+        if (strpos($n, 'name') !== false) $slotKey = 'name';
+        if (strpos($n, 'num') !== false || strpos($n,'no') !== false || strpos($n,'number') !== false) $slotKey = 'number';
+    }
 
-            if (!$slotKey && isset($a->template_id)) {
-                if ((int)$a->template_id === 1) $slotKey = 'name';
-                if ((int)$a->template_id === 2) $slotKey = 'number';
-            }
+    // fallback by template_id (if you use templates to denote name/number)
+    if (!$slotKey && isset($a->template_id)) {
+        if ((int)$a->template_id === 1) $slotKey = 'name';
+        if ((int)$a->template_id === 2) $slotKey = 'number';
+    }
 
-            if (!$slotKey) {
-                if (!isset($layoutSlots['name'])) $slotKey = 'name';
-                else $slotKey = 'number';
-            }
+    // final fallback naming
+    if (!$slotKey) {
+        // choose a stable key: use the DB id to make unique key names
+        $slotKey = 'slot_' . ($a->id ?? uniqid());
+    }
 
-            // mask svg public URL
-            $maskUrl = null;
-            if (!empty($a->mask_svg_path)) {
-                // If path stored in storage disk
-                try {
-                    $maskUrl = Storage::disk('public')->url($a->mask_svg_path);
-                } catch (\Throwable $e) {
-                    // fallback to /files/<path> (you already use this pattern)
-                    $maskUrl = url('/files/' . ltrim($a->mask_svg_path, '/'));
-                }
-            }
-
-            $layoutSlots[$slotKey] = [
-                'id'         => $a->id,
-                'left_pct'   => round($left, 6),
-                'top_pct'    => round($top, 6),
-                'width_pct'  => round($w, 6),
-                'height_pct' => round($h, 6),
-                'rotation'   => (int)($a->rotation ?? 0),
-                'name'       => $a->name ?? null,
-                'slot_key'   => $a->slot_key ?? null,
-                'mask'       => $maskUrl,
-            ];
-        }
+    $layoutSlots[$slotKey] = [
+        'id' => $a->id,
+        'left_pct'  => round($left, 6),
+        'top_pct'   => round($top, 6),
+        'width_pct' => round($w, 6),
+        'height_pct'=> round($h, 6),
+        'rotation'  => (int)($a->rotation ?? 0),
+        'name'      => $a->name ?? null,
+        'slot_key'  => $a->slot_key ?? null,
+        'template_id' => $a->template_id ?? null,
+        'mask'      => $mask,
+    ];
+}
 
         // ensure both keys exist (fallback defaults)
         if (!isset($layoutSlots['name'])) {
