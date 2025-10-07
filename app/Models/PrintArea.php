@@ -1,19 +1,19 @@
 <?php
-
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
 class PrintArea extends Model
 {
+    // <-- add this line to point model to the real table
+    protected $table = 'product_view_areas';
+
     protected $fillable = [
-    'product_view_id',
-    'template_id',
-    'mask_svg_path',
-    'left_pct','top_pct','width_pct','height_pct',
-    'x_mm','y_mm','width_mm','height_mm','dpi','rotation',
-    'name'
-];
+        'product_view_id','template_id','mask_svg_path',
+        'left_pct','top_pct','width_pct','height_pct',
+        'x_mm','y_mm','width_mm','height_mm','dpi','rotation',
+        'name','slot_key'
+    ];
 
     protected $casts = [
         'x_mm' => 'float',
