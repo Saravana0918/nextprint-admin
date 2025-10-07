@@ -45,6 +45,17 @@
     body { background-color: #929292; }
     .body-padding{ padding-top: 100px; }
     .right-layout{ padding-top:350px; }
+    /* user-uploaded artwork overlay */
+    .np-user-image {
+      position: absolute;
+      pointer-events: auto; /* allow future drag/resize if you add handlers */
+      object-fit: cover;
+      display: block;
+      transform-origin: center center;
+      z-index: 400; /* below overlays which are z-index 9999, adjust if needed */
+      box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+      border-radius: 4px;
+    }
 
     /* mobile specific: keep overlays on image, inputs below */
     @media (max-width: 767px) {
@@ -113,6 +124,16 @@
         <button type="button" class="np-swatch" data-color="#1E90FF" style="background:#1E90FF"></button>
       </div>
       <input id="np-color" type="color" class="form-control form-control-color mt-2" value="#D4AF37">
+      <!-- customer image upload (put inside the controls column near fonts/colors) -->
+      <div class="mb-2" id="np-upload-block" style="margin-top:6px;">
+        <label for="np-upload-image" class="form-label" style="font-size:.9rem;color:#fff;opacity:.95">Upload Image (customer)</label>
+        <input id="np-upload-image" type="file" accept="image/*" class="form-control" />
+        <div style="margin-top:6px;">
+          <button id="np-user-image-reset" type="button" class="btn btn-sm btn-outline-light" style="display:none;margin-right:6px;">Remove Image</button>
+          <label for="np-user-image-scale" style="color:#fff; font-size:.85rem;margin-right:6px;display:none;" id="np-user-image-scale-label">Scale</label>
+          <input id="np-user-image-scale" type="range" min="50" max="200" value="100" style="vertical-align: middle; display:none;" />
+        </div>
+      </div>
     </div>
 
     <!-- purchase + team -->
@@ -458,7 +479,186 @@
 
 })();
 </script>
+<script>
+// Image upload handler: places the image into the "primary" layout slot (if layoutSlots available)
+// or centers it on the stage as fallback.
 
+(function(){
+  const uploadEl = document.getElementById('np-upload-image');
+  const stage = document.getElementById('np-stage');
+  const baseImg = document.getElementById('np-base');
+  const previewHidden = document.getElementById('np-preview-hidden');
+  const removeBtn = document.getElementById('np-user-image-reset');
+  const scaleRange = document.getElementById('np-user-image-scale');
+  const scaleLabel = document.getElementById('np-user-image-scale-label');
+
+  // keep a ref to inserted image node
+  let userImg = null;
+  let userImgScale = 1.0;
+
+  function computeStageSizeLocal(){
+    if (!baseImg || !stage) return null;
+    const stageRect = stage.getBoundingClientRect();
+    const imgRect = baseImg.getBoundingClientRect();
+    return {
+      offsetLeft: Math.round(imgRect.left - stageRect.left),
+      offsetTop: Math.round(imgRect.top - stageRect.top),
+      imgW: Math.max(1,imgRect.width), imgH: Math.max(1,imgRect.height),
+      stageW: Math.max(1, stageRect.width), stageH: Math.max(1, stageRect.height)
+    };
+  }
+
+  // place & size user image into a slot object { left_pct, top_pct, width_pct, height_pct, rotation }
+  function placeUserImage(slot){
+    if (!userImg) return;
+    const s = computeStageSizeLocal();
+    if (!s) return;
+
+    // fallback: if no slot, center cover the whole image area
+    if (!slot || !slot.width_pct) {
+      const left = Math.round(s.stageW/2);
+      const top  = Math.round(s.stageH/2);
+      const wpx = Math.round(s.imgW * 0.8);
+      const hpx = Math.round(s.imgH * 0.8);
+      userImg.style.left = left + 'px';
+      userImg.style.top  = top + 'px';
+      userImg.style.width = wpx + 'px';
+      userImg.style.height = hpx + 'px';
+      userImg.style.transform = 'translate(-50%,-50%) scale(' + userImgScale + ')';
+      return;
+    }
+
+    const centerX = Math.round(s.offsetLeft + ((slot.left_pct||50)/100) * s.imgW + ((slot.width_pct||0)/200)*s.imgW);
+    const centerY = Math.round(s.offsetTop + ((slot.top_pct||50)/100) * s.imgH + ((slot.height_pct||0)/200)*s.imgH);
+    const areaWpx = Math.max(8, Math.round(((slot.width_pct||10)/100) * s.imgW));
+    const areaHpx = Math.max(8, Math.round(((slot.height_pct||10)/100) * s.imgH));
+
+    // Fit user image to cover the area (cover scale)
+    // keep CSS object-fit: cover; so width/height should be area size * scale.
+    const scaledW = Math.round(areaWpx * (userImgScale));
+    const scaledH = Math.round(areaHpx * (userImgScale));
+
+    userImg.style.left = centerX + 'px';
+    userImg.style.top  = centerY + 'px';
+    userImg.style.width = scaledW + 'px';
+    userImg.style.height = scaledH + 'px';
+    userImg.style.transform = 'translate(-50%,-50%)';
+    if (slot.rotation) {
+      userImg.style.transform += ' rotate(' + slot.rotation + 'deg)';
+    }
+  }
+
+  // find first "text" slot? prefer slot named "name" or "number" or a slot with usage = 'regular'?
+  function findPreferredSlot(){
+    try {
+      if (window.layoutSlots && Object.keys(window.layoutSlots || {}).length) {
+        // If there is a specific decoration area type in layoutSlots (e.g. 'logo' or 'artwork'), try that first.
+        // We choose (in order): 'logo', 'artwork', 'number', 'name' or the first slot.
+        const prefer = ['logo','artwork','number','name','custom'];
+        for (const p of prefer) {
+          if (window.layoutSlots[p]) return window.layoutSlots[p];
+        }
+        // fallback to first key
+        const keys = Object.keys(window.layoutSlots);
+        if (keys.length) return window.layoutSlots[keys[0]];
+      }
+    } catch(e){}
+    return null;
+  }
+
+  // read file and create image element
+  async function handleFile(file) {
+    if (!file) return;
+    // validate type and size
+    if (!/^image\//.test(file.type)) { alert('Please upload an image file (PNG, JPG, SVG).'); return; }
+    const maxMB = 4;
+    if (file.size > maxMB * 1024 * 1024) { alert('Please use an image smaller than ' + maxMB + ' MB.'); return; }
+
+    const reader = new FileReader();
+    reader.onload = function(ev) {
+      const url = ev.target.result;
+      // remove old image if exists
+      if (userImg && userImg.parentNode) userImg.parentNode.removeChild(userImg);
+      // create new img
+      userImg = document.createElement('img');
+      userImg.className = 'np-user-image';
+      userImg.src = url;
+      userImg.alt = 'User artwork';
+      // ensure absolute positioning inside stage
+      userImg.style.position = 'absolute';
+      userImg.style.left = '50%';
+      userImg.style.top = '50%';
+      userImg.style.width = '100px';
+      userImg.style.height = '100px';
+      userImg.style.transform = 'translate(-50%,-50%)';
+      userImg.style.objectFit = 'cover';
+      userImg.style.pointerEvents = 'none'; // not interactive for now
+
+      stage.appendChild(userImg);
+
+      // show controls
+      if (removeBtn) removeBtn.style.display = 'inline-block';
+      if (scaleRange) { scaleRange.style.display = 'inline-block'; scaleLabel.style.display = 'inline-block'; scaleRange.value = 100; userImgScale = 1.0; }
+
+      // place it in preferred slot
+      const slot = findPreferredSlot();
+      placeUserImage(slot);
+
+      // when the user image loads, you might want to re-place to get natural size
+      userImg.onload = function(){ placeUserImage(slot); };
+
+      // also update the hidden preview immediately (optional)
+      // we'll still re-capture preview at Add to Cart time; this just saves current data.
+      try {
+        // small timeout so image is painted
+        setTimeout(()=> {
+          html2canvas(stage, { useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1 })
+           .then(canvas => {
+             previewHidden.value = canvas.toDataURL('image/png');
+           })
+           .catch(()=>{ /* ignore */ });
+        }, 180);
+      } catch(e){}
+    };
+    reader.readAsDataURL(file);
+  }
+
+  if (uploadEl) {
+    uploadEl.addEventListener('change', function(e){
+      const f = e.target.files && e.target.files[0];
+      if (!f) return;
+      handleFile(f);
+    });
+  }
+
+  if (removeBtn) {
+    removeBtn.addEventListener('click', function(){
+      if (userImg && userImg.parentNode) userImg.parentNode.removeChild(userImg);
+      userImg = null;
+      removeBtn.style.display = 'none';
+      if (scaleRange) { scaleRange.style.display = 'none'; scaleLabel.style.display = 'none'; }
+      // clear hidden preview (it will be regenerated on Add to Cart)
+      if (previewHidden) previewHidden.value = '';
+    });
+  }
+
+  if (scaleRange) {
+    scaleRange.addEventListener('input', function(){
+      const v = parseInt(this.value || '100', 10);
+      userImgScale = v / 100;
+      const slot = findPreferredSlot();
+      placeUserImage(slot);
+    });
+  }
+
+  // keep image placement accurate on resize/rotation
+  window.addEventListener('resize', function(){ if (userImg) placeUserImage(findPreferredSlot()); });
+  document.fonts?.ready.then(()=> { if (userImg) placeUserImage(findPreferredSlot()); });
+
+  // ensure when Add-to-cart's html2canvas runs it captures the user image correctly (your code already calls html2canvas)
+  // nothing else needed; the inserted node is inside #np-stage so will be included.
+})();
+</script>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 
 </body>
