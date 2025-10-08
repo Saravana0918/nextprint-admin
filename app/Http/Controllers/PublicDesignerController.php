@@ -179,37 +179,48 @@ class PublicDesignerController extends Controller
         $artKeywords = ['logo', 'artwork', 'team_logo', 'graphic', 'image', 'art', 'badge', 'patch'];
 
         if (!empty($originalLayout) && is_array($originalLayout)) {
-            foreach ($originalLayout as $slotKey => $slot) {
-                $k = strtolower($slotKey);
+    foreach ($originalLayout as $slotKey => $slot) {
+        $k = strtolower($slotKey);
 
-                // 1) check the slot key itself
-                foreach ($artKeywords as $kw) {
-                    if (strpos($k, $kw) !== false) {
-                        $hasArtworkSlot = true;
-                        break 2;
-                    }
-                }
-
-                // 2) check slot name (like "TEAM LOGO", "Logo", "Artwork")
-                if (!empty($slot['name'])) {
-                    $slotNameLower = strtolower((string)$slot['name']);
-                    foreach ($artKeywords as $kw) {
-                        if (strpos($slotNameLower, $kw) !== false) {
-                            $hasArtworkSlot = true;
-                            break 2;
-                        }
-                    }
-                }
-
-                // 3) explicit slot type metadata (if present)
-                if (!empty($slot['type']) && in_array(strtolower($slot['type']), ['image', 'artwork', 'logo'])) {
-                    $hasArtworkSlot = true;
-                    break;
-                }
-
-                // NOTE: intentionally NOT using mask/large-area fallback to avoid false positives
+        // 0) Slot-level category check (OPTION A): if admin set slot category to "Regular"
+        //    we treat it as an artwork area (this is the new behavior you requested).
+        if (!empty($slot['raw']['category'])) {
+            $slotCategory = strtolower((string)$slot['raw']['category']);
+            if (strpos($slotCategory, 'regular') !== false) {
+                $hasArtworkSlot = true;
+                break;
             }
         }
+
+        // 1) check the slot key itself
+        foreach ($artKeywords as $kw) {
+            if (strpos($k, $kw) !== false) {
+                $hasArtworkSlot = true;
+                break 2;
+            }
+        }
+
+        // 2) check slot name (like "TEAM LOGO", "Logo", "Artwork")
+        if (!empty($slot['name'])) {
+            $slotNameLower = strtolower((string)$slot['name']);
+            foreach ($artKeywords as $kw) {
+                if (strpos($slotNameLower, $kw) !== false) {
+                    $hasArtworkSlot = true;
+                    break 2;
+                }
+            }
+        }
+
+        // 3) explicit slot type metadata (if present)
+        if (!empty($slot['type']) && in_array(strtolower($slot['type']), ['image', 'artwork', 'logo'])) {
+            $hasArtworkSlot = true;
+            break;
+        }
+
+        // NOTE: intentionally NOT using mask/large-area fallback to avoid false positives
+    }
+}
+
 
         // authoritative decision: only enable upload when layout explicitly has artwork slot
         $showUpload = (bool)$hasArtworkSlot;
