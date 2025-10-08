@@ -78,7 +78,7 @@ Route::get('/api/public/products/{handle}/methods', [PublicProductController::cl
 Route::get('/designer', [PublicDesignerController::class, 'show'])->name('public.designer.show');
 Route::post('/designer/upload-preview', [ShopifyCartController::class, 'uploadPreview'])->name('designer.upload_preview');
 Route::post('/designer/add-to-cart', [ShopifyCartController::class, 'addToCart'])->name('designer.addtocart');
-
+Route::post('/designer/upload-temp', [\App\Http\Controllers\DesignerUploadController::class, 'uploadTemp'])->name('designer.upload_temp');
 /*
 | Team routes
 */

@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
   <title>{{ $product->name ?? ($product->title ?? 'Product') }} – NextPrint</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Oswald:wght@400;600&display=swap" rel="stylesheet">
@@ -132,6 +133,7 @@
         <input type="hidden" name="number_text" id="np-num-hidden">
         <input type="hidden" name="font" id="np-font-hidden">
         <input type="hidden" name="color" id="np-color-hidden">
+        <input type="hidden" id="np-uploaded-logo-url" name="uploaded_logo_url" value="">
         <input type="hidden" name="preview_data" id="np-preview-hidden">
         <input type="hidden" name="product_id" id="np-product-id" value="{{ $product->id ?? $product->local_id ?? '' }}">
         <input type="hidden" name="shopify_product_id" id="np-shopify-product-id" value="{{ $product->shopify_product_id ?? $product->shopify_id ?? '' }}">
@@ -436,20 +438,27 @@
   }
 
   if (addTeam) addTeam.addEventListener('click', function(e) {
-    e.preventDefault();
-    const productId = $('np-product-id')?.value || null;
-    const params = new URLSearchParams();
-    if (productId) params.set('product_id', productId);
-    if (nameEl?.value) params.set('prefill_name', nameEl.value);
-    if (numEl?.value) params.set('prefill_number', numEl.value.replace(/\D/g,'')); 
-    if (fontEl?.value) params.set('prefill_font', fontEl.value);
-    if (colorEl?.value) params.set('prefill_color', encodeURIComponent(colorEl.value));
-    const sizeVal = $('np-size')?.value || '';
-    if (sizeVal) params.set('prefill_size', sizeVal);
-    try { if (window.layoutSlots && Object.keys(window.layoutSlots || {}).length) params.set('layoutSlots', encodeURIComponent(JSON.stringify(window.layoutSlots))); } catch (err) {}
-    const base = "{{ route('team.create') }}";
-    window.location.href = base + (params.toString() ? ('?' + params.toString()) : '');
-  });
+  e.preventDefault();
+  const productId = $('np-product-id')?.value || null;
+  const params = new URLSearchParams();
+  if (productId) params.set('product_id', productId);
+  if (nameEl?.value) params.set('prefill_name', nameEl.value);
+  if (numEl?.value) params.set('prefill_number', numEl.value.replace(/\D/g,'')); 
+  if (fontEl?.value) params.set('prefill_font', fontEl.value);
+  if (colorEl?.value) params.set('prefill_color', encodeURIComponent(colorEl.value));
+  const sizeVal = $('np-size')?.value || '';
+  if (sizeVal) params.set('prefill_size', sizeVal);
+
+  // 👇 New line
+  const uploadedLogo = document.getElementById('np-uploaded-logo-url')?.value || '';
+  if (uploadedLogo) params.set('prefill_logo', encodeURIComponent(uploadedLogo));
+
+  try { if (window.layoutSlots && Object.keys(window.layoutSlots || {}).length) params.set('layoutSlots', encodeURIComponent(JSON.stringify(window.layoutSlots))); } catch (err) {}
+
+  const base = "{{ route('team.create') }}";
+  window.location.href = base + (params.toString() ? ('?' + params.toString()) : '');
+});
+
 
   // init
   applyFont(fontEl?.value || 'bebas');
@@ -587,48 +596,75 @@
     } catch(e) { console.warn('findPreferredSlot failed', e); return null; }
   }
 
-  async function handleFile(file) {
-    if (!file) return;
-    if (!/^image\//.test(file.type)) { alert('Please upload an image file (PNG, JPG, SVG).'); return; }
-    const maxMB = 6;
-    if (file.size > maxMB * 1024 * 1024) { alert('Please use an image smaller than ' + maxMB + ' MB.'); return; }
-
-    const reader = new FileReader();
-    reader.onload = function(ev) {
-      const url = ev.target.result;
-      if (userImg && userImg.parentNode) userImg.parentNode.removeChild(userImg);
-      userImg = document.createElement('img');
-      userImg.className = 'np-user-image';
-      userImg.src = url;
-      userImg.alt = 'User artwork';
-      userImg.style.position = 'absolute';
-      userImg.style.left = '50%';
-      userImg.style.top = '50%';
-      userImg.style.width = '100px';
-      userImg.style.height = '100px';
-      userImg.style.transform = 'translate(-50%,-50%)';
-      userImg.style.objectFit = 'cover';
-      userImg.style.pointerEvents = 'none';
-      stage.appendChild(userImg);
-
-      if (removeBtn) removeBtn.style.display = 'inline-block';
-      if (scaleRange) { scaleRange.style.display = 'inline-block'; scaleLabel.style.display = 'inline-block'; scaleRange.value = 100; userImgScale = 1.0; }
-
-      const slot = findPreferredSlot();
-      placeUserImage(slot);
-
-      userImg.onload = function(){ placeUserImage(slot); };
-
-      try {
-        setTimeout(()=> {
-          html2canvas(stage, { useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1 })
-           .then(canvas => { previewHidden.value = canvas.toDataURL('image/png'); })
-           .catch(()=>{});
-        }, 180);
-      } catch(e){}
-    };
-    reader.readAsDataURL(file);
+  // ---- upload helper: sends file to server, returns public URL ----
+async function uploadFileToServer(file) {
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    const token = document.querySelector('meta[name="csrf-token"]').getAttribute('content') || '';
+    const resp = await fetch('{{ route("designer.upload_temp") }}', {
+      method: 'POST',
+      body: fd,
+      credentials: 'same-origin',
+      headers: { 'X-CSRF-TOKEN': token }
+    });
+    if (!resp.ok) throw new Error('upload failed: ' + resp.status);
+    const json = await resp.json();
+    return json.url || null;
+  } catch (err) {
+    console.warn('uploadFileToServer error', err);
+    return null;
   }
+}
+
+// ---- main file handler: uploads + shows preview ----
+async function handleFile(file) {
+  if (!file) return;
+  if (!/^image\//.test(file.type)) { alert('Please upload an image file.'); return; }
+  const maxMB = 6;
+  if (file.size > maxMB * 1024 * 1024) { alert('Please use an image smaller than ' + maxMB + ' MB.'); return; }
+
+  // Upload to Laravel temp folder
+  const uploadedUrl = await uploadFileToServer(file);
+
+  // Local preview fallback
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    const previewUrl = uploadedUrl || ev.target.result;
+
+    if (userImg && userImg.parentNode) userImg.parentNode.removeChild(userImg);
+    userImg = document.createElement('img');
+    userImg.className = 'np-user-image';
+    userImg.src = previewUrl;
+    userImg.alt = 'User artwork';
+    userImg.style.position = 'absolute';
+    userImg.style.left = '50%';
+    userImg.style.top = '50%';
+    userImg.style.width = '100px';
+    userImg.style.height = '100px';
+    userImg.style.transform = 'translate(-50%,-50%)';
+    userImg.style.objectFit = 'cover';
+    userImg.style.pointerEvents = 'none';
+    stage.appendChild(userImg);
+
+    if (removeBtn) removeBtn.style.display = 'inline-block';
+    if (scaleRange) {
+      scaleRange.style.display = 'inline-block';
+      scaleLabel.style.display = 'inline-block';
+      scaleRange.value = 100;
+      userImgScale = 1.0;
+    }
+
+    const slot = findPreferredSlot();
+    placeUserImage(slot);
+    userImg.onload = function(){ placeUserImage(slot); };
+
+    // Save uploaded public URL to hidden field
+    const hiddenLogo = document.getElementById('np-uploaded-logo-url');
+    if (hiddenLogo) hiddenLogo.value = uploadedUrl || '';
+  };
+  reader.readAsDataURL(file);
+}
 
   if (uploadEl) uploadEl.addEventListener('change', function(e){ const f = e.target.files && e.target.files[0]; if (!f) return; handleFile(f); });
   if (removeBtn) removeBtn.addEventListener('click', function(){ if (userImg && userImg.parentNode) userImg.parentNode.removeChild(userImg); userImg = null; removeBtn.style.display = 'none'; if (scaleRange) { scaleRange.style.display = 'none'; scaleLabel.style.display = 'none'; } if (previewHidden) previewHidden.value = ''; });

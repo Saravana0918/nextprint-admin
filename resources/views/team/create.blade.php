@@ -5,7 +5,33 @@
 @section('content')
 @php
   $img = $product->image_url ?? ($product->preview_src ?? asset('images/placeholder.png'));
+
+  // Start with any server-side $prefill passed by controller (if any)
   $prefill = $prefill ?? [];
+
+  // Merge query params passed from designer (URL encoded).
+  try {
+      $qName   = request()->query('prefill_name');
+      $qNum    = request()->query('prefill_number');
+      $qFont   = request()->query('prefill_font');
+      $qColor  = request()->query('prefill_color');
+      $qLogo   = request()->query('prefill_logo');
+      $qLayout = request()->query('layoutSlots');
+
+      if ($qName)  $prefill['prefill_name']   = urldecode($qName);
+      if ($qNum)   $prefill['prefill_number'] = urldecode($qNum);
+      if ($qFont)  $prefill['prefill_font']   = urldecode($qFont);
+      if ($qColor) $prefill['prefill_color']  = urldecode($qColor);
+      if ($qLogo)  $prefill['prefill_logo']   = urldecode($qLogo);
+
+      if (!empty($qLayout)) {
+          $decoded = json_decode(urldecode($qLayout), true);
+          if (is_array($decoded)) $layoutSlots = $decoded;
+      }
+  } catch(\Throwable $e) {
+      // ignore
+  }
+
   $layoutSlots = $layoutSlots ?? null;
 
   // build size options (preserve order of variants as returned)
@@ -14,7 +40,6 @@
       foreach ($product->variants as $v) {
           $val = trim((string)($v->option_value ?? $v->option_name ?? ''));
           if ($val === '') continue;
-          // don't duplicate
           if (!in_array($val, $sizeOptions, true)) $sizeOptions[] = $val;
       }
   }
@@ -66,10 +91,9 @@
   }
 
   .preview-col .card-body {
-    padding: 0.75rem 1rem;      /* designer-ish padding; tweak if needed */
+    padding: 0.75rem 1rem;
   }
 
-  /* page specific layout */
   .main-flex { align-items: flex-start; }
   @media (max-width: 991px) {
     .main-flex { flex-direction: column !important; }
@@ -90,6 +114,15 @@
                  alt="{{ $product->name ?? 'Product' }}"
                  crossorigin="anonymous"
                  onerror="this.onerror=null;this.src='{{ asset('images/placeholder.png') }}'">
+
+            {{-- Logo element (populated from designer prefill or empty hidden) --}}
+            @if(!empty($prefill['prefill_logo']))
+              <img id="player-logo" src="{{ $prefill['prefill_logo'] }}" alt="Logo"
+                   style="position:absolute; z-index:300; pointer-events:none; display:block;" crossorigin="anonymous" />
+            @else
+              <img id="player-logo" src="" alt="Logo"
+                   style="position:absolute; z-index:300; pointer-events:none; display:none;" crossorigin="anonymous" />
+            @endif
 
             <div id="overlay-name" class="np-overlay font-bebas" aria-hidden="true"
                  style="z-index:30; pointer-events:none; font-weight:800;">NAME</div>
@@ -115,6 +148,8 @@
         @csrf
         <input type="hidden" name="product_id" value="{{ $product->id ?? '' }}">
         <input type="hidden" name="shopify_product_id" value="{{ $product->shopify_product_id ?? '' }}">
+        {{-- Persist uploaded logo for server-side storage --}}
+        <input type="hidden" id="team-prefill-logo" name="team_logo_url" value="{{ $prefill['prefill_logo'] ?? '' }}">
 
         <div class="mb-3">
           <button type="button" id="btn-add-row" class="btn btn-primary">ADD NEW</button>
@@ -136,7 +171,6 @@
   window.layoutSlots = {!! json_encode($layoutSlots ?? [], JSON_NUMERIC_CHECK) !!};
 </script>
 
-<!-- row template (dynamic sizes injected into template) -->
 <template id="player-row-template">
   <div class="card mb-2 p-2 player-row">
     <div class="d-flex gap-2 align-items-start row-controls">
@@ -154,7 +188,6 @@
 </template>
 
 <script>
-  // expose variantMap and shopfrontUrl for client resolution
   window.variantMap = {!! json_encode($variantMap, JSON_UNESCAPED_SLASHES | JSON_NUMERIC_CHECK) !!} || {};
   console.info('team variantMap', window.variantMap);
   window.shopfrontUrl = "{{ env('SHOPIFY_STORE_FRONT_URL', 'https://nextprint.in') }}";
@@ -171,6 +204,8 @@ document.addEventListener('DOMContentLoaded', function() {
   const imgEl = document.getElementById('player-base');
   const ovName = document.getElementById('overlay-name');
   const ovNum  = document.getElementById('overlay-number');
+  const logoEl = document.getElementById('player-logo');
+  const hiddenTeamLogo = document.getElementById('team-prefill-logo');
 
   const pf = window.prefill || {};
   const layout = (typeof window.layoutSlots === 'object' && Object.keys(window.layoutSlots || {}).length)
@@ -179,6 +214,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     name: { left_pct:50, top_pct:25, width_pct:85, height_pct:8, rotation:0 },
                     number: { left_pct:50, top_pct:54, width_pct:70, height_pct:12, rotation:0 }
                  };
+
+  // Map designer font key -> css class (same as designer)
+  const fontClassMap = { 'bebas': 'font-bebas', 'anton': 'font-anton', 'oswald': 'font-oswald', 'impact': 'font-impact' };
 
   function computeStageSize(stage, img) {
     if (!stage || !img) return null;
@@ -242,27 +280,74 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
+  // place uploaded logo using artwork slot
+  function placeLogo(logo, slot) {
+    if (!logo) return;
+    const s = computeStageSize(stageEl, imgEl);
+    if (!s) return;
+
+    if (slot && slot.width_pct) {
+      const cx = Math.round(s.offsetLeft + ((slot.left_pct||50)/100) * s.imgW + ((slot.width_pct||0)/200) * s.imgW);
+      const cy = Math.round(s.offsetTop  + ((slot.top_pct||50)/100)  * s.imgH + ((slot.height_pct||0)/200) * s.imgH);
+      const wpx = Math.round(((slot.width_pct||10)/100) * s.imgW);
+      const hpx = Math.round(((slot.height_pct||10)/100) * s.imgH);
+
+      logo.style.display = 'block';
+      logo.style.left = (cx - wpx/2) + 'px';
+      logo.style.top  = (cy - hpx/2) + 'px';
+      logo.style.width = wpx + 'px';
+      logo.style.height = hpx + 'px';
+      logo.style.transform = 'rotate(' + (slot.rotation || 0) + 'deg)';
+    } else {
+      // fallback small badge
+      logo.style.display = 'block';
+      logo.style.position = 'absolute';
+      logo.style.left = '20%';
+      logo.style.top = '30%';
+      logo.style.width = '70px';
+      logo.style.height = '70px';
+      logo.style.transform = 'translate(-50%,-50%)';
+    }
+  }
+
   function applyLayout() {
     if (!imgEl || !imgEl.complete) return;
 
-    // apply prefill font & color if present (only initial)
-    if (pf.prefill_font || pf.font) {
-      const map = {bebas: "Bebas Neue, sans-serif", oswald: "Oswald, sans-serif", anton: "Anton, sans-serif", impact: "Impact, Arial"};
-      const key = (pf.prefill_font || pf.font).toString().toLowerCase();
-      const fam = map[key] || (pf.prefill_font || pf.font) || '';
-      if (fam) { ovName.style.fontFamily = fam; ovNum.style.fontFamily = fam; }
-    }
+    // apply prefill font & color if present
+    const pfFont = (pf.prefill_font || pf.font || '') .toString().toLowerCase();
+    const fontClass = fontClassMap[pfFont] || fontClassMap['bebas'];
+    if (ovName) ovName.className = 'np-overlay ' + fontClass;
+    if (ovNum)  ovNum.className  = 'np-overlay ' + fontClass;
+
     if (pf.prefill_color || pf.color) {
       try { var c = decodeURIComponent(pf.prefill_color || pf.color || ''); } catch(e){ var c = (pf.prefill_color || pf.color || ''); }
       if (c) { ovName.style.color = c; ovNum.style.color = c; }
     }
 
-    // position overlays according to layout slots
+    // position overlays
     placeOverlay(ovName, layout.name, 'name');
     placeOverlay(ovNum, layout.number, 'number');
+
+    // choose artwork slot from layoutSlots if present
+    let artwork = null;
+    try {
+      artwork = layout['logo'] || layout['artwork'] || layout['team_logo'] || (Object.values(layout).find(s=> s && (s.mask || (s.slot_key && /logo|artwork|team/i.test(s.slot_key)))) || null);
+    } catch(e) { artwork = null; }
+
+    // set logo src if pf exists but server didn't set src attribute
+    try {
+      if (hiddenTeamLogo && hiddenTeamLogo.value && (!logoEl.src || logoEl.src === location.origin + '/')) {
+        logoEl.src = hiddenTeamLogo.value;
+        logoEl.style.display = 'block';
+      } else if (pf.prefill_logo && (!logoEl.src || logoEl.src === location.origin + '/')) {
+        try { logoEl.src = decodeURIComponent(pf.prefill_logo); logoEl.style.display = 'block'; } catch(e){ logoEl.src = pf.prefill_logo; logoEl.style.display = 'block'; }
+        if (hiddenTeamLogo) hiddenTeamLogo.value = (pf.prefill_logo ? decodeURIComponent(pf.prefill_logo) : pf.prefill_logo);
+      }
+    } catch(e){ /* ignore */ }
+
+    if (logoEl) placeLogo(logoEl, artwork);
   }
 
-  // robust recalculation helper (ResizeObserver + events)
   (function addReliableRecalc() {
     try {
       if ('ResizeObserver' in window) {
@@ -297,10 +382,15 @@ document.addEventListener('DOMContentLoaded', function() {
     // apply per-row font if provided
     if (fontHidden?.value) {
       const fm = fontHidden.value.toLowerCase();
-      const familyMap = {bebas: "Bebas Neue, sans-serif", oswald: "Oswald, sans-serif", anton:"Anton, sans-serif", impact:"Impact, Arial"};
-      const fam = familyMap[fm] || fontHidden.value;
-      ovName.style.fontFamily = fam;
-      ovNum.style.fontFamily = fam;
+      const cls = fontClassMap[fm] || fontClassMap['bebas'];
+      ovName.className = 'np-overlay ' + cls;
+      ovNum.className  = 'np-overlay ' + cls;
+    } else {
+      // revert to designer prefill font if present
+      const pfFontLocal = (pf.prefill_font || pf.font || '').toString().toLowerCase();
+      const cls = fontClassMap[pfFontLocal] || fontClassMap['bebas'];
+      ovName.className = 'np-overlay ' + cls;
+      ovNum.className  = 'np-overlay ' + cls;
     }
 
     // apply per-row color if provided
@@ -309,17 +399,14 @@ document.addEventListener('DOMContentLoaded', function() {
       ovNum.style.color = colorHidden.value;
     }
 
-    // set overlay text & mark active row
     ovName.textContent = nm || 'NAME';
     ovNum.textContent = nu || '09';
     list.querySelectorAll('.player-row').forEach(r => r.classList.remove('preview-active'));
     row.classList.add('preview-active');
 
-    // reposition overlays
     applyLayout();
   }
 
-  // helper: attach input limits
   function enforceLimits(input) {
     if (!input) return;
     if (input.classList.contains('player-number')) {
@@ -330,7 +417,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-  // create a new row and wire UI
   function createRow(vals = {}) {
     const node = tpl.content.cloneNode(true);
     list.appendChild(node);
@@ -350,7 +436,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     enforceLimits(numEl); enforceLimits(nameEl);
 
-    // wire remove click (per-row)
     last.querySelector('.btn-remove').addEventListener('click', ()=> {
       last.remove();
       if (!list.querySelector('.player-row')) { ovName.textContent = ''; ovNum.textContent = ''; applyLayout(); }
@@ -360,20 +445,17 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     });
 
-    // wire focus => auto preview for this row
     nameEl.addEventListener('focus', ()=> renderRowPreview(last));
     numEl.addEventListener('focus', ()=> renderRowPreview(last));
     nameEl.addEventListener('input', ()=> { if (last.classList.contains('preview-active')) renderRowPreview(last); });
     numEl.addEventListener('input', ()=> { if (last.classList.contains('preview-active')) renderRowPreview(last); });
 
-    // auto-focus and auto-preview new row
     nameEl.focus();
     renderRowPreview(last);
 
     return last;
   }
 
-  // event delegation for Preview buttons (works for dynamic rows)
   list.addEventListener('click', function(evt) {
     const btn = evt.target.closest('.btn-preview');
     if (!btn) return;
@@ -396,6 +478,13 @@ document.addEventListener('DOMContentLoaded', function() {
     createRow();
   }
 
+  // ensure hiddenTeamLogo kept in sync
+  try {
+    if (hiddenTeamLogo && pf.prefill_logo) {
+      try { hiddenTeamLogo.value = decodeURIComponent(pf.prefill_logo); } catch(e) { hiddenTeamLogo.value = pf.prefill_logo; }
+    }
+  } catch(e){}
+
   // final collect & submit
   form.addEventListener('submit', async function(e) {
     e.preventDefault();
@@ -409,7 +498,6 @@ document.addEventListener('DOMContentLoaded', function() {
       const c  = r.querySelector('.player-color')?.value || '';
       if (!n && !num) return;
 
-      // resolve numeric variant id using window.variantMap (case-insensitive)
       let variantId = '';
       try {
         if (window.variantMap) {
@@ -423,13 +511,13 @@ document.addEventListener('DOMContentLoaded', function() {
         size: sz,
         font: f,
         color: c,
-        variant_id: variantId  // <-- important: numeric id
+        variant_id: variantId
       });
     });
 
     if (players.length === 0) { alert('Add at least one player.'); return; }
 
-    const payload = { product_id: form.querySelector('input[name="product_id"]').value || null, players: players };
+    const payload = { product_id: form.querySelector('input[name="product_id"]').value || null, players: players, team_logo_url: hiddenTeamLogo?.value || '' };
     try {
       const token = document.querySelector('input[name="_token"]')?.value || '';
       const resp = await fetch(form.action, {
