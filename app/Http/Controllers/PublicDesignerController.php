@@ -83,62 +83,76 @@ class PublicDesignerController extends Controller
         // ----------------------------
         $layoutSlots = [];
 
-foreach ($areas as $a) {
-    // prefer explicit percent values, fallback to mm→percent if you stored mm; here assume pct fields exist
-    $left  = (float)($a->left_pct ?? $a->x_mm ?? 0);
-    $top   = (float)($a->top_pct ?? $a->y_mm ?? 0);
-    $w     = (float)($a->width_pct ?? $a->width_mm ?? 10);
-    $h     = (float)($a->height_pct ?? $a->height_mm ?? 10);
+        foreach ($areas as $a) {
+            // prefer explicit percent values, fallback to mm→percent if you stored mm; here assume pct fields exist
+            $left  = (float)($a->left_pct ?? $a->x_mm ?? 0);
+            $top   = (float)($a->top_pct ?? $a->y_mm ?? 0);
+            $w     = (float)($a->width_pct ?? $a->width_mm ?? 10);
+            $h     = (float)($a->height_pct ?? $a->height_mm ?? 10);
 
-    // If any value looks like fraction (0..1) convert to percent
-    if ($left <= 1) $left *= 100;
-    if ($top   <= 1) $top  *= 100;
-    if ($w     <= 1) $w    *= 100;
-    if ($h     <= 1) $h    *= 100;
+            // If any value looks like fraction (0..1) convert to percent
+            if ($left <= 1) $left *= 100;
+            if ($top   <= 1) $top  *= 100;
+            if ($w     <= 1) $w    *= 100;
+            if ($h     <= 1) $h    *= 100;
 
-    // mask_url - build a public URL if mask_svg_path exists
-    $mask = null;
-    if (!empty($a->mask_svg_path)) {
-        // If you are storing path like "area_shapes/xxx.svg" in storage/app/public you can use:
-        // $mask = Storage::disk('public')->url($a->mask_svg_path);
-        // or if you serve via /files/ path:
-        $mask = strpos($a->mask_svg_path, '/files/') === 0 ? $a->mask_svg_path : ('/files/' . ltrim($a->mask_svg_path, '/'));
-    }
+            // mask_url - build a public URL if mask_svg_path exists
+            $mask = null;
+            if (!empty($a->mask_svg_path)) {
+                // Adjust this depending on how you serve mask files.
+                // If masks are stored in storage/app/public, use Storage::disk('public')->url()
+                try {
+                    // attempt to build public disk url
+                    $possible = (string)$a->mask_svg_path;
+                    // If stored path already is URL or starts with /files/ keep it
+                    if (stripos($possible, 'http://') === 0 || stripos($possible, 'https://') === 0) {
+                        $mask = $possible;
+                    } elseif (strpos($possible, '/files/') === 0) {
+                        $mask = $possible;
+                    } else {
+                        // try storage public
+                        $mask = Storage::disk('public')->url(ltrim($possible, '/'));
+                    }
+                } catch (\Throwable $e) {
+                    // fallback simple concatenation (if you use /files/ route)
+                    $mask = '/files/' . ltrim((string)$a->mask_svg_path, '/');
+                }
+            }
 
-    // slot key & name
-    $slotKey = null;
-    if (!empty($a->slot_key)) $slotKey = strtolower(trim($a->slot_key));
-    if (!$slotKey && !empty($a->name)) {
-        $n = strtolower($a->name);
-        if (strpos($n, 'name') !== false) $slotKey = 'name';
-        if (strpos($n, 'num') !== false || strpos($n,'no') !== false || strpos($n,'number') !== false) $slotKey = 'number';
-    }
+            // slot key & name
+            $slotKey = null;
+            if (!empty($a->slot_key)) $slotKey = strtolower(trim($a->slot_key));
+            if (!$slotKey && !empty($a->name)) {
+                $n = strtolower($a->name);
+                if (strpos($n, 'name') !== false) $slotKey = 'name';
+                if (strpos($n, 'num') !== false || strpos($n,'no') !== false || strpos($n,'number') !== false) $slotKey = 'number';
+            }
 
-    // fallback by template_id (if you use templates to denote name/number)
-    if (!$slotKey && isset($a->template_id)) {
-        if ((int)$a->template_id === 1) $slotKey = 'name';
-        if ((int)$a->template_id === 2) $slotKey = 'number';
-    }
+            // fallback by template_id (if you use templates to denote name/number)
+            if (!$slotKey && isset($a->template_id)) {
+                if ((int)$a->template_id === 1) $slotKey = 'name';
+                if ((int)$a->template_id === 2) $slotKey = 'number';
+            }
 
-    // final fallback naming
-    if (!$slotKey) {
-        // choose a stable key: use the DB id to make unique key names
-        $slotKey = 'slot_' . ($a->id ?? uniqid());
-    }
+            // final fallback naming
+            if (!$slotKey) {
+                // choose a stable key: use the DB id to make unique key names
+                $slotKey = 'slot_' . ($a->id ?? uniqid());
+            }
 
-    $layoutSlots[$slotKey] = [
-        'id' => $a->id,
-        'left_pct'  => round($left, 6),
-        'top_pct'   => round($top, 6),
-        'width_pct' => round($w, 6),
-        'height_pct'=> round($h, 6),
-        'rotation'  => (int)($a->rotation ?? 0),
-        'name'      => $a->name ?? null,
-        'slot_key'  => $a->slot_key ?? null,
-        'template_id' => $a->template_id ?? null,
-        'mask'      => $mask,
-    ];
-}
+            $layoutSlots[$slotKey] = [
+                'id' => $a->id,
+                'left_pct'  => round($left, 6),
+                'top_pct'   => round($top, 6),
+                'width_pct' => round($w, 6),
+                'height_pct'=> round($h, 6),
+                'rotation'  => (int)($a->rotation ?? 0),
+                'name'      => $a->name ?? null,
+                'slot_key'  => $a->slot_key ?? null,
+                'template_id' => $a->template_id ?? null,
+                'mask'      => $mask,
+            ];
+        }
 
         // ensure both keys exist (fallback defaults)
         if (!isset($layoutSlots['name'])) {
@@ -151,6 +165,45 @@ foreach ($areas as $a) {
                 'id' => null, 'left_pct' => 10, 'top_pct' => 75, 'width_pct' => 30, 'height_pct' => 10, 'rotation' => 0, 'mask' => null
             ];
         }
+
+        // ----------------------------
+        // Decide whether to show upload option for this product
+        // (You can adapt logic to your DB: category relation, type, is_regular flag, tags etc.)
+        // ----------------------------
+        $showUpload = false;
+
+        // 1) explicit boolean column example (if exists)
+        if (isset($product->is_regular)) {
+            $showUpload = (bool)$product->is_regular;
+        }
+
+        // 2) category relation fallback (adjust if you have category relation name)
+        if (!$showUpload && isset($product->category) && is_object($product->category)) {
+            $cat = strtolower(trim($product->category->slug ?? $product->category->name ?? ''));
+            if ($cat === 'regular' || $cat === 'regulars' || $cat === 'regular-category') {
+                $showUpload = true;
+            }
+        }
+
+        // 3) type or tags fallback
+        if (!$showUpload) {
+            if (!empty($product->type) && strtolower($product->type) === 'regular') $showUpload = true;
+            if (!$showUpload && !empty($product->tags) && is_string($product->tags) && stripos($product->tags, 'regular') !== false) $showUpload = true;
+        }
+
+        // If you want layoutSlots filtered to only name/number (as requested), do that here:
+        // Keep a copy of original if you need to send full in future.
+        $originalLayout = $layoutSlots;
+        // Filter to only name & number slots
+        $filteredSlots = [];
+        foreach ($layoutSlots as $k => $v) {
+            $lk = strtolower($k);
+            if (in_array($lk, ['name','number'])) {
+                $filteredSlots[$lk] = $v;
+            }
+        }
+        // overwrite layoutSlots with filtered set (so front-end gets only name & number)
+        $layoutSlots = $filteredSlots;
 
         // ----------------------------
         // compute a safe display price (robust)
@@ -207,6 +260,9 @@ foreach ($areas as $a) {
             'areas'   => $areas,
             'layoutSlots' => $layoutSlots,
             'displayPrice' => (float)$displayPrice,
+            'showUpload' => $showUpload,
+            // optionally send original full layout if needed later
+            'originalLayoutSlots' => $originalLayout,
         ]);
     }
 }

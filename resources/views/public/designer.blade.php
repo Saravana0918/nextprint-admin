@@ -114,15 +114,18 @@
         <button type="button" class="np-swatch" data-color="#1E90FF" style="background:#1E90FF"></button>
       </div>
       <input id="np-color" type="color" class="form-control form-control-color mt-2" value="#D4AF37">
-      <div class="mb-2" id="np-upload-block" style="margin-top:6px;">
-        <label for="np-upload-image" class="form-label" style="font-size:.9rem;color:#fff;opacity:.95">Upload Image (customer)</label>
-        <input id="np-upload-image" type="file" accept="image/*" class="form-control" />
-        <div style="margin-top:6px;">
-          <button id="np-user-image-reset" type="button" class="btn btn-sm btn-outline-light" style="display:none;margin-right:6px;">Remove Image</button>
-          <label for="np-user-image-scale" style="color:#fff; font-size:.85rem;margin-right:6px;display:none;" id="np-user-image-scale-label">Scale</label>
-          <input id="np-user-image-scale" type="range" min="50" max="200" value="100" style="vertical-align: middle; display:none;" />
+      {{-- BEFORE: plain upload block --}}
+      @if(!empty($showUpload))
+        <div class="mb-2" id="np-upload-block" style="margin-top:6px;">
+          <label for="np-upload-image" class="form-label" style="font-size:.9rem;color:#fff;opacity:.95">Upload Image (customer)</label>
+          <input id="np-upload-image" type="file" accept="image/*" class="form-control" />
+          <div style="margin-top:6px;">
+            <button id="np-user-image-reset" type="button" class="btn btn-sm btn-outline-light" style="display:none;margin-right:6px;">Remove Image</button>
+            <label for="np-user-image-scale" style="color:#fff; font-size:.85rem;margin-right:6px;display:none;" id="np-user-image-scale-label">Scale</label>
+            <input id="np-user-image-scale" type="range" min="50" max="200" value="100" style="vertical-align: middle; display:none;" />
+          </div>
         </div>
-      </div>
+      @endif
     </div>
 
     <div class="col-md-3 np-col order-3 order-md-3 right-layout mobile-layout">
@@ -181,6 +184,7 @@
   // Pass normalized slots (server converted mask path to /files/.. if needed)
   window.layoutSlots = {!! json_encode($slotsForJs ?? [], JSON_NUMERIC_CHECK) !!};
   window.personalizationSupported = {{ !empty($layoutSlots) ? 'true' : 'false' }};
+  window.showUpload = {{ !empty($showUpload) ? 'true' : 'false' }};
   window.variantMap = {!! json_encode($variantMap, JSON_UNESCAPED_SLASHES | JSON_NUMERIC_CHECK) !!} || {};
   window.shopfrontUrl = "{{ env('SHOPIFY_STORE_FRONT_URL', 'https://nextprint.in') }}";
   console.info('layoutSlots:', window.layoutSlots);
