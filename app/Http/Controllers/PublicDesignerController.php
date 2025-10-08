@@ -173,98 +173,56 @@ class PublicDesignerController extends Controller
 
         // ----------------------------
         // Decide whether to show upload option for this product
-        // (robust: detect artwork/logo slot in originalLayout OR fall back to previous heuristics)
+        // Strict: ONLY when explicit artwork/logo slot exists (slot_key, name or type)
         // ----------------------------
-       $hasArtworkSlot = false;
-$artKeywords = ['logo','artwork','team_logo','graphic','image','art','badge','patch'];
+        $hasArtworkSlot = false;
+        $artKeywords = ['logo', 'artwork', 'team_logo', 'graphic', 'image', 'art', 'badge', 'patch'];
 
-if (!empty($originalLayout) && is_array($originalLayout)) {
-    foreach ($originalLayout as $slotKey => $slot) {
-        $k = strtolower($slotKey);
+        if (!empty($originalLayout) && is_array($originalLayout)) {
+            foreach ($originalLayout as $slotKey => $slot) {
+                $k = strtolower($slotKey);
 
-        // ✅ NEW: detect TEAM LOGO or ARTWORK name
-        if (!empty($slot['name'])) {
-            $slotNameLower = strtolower($slot['name']);
-            if (strpos($slotNameLower, 'team logo') !== false ||
-                strpos($slotNameLower, 'logo') !== false ||
-                strpos($slotNameLower, 'artwork') !== false ||
-                strpos($slotNameLower, 'graphic') !== false) {
-                $hasArtworkSlot = true;
-                break;
+                // 1) check the slot key itself
+                foreach ($artKeywords as $kw) {
+                    if (strpos($k, $kw) !== false) {
+                        $hasArtworkSlot = true;
+                        break 2;
+                    }
+                }
+
+                // 2) check slot name (like "TEAM LOGO", "Logo", "Artwork")
+                if (!empty($slot['name'])) {
+                    $slotNameLower = strtolower((string)$slot['name']);
+                    foreach ($artKeywords as $kw) {
+                        if (strpos($slotNameLower, $kw) !== false) {
+                            $hasArtworkSlot = true;
+                            break 2;
+                        }
+                    }
+                }
+
+                // 3) explicit slot type metadata (if present)
+                if (!empty($slot['type']) && in_array(strtolower($slot['type']), ['image', 'artwork', 'logo'])) {
+                    $hasArtworkSlot = true;
+                    break;
+                }
+
+                // NOTE: intentionally NOT using mask/large-area fallback to avoid false positives
             }
         }
 
-        // 1) keyword in key name
-        foreach ($artKeywords as $kw) {
-            if (strpos($k, $kw) !== false) {
-                $hasArtworkSlot = true;
-                break 2;
-            }
-        }
-
-        // 2) mask presence (mask implies image area)
-        if (!empty($slot['mask'])) {
-            $hasArtworkSlot = true;
-            break;
-        }
-
-        // 3) explicit type metadata
-        if (!empty($slot['type']) && in_array(strtolower($slot['type']), ['image','artwork','logo'])) {
-            $hasArtworkSlot = true;
-            break;
-        }
-
-        // 4) heuristics: large area
-        if (!empty($slot['width_pct']) && !empty($slot['height_pct'])) {
-            if ((float)$slot['width_pct'] >= 25 || (float)$slot['height_pct'] >= 25) {
-                $hasArtworkSlot = true;
-                break;
-            }
-        }
-    }
-}
-
-        // start with artwork-detection result
+        // authoritative decision: only enable upload when layout explicitly has artwork slot
         $showUpload = (bool)$hasArtworkSlot;
 
-// log other flags for debugging without letting them enable upload
-$diagnostics = [
-    'hasArtworkSlot' => (int)$hasArtworkSlot,
-    'product_is_regular' => isset($product->is_regular) ? (int)$product->is_regular : null,
-    'category' => isset($product->category) && is_object($product->category) ? ($product->category->slug ?? $product->category->name ?? null) : (isset($product->category) ? $product->category : null),
-    'type' => $product->type ?? null,
-    'tags' => is_string($product->tags) ? $product->tags : (is_array($product->tags) ? implode(',', $product->tags) : null),
-];
-
-// Optional: if you want to allow non-layout-based uploads in future, implement a product flag (e.g. allow_upload)
-// For now we DO NOT respect category/type/tags/is_regular to enable upload automatically.
-
-\Log::info('designer: upload-diagnostics ' . json_encode(array_merge(['product_id' => $product->id ?? 'unknown'], $diagnostics)));
-
-        // combine with your existing explicit heuristics so old behavior remains:
-        if (!$showUpload && isset($product->is_regular)) {
-            $showUpload = (bool)$product->is_regular;
-        }
-
-        if (!$showUpload && isset($product->category) && is_object($product->category)) {
-            $cat = strtolower(trim($product->category->slug ?? $product->category->name ?? ''));
-            if ($cat === 'regular' || $cat === 'regulars' || $cat === 'regular-category') {
-                $showUpload = true;
-            }
-        }
-
-        if (!$showUpload && isset($product->category) && is_string($product->category)) {
-            $cat = strtolower(trim($product->category));
-            if ($cat === 'regular' || stripos($cat, 'regular') !== false) $showUpload = true;
-        }
-
-        if (!$showUpload) {
-            if (!empty($product->type) && strtolower($product->type) === 'regular') $showUpload = true;
-            if (!$showUpload && !empty($product->tags) && is_string($product->tags) && stripos($product->tags, 'regular') !== false) $showUpload = true;
-        }
-
-        // Log the final decision for quick debugging
-        \Log::info('designer: showUpload=' . (int)$showUpload . ' product_id=' . ($product->id ?? 'unknown') . ' hasArtworkSlot=' . (int)$hasArtworkSlot);
+        // Diagnostics log for debugging (do not let these flags enable upload automatically)
+        $diagnostics = [
+            'hasArtworkSlot' => (int)$hasArtworkSlot,
+            'product_is_regular' => isset($product->is_regular) ? (int)$product->is_regular : null,
+            'category' => isset($product->category) && is_object($product->category) ? ($product->category->slug ?? $product->category->name ?? null) : (isset($product->category) ? $product->category : null),
+            'type' => $product->type ?? null,
+            'tags' => is_string($product->tags) ? $product->tags : (is_array($product->tags) ? implode(',', $product->tags) : null),
+        ];
+        \Log::info('designer: upload-diagnostics ' . json_encode(array_merge(['product_id' => $product->id ?? 'unknown'], $diagnostics)));
 
         // ----------------------------
         // Filter layoutSlots to only name & number for overlays (so overlays use only these keys)
