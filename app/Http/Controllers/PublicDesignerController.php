@@ -82,6 +82,7 @@ class PublicDesignerController extends Controller
         // Build layoutSlots with server-side normalization (including mask svg public URL)
         // ----------------------------
         $layoutSlots = [];
+        $originalLayout = [];
 
         foreach ($areas as $a) {
             // prefer explicit percent values, fallback to mm→percent if you stored mm; here assume pct fields exist
@@ -99,22 +100,17 @@ class PublicDesignerController extends Controller
             // mask_url - build a public URL if mask_svg_path exists
             $mask = null;
             if (!empty($a->mask_svg_path)) {
-                // Adjust this depending on how you serve mask files.
-                // If masks are stored in storage/app/public, use Storage::disk('public')->url()
                 try {
-                    // attempt to build public disk url
                     $possible = (string)$a->mask_svg_path;
-                    // If stored path already is URL or starts with /files/ keep it
                     if (stripos($possible, 'http://') === 0 || stripos($possible, 'https://') === 0) {
                         $mask = $possible;
                     } elseif (strpos($possible, '/files/') === 0) {
                         $mask = $possible;
                     } else {
-                        // try storage public
+                        // try storage public disk
                         $mask = Storage::disk('public')->url(ltrim($possible, '/'));
                     }
                 } catch (\Throwable $e) {
-                    // fallback simple concatenation (if you use /files/ route)
                     $mask = '/files/' . ltrim((string)$a->mask_svg_path, '/');
                 }
             }
@@ -140,7 +136,7 @@ class PublicDesignerController extends Controller
                 $slotKey = 'slot_' . ($a->id ?? uniqid());
             }
 
-            $layoutSlots[$slotKey] = [
+            $normalized = [
                 'id' => $a->id,
                 'left_pct'  => round($left, 6),
                 'top_pct'   => round($top, 6),
@@ -151,10 +147,17 @@ class PublicDesignerController extends Controller
                 'slot_key'  => $a->slot_key ?? null,
                 'template_id' => $a->template_id ?? null,
                 'mask'      => $mask,
+                'mask_svg_path' => $a->mask_svg_path ?? null,
             ];
+
+            // add to original full layout (keyed by slotKey so it's easy to find)
+            $originalLayout[$slotKey] = $normalized;
+
+            // also add into the "working" layoutSlots (we will filter to name/number later)
+            $layoutSlots[$slotKey] = $normalized;
         }
 
-        // ensure both keys exist (fallback defaults)
+        // ensure both name/number exist in working set (fallback defaults)
         if (!isset($layoutSlots['name'])) {
             $layoutSlots['name'] = [
                 'id' => null, 'left_pct' => 10, 'top_pct' => 5, 'width_pct' => 60, 'height_pct' => 8, 'rotation' => 0, 'mask' => null
@@ -168,7 +171,6 @@ class PublicDesignerController extends Controller
 
         // ----------------------------
         // Decide whether to show upload option for this product
-        // (You can adapt logic to your DB: category relation, type, is_regular flag, tags etc.)
         // ----------------------------
         $showUpload = false;
 
@@ -185,16 +187,22 @@ class PublicDesignerController extends Controller
             }
         }
 
-        // 3) type or tags fallback
+        // 3) category as string
+        if (!$showUpload && isset($product->category) && is_string($product->category)) {
+            $cat = strtolower(trim($product->category));
+            if ($cat === 'regular' || stripos($cat, 'regular') !== false) $showUpload = true;
+        }
+
+        // 4) type or tags fallback
         if (!$showUpload) {
             if (!empty($product->type) && strtolower($product->type) === 'regular') $showUpload = true;
             if (!$showUpload && !empty($product->tags) && is_string($product->tags) && stripos($product->tags, 'regular') !== false) $showUpload = true;
         }
 
-        // If you want layoutSlots filtered to only name/number (as requested), do that here:
-        // Keep a copy of original if you need to send full in future.
-        $originalLayout = $layoutSlots;
-        // Filter to only name & number slots
+        // ----------------------------
+        // Filter layoutSlots to only name & number for overlays (so overlays use only these keys)
+        // Keep originalLayout (full) to send to the view for masks/upload decisions
+        // ----------------------------
         $filteredSlots = [];
         foreach ($layoutSlots as $k => $v) {
             $lk = strtolower($k);
@@ -202,8 +210,9 @@ class PublicDesignerController extends Controller
                 $filteredSlots[$lk] = $v;
             }
         }
-        // overwrite layoutSlots with filtered set (so front-end gets only name & number)
-        $layoutSlots = $filteredSlots;
+        // make sure both exist
+        if (!isset($filteredSlots['name'])) $filteredSlots['name'] = $layoutSlots['name'];
+        if (!isset($filteredSlots['number'])) $filteredSlots['number'] = $layoutSlots['number'];
 
         // ----------------------------
         // compute a safe display price (robust)
@@ -258,11 +267,10 @@ class PublicDesignerController extends Controller
             'product' => $product,
             'view'    => $view,
             'areas'   => $areas,
-            'layoutSlots' => $layoutSlots,
+            'layoutSlots' => $filteredSlots,        // name/number for overlays
+            'originalLayoutSlots' => $originalLayout, // full layout for masks/uploads
             'displayPrice' => (float)$displayPrice,
             'showUpload' => $showUpload,
-            // optionally send original full layout if needed later
-            'originalLayoutSlots' => $originalLayout,
         ]);
     }
 }
