@@ -67,48 +67,21 @@
 <body class="body-padding">
 
 @php
-  // base image fallback
   $img = $product->image_url ?? ($product->preview_src ?? asset('images/placeholder.png'));
 
-  // Prepare JS payloads (full and text-only)
-  $fullSlots = $originalLayoutSlots ?? [];
-  $slotsFullForJs = [];
-  foreach ($fullSlots as $k => $s) {
-      $slot = (array)$s;
-      $mask = $slot['mask'] ?? null;
-      if (!$mask && !empty($slot['mask_svg_path'])) {
-          $mask = '/files/' . ltrim($slot['mask_svg_path'], '/');
-      }
-      $slotsFullForJs[$k] = array_merge($slot, ['mask' => $mask ?? null]);
-  }
-
-  $slotsTextForJs = [];
+  // Normalize layoutSlots to include mask URL if available.
+  $slotsForJs = [];
   if (!empty($layoutSlots) && is_array($layoutSlots)) {
       foreach ($layoutSlots as $k => $s) {
-          $slotsTextForJs[$k] = (array)$s;
+          $slot = (array)$s;
+          // If server-side slot may have mask_svg_path (from DB), convert to public URL
+          $mask = $slot['mask'] ?? null;
+          if (!$mask && !empty($slot['mask_svg_path'])) {
+              $mask = '/files/' . ltrim($slot['mask_svg_path'], '/');
+          }
+          $slotsForJs[$k] = array_merge($slot, ['mask' => $mask ?? null]);
       }
   }
-
-  // Blade-side artwork detection (defensive; mirrors controller logic)
-  $bladeHasArtworkSlot = false;
-  $artKeywords = ['logo','artwork','team_logo','graphic','image','art','badge','patch'];
-  foreach ($slotsFullForJs as $key => $slot) {
-      $lowerKey = strtolower((string)$key);
-      foreach ($artKeywords as $kw) {
-          if (strpos($lowerKey, $kw) !== false) { $bladeHasArtworkSlot = true; break 2; }
-      }
-      if (!empty($slot['mask'])) { $bladeHasArtworkSlot = true; break; }
-      if (!empty($slot['type']) && in_array(strtolower($slot['type']), ['image','artwork','logo'])) { $bladeHasArtworkSlot = true; break; }
-      if (!empty($slot['width_pct']) && !empty($slot['height_pct'])) {
-          if ((float)$slot['width_pct'] >= 25 || (float)$slot['height_pct'] >= 25) { $bladeHasArtworkSlot = true; break; }
-      }
-  }
-
-  // debug override via query param ?debug_upload=1
-  $debugShowUpload = request()->query('debug_upload') == '1';
-
-  // final blade decision: combine controller flag ($showUpload), blade detection and debug
-  $forceUpload = (!empty($showUpload) || $bladeHasArtworkSlot || $debugShowUpload);
 @endphp
 
 <div class="container">
@@ -141,23 +114,14 @@
         <button type="button" class="np-swatch" data-color="#1E90FF" style="background:#1E90FF"></button>
       </div>
       <input id="np-color" type="color" class="form-control form-control-color mt-2" value="#D4AF37">
-
-      {{-- Uploader block: rendered only when controller or blade detection or debug indicates support --}}
-      @if($forceUpload)
-        <div class="mb-2" id="np-upload-block" style="{{ $debugShowUpload ? 'border:2px dashed red; padding:8px; background:#fff7f7;' : '' }}">
-          <label for="np-upload-image" class="form-label" style="font-size:.9rem;color:#fff;opacity:.95">Upload Image (customer)</label>
-          <input id="np-upload-image" type="file" accept="image/*" class="form-control" />
-          <div style="margin-top:6px;">
-            <button id="np-user-image-reset" type="button" class="btn btn-sm btn-outline-light" style="display:none;margin-right:6px;">Remove Image</button>
-            <label for="np-user-image-scale" style="color:#fff; font-size:.85rem;margin-right:6px;display:none;" id="np-user-image-scale-label">Scale</label>
-            <input id="np-user-image-scale" type="range" min="50" max="200" value="100" style="vertical-align: middle; display:none;" />
-          </div>
-          @if($debugShowUpload)
-            <small class="d-block mt-2" style="color:#333;">DEBUG: uploader forced. bladeHasArtworkSlot={{ $bladeHasArtworkSlot ? '1' : '0' }}, controllerShowUpload={{ !empty($showUpload) ? '1' : '0' }}</small>
-          @endif
+      <div class="mb-2" id="np-upload-block" style="margin-top:6px;">
+        <input id="np-upload-image" type="file" accept="image/*" class="form-control" />
+        <div style="margin-top:6px;">
+          <button id="np-user-image-reset" type="button" class="btn btn-sm btn-outline-light" style="display:none;margin-right:6px;">Remove Image</button>
+          <label for="np-user-image-scale" style="color:#fff; font-size:.85rem;margin-right:6px;display:none;" id="np-user-image-scale-label">Scale</label>
+          <input id="np-user-image-scale" type="range" min="50" max="200" value="100" style="vertical-align: middle; display:none;" />
         </div>
-      @endif
-
+      </div>
     </div>
 
     <div class="col-md-3 np-col order-3 order-md-3 right-layout mobile-layout">
@@ -213,14 +177,12 @@
 @endphp
 
 <script>
-  // two slot sets:
-  window.fullLayoutSlots = {!! json_encode($slotsFullForJs ?? [], JSON_NUMERIC_CHECK) !!};
-  window.layoutSlots = {!! json_encode($slotsTextForJs ?? [], JSON_NUMERIC_CHECK) !!};
-  window.personalizationSupported = {{ !empty($slotsTextForJs) ? 'true' : 'false' }};
-  window.showUpload = {{ $forceUpload ? 'true' : 'false' }}; // unified: controller || blade-detection || debug
+  // Pass normalized slots (server converted mask path to /files/.. if needed)
+  window.layoutSlots = {!! json_encode($slotsForJs ?? [], JSON_NUMERIC_CHECK) !!};
+  window.personalizationSupported = {{ !empty($layoutSlots) ? 'true' : 'false' }};
   window.variantMap = {!! json_encode($variantMap, JSON_UNESCAPED_SLASHES | JSON_NUMERIC_CHECK) !!} || {};
   window.shopfrontUrl = "{{ env('SHOPIFY_STORE_FRONT_URL', 'https://nextprint.in') }}";
-  console.info('fullLayoutSlots:', window.fullLayoutSlots, 'textSlots:', window.layoutSlots, 'showUpload:', window.showUpload);
+  console.info('layoutSlots:', window.layoutSlots);
 </script>
 
 <script>
@@ -230,9 +192,7 @@
   const pvName  = $('np-prev-name'), pvNum = $('np-prev-num'), baseImg = $('np-base'), stage = $('np-stage');
   const btn = $('np-atc-btn'), form = $('np-atc-form'), addTeam = $('btn-add-team');
   const sizeEl = $('np-size');
-
-  const textLayout = (typeof window.layoutSlots === 'object' && window.layoutSlots !== null) ? window.layoutSlots : {};
-  const fullLayout = (typeof window.fullLayoutSlots === 'object' && window.fullLayoutSlots !== null) ? window.fullLayoutSlots : {};
+  const layout = (typeof window.layoutSlots === 'object' && window.layoutSlots !== null) ? window.layoutSlots : {};
   const NAME_RE = /^[A-Za-z ]{1,12}$/, NUM_RE = /^\d{1,3}$/;
 
   function applyFont(val){
@@ -299,15 +259,14 @@
     }
   }
 
-  // render masks using fullLayout (full slots)
+  // Renders stored masks (if any) as images positioned on-stage
   function renderMasks() {
-    const layout = fullLayout;
-    const stageEl = document.getElementById('np-stage');
-    const img = document.getElementById('np-base');
-    if (!layout || !stageEl || !img) return;
-
-    const stageRect = stageEl.getBoundingClientRect();
-    const imgRect = img.getBoundingClientRect();
+    const layout = window.layoutSlots || {};
+    const stage = document.getElementById('np-stage');
+    const baseImg = document.getElementById('np-base');
+    if (!layout || !stage || !baseImg) return;
+    const stageRect = stage.getBoundingClientRect();
+    const imgRect = baseImg.getBoundingClientRect();
     const s = {
       offsetLeft: Math.round(imgRect.left - stageRect.left),
       offsetTop: Math.round(imgRect.top - stageRect.top),
@@ -330,7 +289,7 @@
         el.style.zIndex = 40;
         el.style.opacity = 1;
         el.style.objectFit = 'contain';
-        stageEl.appendChild(el);
+        stage.appendChild(el);
       }
       const cx = Math.round(s.offsetLeft + ((slot.left_pct||0)/100)*s.imgW + ((slot.width_pct||0)/200)*s.imgW);
       const cy = Math.round(s.offsetTop + ((slot.top_pct||0)/100)*s.imgH + ((slot.height_pct||0)/200)*s.imgH);
@@ -346,29 +305,37 @@
 
   function applyLayout(){
     if (!baseImg || !baseImg.complete) return;
-    if (textLayout && textLayout.name) placeOverlay(pvName, textLayout.name, 'name'); else { pvName.style.left='50%'; pvName.style.top='45%'; pvName.style.transform='translate(-50%,-50%)'; }
-    if (textLayout && textLayout.number) placeOverlay(pvNum, textLayout.number, 'number'); else { pvNum.style.left='50%'; pvNum.style.top='65%'; pvNum.style.transform='translate(-50%,-50%)'; }
+    if (layout && layout.name) placeOverlay(pvName, layout.name, 'name'); else { pvName.style.left='50%'; pvName.style.top='45%'; pvName.style.transform='translate(-50%,-50%)'; }
+    if (layout && layout.number) placeOverlay(pvNum, layout.number, 'number'); else { pvNum.style.left='50%'; pvNum.style.top='65%'; pvNum.style.transform='translate(-50%,-50%)'; }
     renderMasks();
   }
 
-  // Choose best slot for user-uploaded image using fullLayout
+  // Choose best slot for user-uploaded image
   function findPreferredSlot(){
     try {
-      const slots = fullLayout || {};
+      const slots = window.layoutSlots || {};
       const keys = Object.keys(slots);
       if (!keys.length) return null;
+
+      // Prefer explicit artwork/logo names
       const preferNames = ['logo','artwork','team_logo','graphic','image','art'];
       for (const p of preferNames) if (slots[p]) return slots[p];
+
+      // Prefer any slot that is not name/number
       for (const k of keys) {
         const s = slots[k];
         const keyLower = (k || '').toString().toLowerCase();
         const slotKey = (s && (s.slot_key || '')).toString().toLowerCase();
         if (keyLower !== 'name' && keyLower !== 'number' && slotKey !== 'name' && slotKey !== 'number') return s;
       }
+
+      // Prefer a slot that has a mask or template — likely artwork
       for (const k of keys) {
         const s = slots[k];
         if (s && (s.mask || s.mask_svg_path || s.template_id)) return s;
       }
+
+      // fallback to number then name then first
       if (slots['number']) return slots['number'];
       if (slots['name']) return slots['name'];
       return slots[keys[0]] || null;
@@ -380,6 +347,7 @@
     if (!userImg) return;
     const s = computeStageSize(); if (!s) return;
 
+    // no slot → center cover stage image
     if (!slot || !slot.width_pct) {
       const left = Math.round(s.stageW/2);
       const top  = Math.round(s.stageH/2);
@@ -399,6 +367,7 @@
     const areaWpx = Math.max(8, Math.round(((slot.width_pct||10)/100) * s.imgW));
     const areaHpx = Math.max(8, Math.round(((slot.height_pct||10)/100) * s.imgH));
 
+    // Cover the area — userImgScale multiplies area dimension
     const scaledW = Math.round(areaWpx * (userImgScale));
     const scaledH = Math.round(areaHpx * (userImgScale));
 
@@ -411,7 +380,7 @@
     if (slot.rotation) tx += ' rotate(' + slot.rotation + 'deg)';
     tx += ' scale(' + userImgScale + ')';
     userImg.style.transform = tx;
-    userImg.style.zIndex = 300;
+    userImg.style.zIndex = 300; // below overlays but above masks
   }
 
   function syncPreview(){
@@ -597,29 +566,25 @@
 
   function findPreferredSlot(){
     try {
-      // prefer names in fullLayoutSlots (global)
-      if (typeof window.fullLayoutSlots !== 'undefined') {
-        const slots = window.fullLayoutSlots || {};
-        const keys = Object.keys(slots);
-        if (!keys.length) return null;
-        const preferNames = ['logo','artwork','team_logo','graphic','image','art'];
-        for (const p of preferNames) if (slots[p]) return slots[p];
-        for (const k of keys) {
-          const s = slots[k];
-          const keyLower = (k || '').toString().toLowerCase();
-          const slotKey = (s && (s.slot_key || '')).toString().toLowerCase();
-          if (keyLower !== 'name' && keyLower !== 'number' && slotKey !== 'name' && slotKey !== 'number') return s;
-        }
-        for (const k of keys) {
-          const s = slots[k];
-          if (s && (s.mask || s.mask_svg_path || s.template_id)) return s;
-        }
-        if (slots['number']) return slots['number'];
-        if (slots['name']) return slots['name'];
-        return slots[keys[0]] || null;
+      const slots = window.layoutSlots || {};
+      const keys = Object.keys(slots);
+      if (!keys.length) return null;
+      const preferNames = ['logo','artwork','team_logo','graphic','image','art'];
+      for (const p of preferNames) if (slots[p]) return slots[p];
+      for (const k of keys) {
+        const s = slots[k];
+        const keyLower = (k || '').toString().toLowerCase();
+        const slotKey = (s && (s.slot_key || '')).toString().toLowerCase();
+        if (keyLower !== 'name' && keyLower !== 'number' && slotKey !== 'name' && slotKey !== 'number') return s;
       }
-    } catch(e){ console.warn(e); }
-    return null;
+      for (const k of keys) {
+        const s = slots[k];
+        if (s && (s.mask || s.mask_svg_path || s.template_id)) return s;
+      }
+      if (slots['number']) return slots['number'];
+      if (slots['name']) return slots['name'];
+      return slots[keys[0]] || null;
+    } catch(e) { console.warn('findPreferredSlot failed', e); return null; }
   }
 
   async function handleFile(file) {
@@ -669,9 +634,18 @@
   if (removeBtn) removeBtn.addEventListener('click', function(){ if (userImg && userImg.parentNode) userImg.parentNode.removeChild(userImg); userImg = null; removeBtn.style.display = 'none'; if (scaleRange) { scaleRange.style.display = 'none'; scaleLabel.style.display = 'none'; } if (previewHidden) previewHidden.value = ''; });
   if (scaleRange) scaleRange.addEventListener('input', function(){ const v = parseInt(this.value || '100', 10); userImgScale = v / 100; const slot = findPreferredSlot(); placeUserImage(slot); });
 
-  window.addEventListener('resize', function(){ if (userImg) placeUserImage(findPreferredSlot()); if (document.getElementById('np-base').complete) setTimeout(()=>{ if (typeof window.renderMasksCustom === 'function') window.renderMasksCustom(); else { /* no-op */ } },40); });
-  document.fonts?.ready.then(()=> { if (userImg) placeUserImage(findPreferredSlot()); setTimeout(()=>{ if (typeof window.renderMasksCustom === 'function') window.renderMasksCustom(); },80); });
+  window.addEventListener('resize', function(){ if (userImg) placeUserImage(findPreferredSlot()); if (document.getElementById('np-base').complete) setTimeout(()=>{ renderMasks(); },40); });
+  document.fonts?.ready.then(()=> { if (userImg) placeUserImage(findPreferredSlot()); setTimeout(()=>{ renderMasks(); },80); });
 
+  function renderMasks(){
+    try {
+      // call the same renderMasks in the other script if loaded
+      if (typeof window.layoutSlots !== 'undefined') {
+        const evt = new Event('renderMasksCustom');
+        window.dispatchEvent(evt);
+      }
+    } catch(e){}
+  }
 })();
 </script>
 
