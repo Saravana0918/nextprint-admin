@@ -448,16 +448,16 @@
   if (colorEl?.value) params.set('prefill_color', encodeURIComponent(colorEl.value));
   const sizeVal = $('np-size')?.value || '';
   if (sizeVal) params.set('prefill_size', sizeVal);
-
-  // 👇 New line
-  const uploadedLogo = document.getElementById('np-uploaded-logo-url')?.value || '';
-  if (uploadedLogo) params.set('prefill_logo', encodeURIComponent(uploadedLogo));
-
   try { if (window.layoutSlots && Object.keys(window.layoutSlots || {}).length) params.set('layoutSlots', encodeURIComponent(JSON.stringify(window.layoutSlots))); } catch (err) {}
+  // NEW: include public logo URL (if available)
+  try {
+    if (window.lastUploadedLogoUrl) params.set('prefill_logo', encodeURIComponent(window.lastUploadedLogoUrl));
+  } catch(e){}
 
   const base = "{{ route('team.create') }}";
   window.location.href = base + (params.toString() ? ('?' + params.toString()) : '');
 });
+
 
 
   // init
@@ -620,22 +620,43 @@ async function uploadFileToServer(file) {
 // ---- main file handler: uploads + shows preview ----
 async function handleFile(file) {
   if (!file) return;
-  if (!/^image\//.test(file.type)) { alert('Please upload an image file.'); return; }
+  if (!/^image\//.test(file.type)) { alert('Please upload an image file (PNG, JPG, SVG).'); return; }
   const maxMB = 6;
   if (file.size > maxMB * 1024 * 1024) { alert('Please use an image smaller than ' + maxMB + ' MB.'); return; }
 
-  // Upload to Laravel temp folder
-  const uploadedUrl = await uploadFileToServer(file);
+  // 1) Upload to server to get public URL
+  let publicUrl = null;
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    // CSRF token if needed (Laravel blade provides it in the page)
+    const token = document.querySelector('input[name="_token"]')?.value;
+    const resp = await fetch('/designer/upload-temp', {
+      method: 'POST',
+      headers: (token ? { 'X-CSRF-TOKEN': token } : {}),
+      body: fd,
+      credentials: 'same-origin'
+    });
+    const json = await resp.json().catch(()=>null);
+    if (resp.ok && json && json.url) {
+      publicUrl = json.url;
+    } else {
+      console.warn('upload-temp failed or did not return url', json);
+    }
+  } catch (err) {
+    console.warn('upload-temp error', err);
+  }
 
-  // Local preview fallback
+  // 2) If server didn't return public URL, fallback to local dataURL
   const reader = new FileReader();
   reader.onload = function(ev) {
-    const previewUrl = uploadedUrl || ev.target.result;
+    const dataUrl = ev.target.result;
 
+    // create userImg on stage (same as before)
     if (userImg && userImg.parentNode) userImg.parentNode.removeChild(userImg);
     userImg = document.createElement('img');
     userImg.className = 'np-user-image';
-    userImg.src = previewUrl;
+    userImg.src = dataUrl; // display immediately from dataURL
     userImg.alt = 'User artwork';
     userImg.style.position = 'absolute';
     userImg.style.left = '50%';
@@ -648,23 +669,31 @@ async function handleFile(file) {
     stage.appendChild(userImg);
 
     if (removeBtn) removeBtn.style.display = 'inline-block';
-    if (scaleRange) {
-      scaleRange.style.display = 'inline-block';
-      scaleLabel.style.display = 'inline-block';
-      scaleRange.value = 100;
-      userImgScale = 1.0;
-    }
+    if (scaleRange) { scaleRange.style.display = 'inline-block'; scaleLabel.style.display = 'inline-block'; scaleRange.value = 100; userImgScale = 1.0; }
 
     const slot = findPreferredSlot();
     placeUserImage(slot);
     userImg.onload = function(){ placeUserImage(slot); };
 
-    // Save uploaded public URL to hidden field
-    const hiddenLogo = document.getElementById('np-uploaded-logo-url');
-    if (hiddenLogo) hiddenLogo.value = uploadedUrl || '';
+    // 3) If we have publicUrl, store it on window for add-team link
+    if (publicUrl) {
+      window.lastUploadedLogoUrl = publicUrl; // used by Add Team Players
+      // also set the hidden preview (optional)
+      try {
+        setTimeout(()=> {
+          html2canvas(stage, { useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1 })
+           .then(canvas => { previewHidden.value = canvas.toDataURL('image/png'); })
+           .catch(()=>{});
+        }, 180);
+      } catch(e){}
+    } else {
+      // no public URL; keep using dataURL locally but won't be accessible on team page
+      window.lastUploadedLogoUrl = null;
+    }
   };
   reader.readAsDataURL(file);
 }
+
 
   if (uploadEl) uploadEl.addEventListener('change', function(e){ const f = e.target.files && e.target.files[0]; if (!f) return; handleFile(f); });
   if (removeBtn) removeBtn.addEventListener('click', function(){ if (userImg && userImg.parentNode) userImg.parentNode.removeChild(userImg); userImg = null; removeBtn.style.display = 'none'; if (scaleRange) { scaleRange.style.display = 'none'; scaleLabel.style.display = 'none'; } if (previewHidden) previewHidden.value = ''; });

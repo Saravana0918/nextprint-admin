@@ -118,10 +118,13 @@
             {{-- Logo element (populated from designer prefill or empty hidden) --}}
             @if(!empty($prefill['prefill_logo']))
               <img id="player-logo" src="{{ $prefill['prefill_logo'] }}" alt="Logo"
-                   style="position:absolute; z-index:300; pointer-events:none; display:block;" crossorigin="anonymous" />
+                  style="position:absolute; z-index:300; pointer-events:none; display:block;"
+                  crossorigin="anonymous"
+                  onerror="this.style.display='none';" />
             @else
               <img id="player-logo" src="" alt="Logo"
-                   style="position:absolute; z-index:300; pointer-events:none; display:none;" crossorigin="anonymous" />
+                  style="position:absolute; z-index:300; pointer-events:none; display:none;"
+                  crossorigin="anonymous" onerror="this.style.display='none';" />
             @endif
 
             <div id="overlay-name" class="np-overlay font-bebas" aria-hidden="true"
