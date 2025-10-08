@@ -175,44 +175,54 @@ class PublicDesignerController extends Controller
         // Decide whether to show upload option for this product
         // (robust: detect artwork/logo slot in originalLayout OR fall back to previous heuristics)
         // ----------------------------
-        $hasArtworkSlot = false;
-        $artKeywords = ['logo','artwork','team_logo','graphic','image','art','badge','patch'];
+       $hasArtworkSlot = false;
+$artKeywords = ['logo','artwork','team_logo','graphic','image','art','badge','patch'];
 
-        // defensive: ensure originalLayout is array
-        if (!empty($originalLayout) && is_array($originalLayout)) {
-            foreach ($originalLayout as $slotKey => $slot) {
-                $k = strtolower($slotKey);
+if (!empty($originalLayout) && is_array($originalLayout)) {
+    foreach ($originalLayout as $slotKey => $slot) {
+        $k = strtolower($slotKey);
 
-                // 1) keyword in key name
-                foreach ($artKeywords as $kw) {
-                    if (strpos($k, $kw) !== false) {
-                        $hasArtworkSlot = true;
-                        break 2;
-                    }
-                }
-
-                // 2) mask presence (mask implies image area)
-                if (!empty($slot['mask'])) {
-                    $hasArtworkSlot = true;
-                    break;
-                }
-
-                // 3) explicit type metadata
-                if (!empty($slot['type']) && in_array(strtolower($slot['type']), ['image','artwork','logo'])) {
-                    $hasArtworkSlot = true;
-                    break;
-                }
-
-                // 4) heuristics: large area (optionally consider as artwork)
-                if (!empty($slot['width_pct']) && !empty($slot['height_pct'])) {
-                    if ((float)$slot['width_pct'] >= 25 || (float)$slot['height_pct'] >= 25) {
-                        // large slot — may be suitable for artwork
-                        $hasArtworkSlot = true;
-                        break;
-                    }
-                }
+        // ✅ NEW: detect TEAM LOGO or ARTWORK name
+        if (!empty($slot['name'])) {
+            $slotNameLower = strtolower($slot['name']);
+            if (strpos($slotNameLower, 'team logo') !== false ||
+                strpos($slotNameLower, 'logo') !== false ||
+                strpos($slotNameLower, 'artwork') !== false ||
+                strpos($slotNameLower, 'graphic') !== false) {
+                $hasArtworkSlot = true;
+                break;
             }
         }
+
+        // 1) keyword in key name
+        foreach ($artKeywords as $kw) {
+            if (strpos($k, $kw) !== false) {
+                $hasArtworkSlot = true;
+                break 2;
+            }
+        }
+
+        // 2) mask presence (mask implies image area)
+        if (!empty($slot['mask'])) {
+            $hasArtworkSlot = true;
+            break;
+        }
+
+        // 3) explicit type metadata
+        if (!empty($slot['type']) && in_array(strtolower($slot['type']), ['image','artwork','logo'])) {
+            $hasArtworkSlot = true;
+            break;
+        }
+
+        // 4) heuristics: large area
+        if (!empty($slot['width_pct']) && !empty($slot['height_pct'])) {
+            if ((float)$slot['width_pct'] >= 25 || (float)$slot['height_pct'] >= 25) {
+                $hasArtworkSlot = true;
+                break;
+            }
+        }
+    }
+}
 
         // start with artwork-detection result
         $showUpload = (bool)$hasArtworkSlot;
