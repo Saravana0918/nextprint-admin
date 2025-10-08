@@ -148,6 +148,8 @@ class PublicDesignerController extends Controller
                 'template_id' => $a->template_id ?? null,
                 'mask'      => $mask,
                 'mask_svg_path' => $a->mask_svg_path ?? null,
+                // keep other raw attrs if needed by front-end
+                'raw' => $a->toArray(),
             ];
 
             // add to original full layout (keyed by slotKey so it's easy to find)
@@ -171,15 +173,55 @@ class PublicDesignerController extends Controller
 
         // ----------------------------
         // Decide whether to show upload option for this product
+        // (robust: detect artwork/logo slot in originalLayout OR fall back to previous heuristics)
         // ----------------------------
-        $showUpload = false;
+        $hasArtworkSlot = false;
+        $artKeywords = ['logo','artwork','team_logo','graphic','image','art','badge','patch'];
 
-        // 1) explicit boolean column example (if exists)
-        if (isset($product->is_regular)) {
+        // defensive: ensure originalLayout is array
+        if (!empty($originalLayout) && is_array($originalLayout)) {
+            foreach ($originalLayout as $slotKey => $slot) {
+                $k = strtolower($slotKey);
+
+                // 1) keyword in key name
+                foreach ($artKeywords as $kw) {
+                    if (strpos($k, $kw) !== false) {
+                        $hasArtworkSlot = true;
+                        break 2;
+                    }
+                }
+
+                // 2) mask presence (mask implies image area)
+                if (!empty($slot['mask'])) {
+                    $hasArtworkSlot = true;
+                    break;
+                }
+
+                // 3) explicit type metadata
+                if (!empty($slot['type']) && in_array(strtolower($slot['type']), ['image','artwork','logo'])) {
+                    $hasArtworkSlot = true;
+                    break;
+                }
+
+                // 4) heuristics: large area (optionally consider as artwork)
+                if (!empty($slot['width_pct']) && !empty($slot['height_pct'])) {
+                    if ((float)$slot['width_pct'] >= 25 || (float)$slot['height_pct'] >= 25) {
+                        // large slot — may be suitable for artwork
+                        $hasArtworkSlot = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // start with artwork-detection result
+        $showUpload = (bool)$hasArtworkSlot;
+
+        // combine with your existing explicit heuristics so old behavior remains:
+        if (!$showUpload && isset($product->is_regular)) {
             $showUpload = (bool)$product->is_regular;
         }
 
-        // 2) category relation fallback (adjust if you have category relation name)
         if (!$showUpload && isset($product->category) && is_object($product->category)) {
             $cat = strtolower(trim($product->category->slug ?? $product->category->name ?? ''));
             if ($cat === 'regular' || $cat === 'regulars' || $cat === 'regular-category') {
@@ -187,21 +229,22 @@ class PublicDesignerController extends Controller
             }
         }
 
-        // 3) category as string
         if (!$showUpload && isset($product->category) && is_string($product->category)) {
             $cat = strtolower(trim($product->category));
             if ($cat === 'regular' || stripos($cat, 'regular') !== false) $showUpload = true;
         }
 
-        // 4) type or tags fallback
         if (!$showUpload) {
             if (!empty($product->type) && strtolower($product->type) === 'regular') $showUpload = true;
             if (!$showUpload && !empty($product->tags) && is_string($product->tags) && stripos($product->tags, 'regular') !== false) $showUpload = true;
         }
 
+        // Log the final decision for quick debugging
+        \Log::info('designer: showUpload=' . (int)$showUpload . ' product_id=' . ($product->id ?? 'unknown') . ' hasArtworkSlot=' . (int)$hasArtworkSlot);
+
         // ----------------------------
         // Filter layoutSlots to only name & number for overlays (so overlays use only these keys)
-        // Keep originalLayout (full) to send to the view for masks/upload decisions
+        // Keep originalLayout (full) to send to the view for masks/uploads
         // ----------------------------
         $filteredSlots = [];
         foreach ($layoutSlots as $k => $v) {

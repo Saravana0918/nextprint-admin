@@ -67,9 +67,10 @@
 <body class="body-padding">
 
 @php
+  // base image fallback
   $img = $product->image_url ?? ($product->preview_src ?? asset('images/placeholder.png'));
 
-  // Prepare JS payloads:
+  // Prepare JS payloads (full and text-only)
   $fullSlots = $originalLayoutSlots ?? [];
   $slotsFullForJs = [];
   foreach ($fullSlots as $k => $s) {
@@ -87,6 +88,27 @@
           $slotsTextForJs[$k] = (array)$s;
       }
   }
+
+  // Blade-side artwork detection (defensive; mirrors controller logic)
+  $bladeHasArtworkSlot = false;
+  $artKeywords = ['logo','artwork','team_logo','graphic','image','art','badge','patch'];
+  foreach ($slotsFullForJs as $key => $slot) {
+      $lowerKey = strtolower((string)$key);
+      foreach ($artKeywords as $kw) {
+          if (strpos($lowerKey, $kw) !== false) { $bladeHasArtworkSlot = true; break 2; }
+      }
+      if (!empty($slot['mask'])) { $bladeHasArtworkSlot = true; break; }
+      if (!empty($slot['type']) && in_array(strtolower($slot['type']), ['image','artwork','logo'])) { $bladeHasArtworkSlot = true; break; }
+      if (!empty($slot['width_pct']) && !empty($slot['height_pct'])) {
+          if ((float)$slot['width_pct'] >= 25 || (float)$slot['height_pct'] >= 25) { $bladeHasArtworkSlot = true; break; }
+      }
+  }
+
+  // debug override via query param ?debug_upload=1
+  $debugShowUpload = request()->query('debug_upload') == '1';
+
+  // final blade decision: combine controller flag ($showUpload), blade detection and debug
+  $forceUpload = (!empty($showUpload) || $bladeHasArtworkSlot || $debugShowUpload);
 @endphp
 
 <div class="container">
@@ -120,8 +142,9 @@
       </div>
       <input id="np-color" type="color" class="form-control form-control-color mt-2" value="#D4AF37">
 
-      @if(!empty($showUpload))
-        <div class="mb-2" id="np-upload-block" style="margin-top:6px;">
+      {{-- Uploader block: rendered only when controller or blade detection or debug indicates support --}}
+      @if($forceUpload)
+        <div class="mb-2" id="np-upload-block" style="{{ $debugShowUpload ? 'border:2px dashed red; padding:8px; background:#fff7f7;' : '' }}">
           <label for="np-upload-image" class="form-label" style="font-size:.9rem;color:#fff;opacity:.95">Upload Image (customer)</label>
           <input id="np-upload-image" type="file" accept="image/*" class="form-control" />
           <div style="margin-top:6px;">
@@ -129,8 +152,12 @@
             <label for="np-user-image-scale" style="color:#fff; font-size:.85rem;margin-right:6px;display:none;" id="np-user-image-scale-label">Scale</label>
             <input id="np-user-image-scale" type="range" min="50" max="200" value="100" style="vertical-align: middle; display:none;" />
           </div>
+          @if($debugShowUpload)
+            <small class="d-block mt-2" style="color:#333;">DEBUG: uploader forced. bladeHasArtworkSlot={{ $bladeHasArtworkSlot ? '1' : '0' }}, controllerShowUpload={{ !empty($showUpload) ? '1' : '0' }}</small>
+          @endif
         </div>
       @endif
+
     </div>
 
     <div class="col-md-3 np-col order-3 order-md-3 right-layout mobile-layout">
@@ -190,10 +217,10 @@
   window.fullLayoutSlots = {!! json_encode($slotsFullForJs ?? [], JSON_NUMERIC_CHECK) !!};
   window.layoutSlots = {!! json_encode($slotsTextForJs ?? [], JSON_NUMERIC_CHECK) !!};
   window.personalizationSupported = {{ !empty($slotsTextForJs) ? 'true' : 'false' }};
-  window.showUpload = {{ !empty($showUpload) ? 'true' : 'false' }};
+  window.showUpload = {{ $forceUpload ? 'true' : 'false' }}; // unified: controller || blade-detection || debug
   window.variantMap = {!! json_encode($variantMap, JSON_UNESCAPED_SLASHES | JSON_NUMERIC_CHECK) !!} || {};
   window.shopfrontUrl = "{{ env('SHOPIFY_STORE_FRONT_URL', 'https://nextprint.in') }}";
-  console.info('fullLayoutSlots:', window.fullLayoutSlots, 'textSlots:', window.layoutSlots);
+  console.info('fullLayoutSlots:', window.fullLayoutSlots, 'textSlots:', window.layoutSlots, 'showUpload:', window.showUpload);
 </script>
 
 <script>
