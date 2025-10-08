@@ -227,6 +227,20 @@ if (!empty($originalLayout) && is_array($originalLayout)) {
         // start with artwork-detection result
         $showUpload = (bool)$hasArtworkSlot;
 
+// log other flags for debugging without letting them enable upload
+$diagnostics = [
+    'hasArtworkSlot' => (int)$hasArtworkSlot,
+    'product_is_regular' => isset($product->is_regular) ? (int)$product->is_regular : null,
+    'category' => isset($product->category) && is_object($product->category) ? ($product->category->slug ?? $product->category->name ?? null) : (isset($product->category) ? $product->category : null),
+    'type' => $product->type ?? null,
+    'tags' => is_string($product->tags) ? $product->tags : (is_array($product->tags) ? implode(',', $product->tags) : null),
+];
+
+// Optional: if you want to allow non-layout-based uploads in future, implement a product flag (e.g. allow_upload)
+// For now we DO NOT respect category/type/tags/is_regular to enable upload automatically.
+
+\Log::info('designer: upload-diagnostics ' . json_encode(array_merge(['product_id' => $product->id ?? 'unknown'], $diagnostics)));
+
         // combine with your existing explicit heuristics so old behavior remains:
         if (!$showUpload && isset($product->is_regular)) {
             $showUpload = (bool)$product->is_regular;
