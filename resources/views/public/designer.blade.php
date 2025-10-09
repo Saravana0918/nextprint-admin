@@ -64,70 +64,6 @@
     }
     @media (min-width: 768px) { .vt-icons { display: none !important; } }
     input:focus, select:focus { outline: 3px solid rgba(13,110,253,0.12); }
-    @media (max-width: 767px) {
-  .np-input-group {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 10px;
-    font-family: 'Arial', sans-serif;
-    padding: 6px 12px;
-    box-sizing: border-box;
-    width: 100%;
-  }
-
-  .np-field {
-    position: relative;
-    width: 86%;            /* responsive width on mobile */
-    max-width: 360px;
-    min-width: 200px;
-  }
-
-  .np-input {
-    width: 100%;
-    background: transparent; /* shows jersey/field behind */
-    border: none;
-    border-bottom: 2px solid #fff;
-    color: #fff;
-    text-align: center;
-    font-size: 20px;
-    font-weight: 800;
-    outline: none;
-    padding: 8px 0 12px 0;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-  }
-
-  /* placeholder same color as text */
-  .np-input::placeholder {
-    color: #fff;
-    opacity: 1;
-  }
-
-  /* small MAX label on bottom-right */
-  .np-max {
-    position: absolute;
-    right: 2px;
-    bottom: -18px;
-    font-size: 10px;
-    color: #fff;
-    opacity: 0.9;
-    font-weight: 700;
-    letter-spacing: 0.4px;
-  }
-
-  /* ensure numeric pad for #np-num on mobile */
-  #np-num {
-    -webkit-appearance: none;
-    appearance: none;
-  }
-
-  /* optional: slightly larger number style (if you want second input visually bigger) */
-  .np-field:nth-child(2) .np-input {
-    font-size: 28px;
-    letter-spacing: 0;
-  }
-}
   </style>
 </head>
 <body class="body-padding">
@@ -176,17 +112,8 @@
     </div>
 
     <div class="col-md-3 np-col order-2 order-md-1" id="np-controls">
-      <div class="np-input-group">
-  <div class="np-field">
-    <input id="np-name" type="text" maxlength="11" class="np-input" placeholder="YOUR NAME">
-    <span class="np-max">MAX. 11</span>
-  </div>
-
-  <div class="np-field">
-    <input id="np-num" type="text" maxlength="2" inputmode="numeric" class="np-input" placeholder="11">
-    <span class="np-max">MAX. 2</span>
-  </div>
-</div>
+      <input id="np-name" type="text" maxlength="12" class="form-control mb-2 text-center" placeholder="YOUR NAME">
+      <input id="np-num"  type="text" maxlength="3" inputmode="numeric" class="form-control mb-2 text-center" placeholder="09">
       <select id="np-font" class="form-select mb-2">
         <option value="bebas">Bebas Neue</option>
         <option value="anton">Anton</option>
