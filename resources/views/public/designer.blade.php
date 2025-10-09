@@ -52,6 +52,7 @@
       box-shadow: 0 6px 18px rgba(0,0,0,0.25);
       border-radius: 4px;
     }
+
     @media (max-width: 767px) {
       body { background-image: url('/images/stadium-bg.jpg'); background-size: cover; background-position: center center; background-repeat: no-repeat; min-height: 100vh; margin-top: -70px; }
       body::before { content: ""; position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 5; pointer-events: none; }
@@ -60,15 +61,6 @@
       .np-stage::after { content: ""; position: absolute; left: 12px; right: 12px; top: 12px; bottom: 12px; border-radius: 8px; background: rgba(0,0,0,0.06); z-index: 15; pointer-events: none; }
       #np-atc-btn { position: fixed !important; top: 12px !important; right: 12px !important; z-index: 100050 !important; width: 130px !important; height: 44px !important; border-radius: 28px !important; box-shadow: 0 6px 18px rgba(0,0,0,0.25) !important; font-weight: 700 !important; }
       .mobile-layout{ margin-top : -330px; }
-      .np-stage {
-    max-width: 92% !important;    /* use most of the screen width */
-    width: 92% !important;
-    min-height: 360px !important; /* taller canvas so image isn't squashed */
-    padding: 12px !important;
-    margin: 8px auto !important;
-  }
-   .np-stage img { width: 100%; height: auto; display:block; }
-     body.body-padding { padding-top: 60px !important; }
     }
     @media (min-width: 768px) { .vt-icons { display: none !important; } }
     input:focus, select:focus { outline: 3px solid rgba(13,110,253,0.12); }
@@ -339,39 +331,6 @@
       el.style.transform = 'rotate(' + (slot.rotation||0) + 'deg)';
     });
   }
-
-  (function ensureReflow(){
-  function reflowAll(){
-    try {
-      // applyLayout is defined earlier to position overlays & masks
-      if (typeof applyLayout === 'function') applyLayout();
-      // if user image exists, reposition it using latest layout
-      if (typeof findPreferredSlot === 'function' && typeof placeUserImage === 'function') {
-        const slot = (typeof window.originalLayoutSlots === 'object' && Object.keys(window.originalLayoutSlots || {}).length)
-                      ? findPreferredSlot()
-                      : findPreferredSlot();
-        // if userImg variable is in scope in upload script it will reposition; else call via window
-        if (window.userImgRef && typeof window.placeUserImageRef === 'function') {
-          window.placeUserImageRef(slot);
-        } else {
-          // fallback: trigger a resize event so the upload script repositions
-          window.dispatchEvent(new Event('resize'));
-        }
-      }
-    } catch(e){ console.warn('reflowAll failed', e); }
-  }
-
-  // run on base image load
-  const baseImg = document.getElementById('np-base');
-  if (baseImg) baseImg.addEventListener('load', ()=> setTimeout(reflowAll, 90));
-
-  // run on fonts ready
-  document.fonts?.ready.then(()=> setTimeout(reflowAll, 140));
-
-  // run on orientation change and resize
-  window.addEventListener('orientationchange', ()=> setTimeout(reflowAll, 180));
-  window.addEventListener('resize', ()=> setTimeout(reflowAll, 100));
-})();
 
   function applyLayout(){
     if (!baseImg || !baseImg.complete) return;
