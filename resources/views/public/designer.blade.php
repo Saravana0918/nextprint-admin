@@ -61,68 +61,51 @@
       .np-stage::after { content: ""; position: absolute; left: 12px; right: 12px; top: 12px; bottom: 12px; border-radius: 8px; background: rgba(0,0,0,0.06); z-index: 15; pointer-events: none; }
       #np-atc-btn { position: fixed !important; top: 12px !important; right: 12px !important; z-index: 100050 !important; border-radius: 28px !important; box-shadow: 0 6px 18px rgba(0,0,0,0.25) !important; font-weight: 700 !important; }
       .mobile-layout{ margin-top : -330px; }
+      .np-input-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px;
+  font-family: 'Arial', sans-serif;
+}
+
+.np-field {
+  position: relative;
+  width: 250px;
+}
+
+.np-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid white;
+  color: white;
+  text-align: center;
+  font-size: 22px;
+  font-weight: 700;
+  outline: none;
+  padding: 6px 0;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.np-input::placeholder {
+  color: white;
+  opacity: 1;
+}
+
+.np-max {
+  position: absolute;
+  right: 0;
+  bottom: -18px;
+  font-size: 10px;
+  color: white;
+  opacity: 0.8;
+  font-weight: 600;
+}
     }
     @media (min-width: 768px) { .vt-icons { display: none !important; } }
     input:focus, select:focus { outline: 3px solid rgba(13,110,253,0.12); }
-    /* MOBILE ONLY: big rounded inputs like screenshot (<= 767px) */
-@media (max-width: 767px) {
-  /* container tweak so inputs sit nicely */
-  #np-controls { padding: 10px 6px !important; }
-
-  /* common input look */
-  #np-controls input.form-control[type="text"],
-  #np-controls input.form-control[inputmode] {
-    height: 52px !important;
-    line-height: 20px !important;
-    border-radius: 8px !important;
-    background: #ffffff !important;    /* white rounded pill */
-    color: #222 !important;
-    font-weight: 700 !important;
-    font-size: 15px !important;
-    text-align: center !important;
-    box-shadow: 0 6px 18px rgba(0,0,0,0.12) !important;
-    border: 0 !important;
-    padding: 10px 14px !important;
-    appearance: none !important;
-    -webkit-appearance: none !important;
-  }
-
-  /* make the number input larger and bolder visually */
-  #np-num {
-    height: 60px !important;
-    font-size: 22px !important;
-    font-weight: 900 !important;
-    letter-spacing: 1px !important;
-  }
-
-  /* placeholder styling - uppercase & lighter color */
-  #np-controls input::placeholder {
-    color: rgba(0,0,0,0.45) !important;
-    text-transform: uppercase !important;
-    font-weight:700 !important;
-    letter-spacing: 1px !important;
-  }
-
-  /* focused state */
-  #np-controls input:focus {
-    outline: none !important;
-    box-shadow: 0 10px 26px rgba(0,0,0,0.18) !important;
-    transform: translateY(-1px);
-  }
-
-  /* spacing between fields */
-  #np-controls input.form-control.mb-2 { margin-bottom: 10px !important; }
-
-  /* make color picker and swatches sit below inputs without shifting layout */
-  #np-controls .np-swatch, #np-color { margin-top: 6px !important; }
-
-  /* Keep everything readable on very small screens */
-  @media (max-width: 360px) {
-    #np-controls input.form-control[type="text"] { font-size: 14px !important; height: 48px !important; }
-    #np-num { font-size: 20px !important; height: 56px !important; }
-  }
-}
-
   </style>
 </head>
 <body class="body-padding">
@@ -171,8 +154,17 @@
     </div>
 
     <div class="col-md-3 np-col order-2 order-md-1" id="np-controls">
-      <input id="np-name" type="text" maxlength="12" class="form-control mb-2 text-center" placeholder="YOUR NAME">
-      <input id="np-num"  type="text" maxlength="3" inputmode="numeric" class="form-control mb-2 text-center" placeholder="09">
+      <div class="np-input-group">
+        <div class="np-field">
+          <input id="np-name" type="text" maxlength="11" class="np-input" placeholder="YOUR NAME">
+          <span class="np-max">MAX. 11</span>
+        </div>
+
+        <div class="np-field">
+          <input id="np-num" type="text" maxlength="2" inputmode="numeric" class="np-input" placeholder="11">
+          <span class="np-max">MAX. 2</span>
+        </div>
+      </div>
       <select id="np-font" class="form-select mb-2">
         <option value="bebas">Bebas Neue</option>
         <option value="anton">Anton</option>
@@ -300,34 +292,6 @@
       stageW: Math.max(1, stageRect.width), stageH: Math.max(1, stageRect.height)
     };
   }
-
-  // Mobile-only: force uppercase and ensure maxlength enforced while typing
-(function mobileInputHelpers(){
-  function applyMobileInput() {
-    if (window.innerWidth > 767) return;
-    const nameInput = document.getElementById('np-name');
-    const numInput  = document.getElementById('np-num');
-    if (nameInput) {
-      nameInput.addEventListener('input', function(e){
-        const pos = this.selectionStart;
-        this.value = (this.value || '').toUpperCase().replace(/[^A-Z\s]/g, '').slice(0, 11);
-        try { this.setSelectionRange(pos, pos); } catch(e){}
-      });
-    }
-    if (numInput) {
-      numInput.setAttribute('inputmode','numeric');
-      numInput.addEventListener('input', function(e){
-        const pos = this.selectionStart;
-        this.value = (this.value || '').replace(/\D/g,'').slice(0,3);
-        try { this.setSelectionRange(pos, pos); } catch(e){}
-      });
-    }
-  }
-  // run on load and on orientation change/resizes
-  window.addEventListener('load', applyMobileInput);
-  window.addEventListener('orientationchange', ()=> setTimeout(applyMobileInput, 120));
-  window.addEventListener('resize', ()=> setTimeout(applyMobileInput, 120));
-})();
 
   function placeOverlay(el, slot, slotKey){
     if(!el || !slot) return;
