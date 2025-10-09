@@ -71,7 +71,7 @@
   .font-impact{font-family:Impact, 'Arial Black', sans-serif;}
 
   /* match designer stage exactly */
-  .np-stage { position: relative; width: 100%; max-width: 534px; margin: 0 auto; background:#fff; border-radius:8px; padding:8px; min-height: 320px; box-sizing: border-box; overflow: visible; }
+  .np-stage { position: relative; width: 100%; max-width: 534px; margin: 0 auto; background:#fff; border-radius:8px; box-sizing: border-box; overflow: visible; }
   .np-stage img { width:100%; height:auto; border-radius:6px; display:block; }
 
   /* overlay styling (same as designer) */
@@ -124,7 +124,7 @@
     /* tighten button padding so icons look neat */
     .btn-remove--icon,
     .btn-preview--icon {
-      padding: 0.2rem 0.35rem;
+      padding: 0.1rem 0.1rem;
       min-width: 38px;
     }
 
