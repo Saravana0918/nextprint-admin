@@ -382,35 +382,49 @@ const altNumEls  = Array.from(document.querySelectorAll('#np-num'));
   // Choose best slot for user-uploaded image
   function findPreferredSlot(){
   try {
-    const orig = (typeof window.originalLayoutSlots === 'object' && window.originalLayoutSlots) ? window.originalLayoutSlots : {};
-    const filtered = (typeof window.layoutSlots === 'object' && window.layoutSlots) ? window.layoutSlots : {};
+    const orig = window.originalLayoutSlots || {};
+    const filtered = window.layoutSlots || {};
     const useSlots = Object.keys(orig).length ? orig : filtered;
     const keys = Object.keys(useSlots);
     if (!keys.length) return null;
 
-    // Prefer explicit artwork/logo names
+    // STEP 1: Prefer FRONT artwork/logo slots
+    const frontSlots = Object.values(useSlots).filter(s =>
+      s && (
+        /front/i.test(s.side || '') || /front/i.test(s.view_name || '') || /front/i.test(s.slot_key || '')
+      )
+    );
+    for (const s of frontSlots) {
+      const key = (s.slot_key || '').toLowerCase();
+      if (/logo|art|image|badge|patch|graphic/.test(key)) return s;
+    }
+
+    // STEP 2: Fallback to any slot explicitly named logo/artwork/team_logo
     const preferNames = ['logo','artwork','team_logo','graphic','image','art','badge','patch'];
-    for (const p of preferNames) if (useSlots[p]) return useSlots[p];
-
-    // Prefer any slot that is not name/number
-    for (const k of keys) {
-      const s = useSlots[k];
-      const keyLower = (k || '').toString().toLowerCase();
-      const slotKey = (s && (s.slot_key || '')).toString().toLowerCase();
-      if (keyLower !== 'name' && keyLower !== 'number' && slotKey !== 'name' && slotKey !== 'number') return s;
+    for (const p of preferNames) {
+      if (useSlots[p]) return useSlots[p];
     }
 
-    // Prefer a slot that has a mask or template
+    // STEP 3: fallback to any non-name/number slot
     for (const k of keys) {
       const s = useSlots[k];
-      if (s && (s.mask || s.mask_svg_path || s.template_id)) return s;
+      const keyLower = k.toLowerCase();
+      const slotKey = (s.slot_key || '').toLowerCase();
+      if (keyLower !== 'name' && keyLower !== 'number' && slotKey !== 'name' && slotKey !== 'number') {
+        return s;
+      }
     }
 
+    // STEP 4: fallback
     if (useSlots['number']) return useSlots['number'];
     if (useSlots['name']) return useSlots['name'];
     return useSlots[keys[0]] || null;
-  } catch(e) { console.warn('findPreferredSlot failed', e); return null; }
+  } catch (e) {
+    console.warn('findPreferredSlot failed', e);
+    return null;
+  }
 }
+
 
 
   // place user image inside chosen slot (cover)
