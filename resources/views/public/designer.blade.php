@@ -64,68 +64,6 @@
     }
     @media (min-width: 768px) { .vt-icons { display: none !important; } }
     input:focus, select:focus { outline: 3px solid rgba(13,110,253,0.12); }
-    @media (max-width: 767px) {
-
-  /* make stage bigger on mobile while preserving layout math */
-  .np-stage {
-    max-width: 92% !important;
-    width: 92% !important;
-    min-height: 360px !important;
-    padding: 12px !important;
-    margin: 8px auto !important;
-  }
-
-  /* overlay visuals for mobile only */
-  .np-overlay {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    flex-direction: column !important;
-    gap: 8px !important;
-    pointer-events: none !important;
-    text-transform: uppercase !important;
-    text-align: center !important;
-    white-space: nowrap !important;
-    z-index: 9999 !important;
-    color: #fff !important; /* default, color will be overridden by JS color setting */
-    text-shadow: 0 3px 10px rgba(0,0,0,0.5) !important;
-  }
-
-  /* structured content inside overlays */
-  .np-overlay .np-text { display:block; text-align:center; line-height:1; white-space:nowrap; }
-  .np-overlay .np-lines { width:100%; box-sizing:border-box; display:block; }
-  .np-overlay .np-line {
-    height: 2px;
-    background: rgba(255,255,255,0.95);
-    width: 72%;
-    margin: 0 auto;
-    border-radius: 2px;
-    box-shadow: 0 1px 0 rgba(0,0,0,0.25);
-  }
-  .np-overlay .np-top { margin-bottom:6px; }
-  .np-overlay .np-bottom { margin-top:6px; }
-
-  /* MAX label to right */
-  .np-overlay .np-max {
-    position: absolute;
-    right: -6px;
-    top: 6px;
-    font-size: 11px;
-    color: rgba(255,255,255,0.95);
-    font-weight:600;
-    letter-spacing: .6px;
-    transform: translateX(100%);
-    white-space:nowrap;
-  }
-
-  /* name vs number tuning */
-  .np-overlay.name .np-text { font-weight:700; letter-spacing: 2px; }
-  .np-overlay.number .np-text { font-weight:900; letter-spacing: 1px; }
-
-  /* keep add-to-cart floating button readable */
-  #np-atc-btn { top: 8px !important; right: 8px !important; width: 120px !important; height: 40px !important; }
-
-}
   </style>
 </head>
 <body class="body-padding">
@@ -477,94 +415,10 @@
   }
 
   function syncPreview(){
-  const isMobile = window.innerWidth <= 767;
-
-  // Read inputs
-  const nameText = (nameEl && nameEl.value) ? nameEl.value.toUpperCase().trim() : 'YOUR NAME';
-  const numText  = (numEl && numEl.value) ? numEl.value.replace(/\D/g,'') : '09';
-
-  // enforce limits (keeps form consistent)
-  if (nameEl) nameEl.maxLength = 11;
-  if (numEl)  numEl.maxLength  = 3;
-
-  // Desktop (and tablet) — keep original simple overlay text (no structural lines)
-  if (!isMobile) {
-    if (pvName && nameEl) {
-      pvName.classList.remove('name','number');
-      pvName.textContent = nameText || 'NAME';
-      // color is already handled elsewhere
-    }
-    if (pvNum && numEl) {
-      pvNum.classList.remove('name','number');
-      pvNum.textContent = numText || '09';
-    }
+    if (pvName && nameEl) pvName.textContent = (nameEl.value || 'NAME').toUpperCase();
+    if (pvNum && numEl) pvNum.textContent = (numEl.value || '09').replace(/\D/g,'');
     applyLayout();
-    return;
   }
-
-  // MOBILE: structured overlay with top/bottom lines + MAX label
-  try {
-    if (pvName) {
-      pvName.classList.remove(); // remove all classes
-      pvName.className = 'np-overlay font-bebas name';
-      pvName.innerHTML = ''
-        + '<span class="np-lines np-top"><span class="np-line"></span></span>'
-        + '<span class="np-text">' + (nameText || 'YOUR NAME') + '</span>'
-        + '<span class="np-lines np-bottom"><span class="np-line"></span></span>'
-        + '<span class="np-max">MAX. 11</span>';
-      // color/visibility: keep existing color
-      if (colorEl) pvName.style.color = colorEl.value;
-    }
-
-    if (pvNum) {
-      pvNum.classList.remove();
-      pvNum.className = 'np-overlay font-bebas number';
-      pvNum.innerHTML = ''
-        + '<span class="np-lines np-top"><span class="np-line"></span></span>'
-        + '<span class="np-text">' + (numText || '09') + '</span>'
-        + '<span class="np-lines np-bottom"><span class="np-line"></span></span>'
-        + '<span class="np-max">MAX. 3</span>';
-      if (colorEl) pvNum.style.color = colorEl.value;
-    }
-
-    // Size the inner text elements appropriately based on slot pixel area
-    function sizeText(el, slotKey, slot) {
-      if (!el || !slot) return;
-      const s = computeStageSize();
-      if (!s) return;
-      const areaWpx = Math.max(8, Math.round(((slot.width_pct||10)/100) * s.imgW));
-      const areaHpx = Math.max(8, Math.round(((slot.height_pct||10)/100) * s.imgH));
-
-      // name: moderate size
-      if (slotKey === 'name') {
-        let fs = Math.floor(Math.min(areaHpx * 0.38, (areaWpx / Math.max(1, (el.querySelector('.np-text').textContent||'').length)) * 1.6));
-        fs = Math.max(12, Math.min(fs, Math.floor(areaHpx * 0.9)));
-        el.querySelector('.np-text').style.fontSize = fs + 'px';
-      }
-
-      // number: large bold
-      if (slotKey === 'number') {
-        let fs = Math.floor(Math.min(areaHpx * 0.85, (areaWpx / Math.max(1, (el.querySelector('.np-text').textContent||'').length)) * 1.1));
-        fs = Math.max(18, Math.min(fs, Math.floor(areaHpx * 1.25)));
-        el.querySelector('.np-text').style.fontSize = fs + 'px';
-      }
-    }
-
-    // pick slot objects: prefer layout (filtered) name/number; fall back to originalLayout if present
-    const nameSlot = (layout && layout.name) ? layout.name : (window.originalLayoutSlots && window.originalLayoutSlots.name ? window.originalLayoutSlots.name : null);
-    const numSlot  = (layout && layout.number) ? layout.number : (window.originalLayoutSlots && window.originalLayoutSlots.number ? window.originalLayoutSlots.number : null);
-
-    if (pvName) sizeText(pvName, 'name', nameSlot);
-    if (pvNum)  sizeText(pvNum, 'number', numSlot);
-
-  } catch (err) {
-    console.warn('syncPreview mobile styling error', err);
-  }
-
-  // finally position overlays & masks exactly like before
-  applyLayout();
-}
-
 
   function syncHidden(){
     const n = $('np-name-hidden'), nm = $('np-num-hidden'), f = $('np-font-hidden'), c = $('np-color-hidden');
