@@ -100,6 +100,48 @@
     .preview-col { order: 1; width: 100% !important; margin-bottom: 1rem; }
     .form-col { order: 2; width: 100% !important; }
   }
+
+  /* === mobile icon button rules & modal styles (added) === */
+  /* show text by default (desktop) */
+  .btn-remove--icon .btn-icon,
+  .btn-preview--icon .btn-icon { display: none; }
+  .btn-remove--icon .btn-text,
+  .btn-preview--icon .btn-text { display: inline; }
+
+  /* MOBILE: hide text, show icons */
+  @media (max-width: 767px) {
+    .btn-remove--icon .btn-text,
+    .btn-preview--icon .btn-text { display: none; }
+    .btn-remove--icon .btn-icon,
+    .btn-preview--icon .btn-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+    }
+
+    /* tighten button padding so icons look neat */
+    .btn-remove--icon,
+    .btn-preview--icon {
+      padding: 0.2rem 0.35rem;
+      min-width: 38px;
+    }
+
+    /* optional: smaller font input sizes on mobile rows */
+    .player-name { font-size: 14px; }
+    .player-number { font-size: 14px; }
+  }
+
+  /* modal basics */
+  .np-modal { position: fixed; inset: 0; z-index: 20000; display: none; align-items: center; justify-content: center; }
+  .np-modal-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.55); }
+  .np-modal-dialog { position: relative; z-index: 20010; max-height: 92vh; overflow: auto; padding: 18px; }
+  .np-modal-close { position: absolute; right: 6px; top: 6px; background: rgba(0,0,0,0.4); border: none; font-size: 26px; color: #fff; cursor: pointer; z-index: 20020; border-radius:6px; padding:4px 8px; }
+  @media (max-width:767px) {
+    .np-modal-dialog { width: calc(100% - 28px); }
+  }
+
 </style>
 
 <div class="container py-4">
@@ -184,8 +226,29 @@
       </select>
       <input type="hidden" name="players[][font]" class="player-font">
       <input type="hidden" name="players[][color]" class="player-color">
-      <button type="button" class="btn btn-danger btn-remove">Remove</button>
-      <button type="button" class="btn btn-outline-primary btn-preview">Preview</button>
+
+      <!-- Remove button: text on desktop, close icon on mobile -->
+      <button type="button" class="btn btn-danger btn-remove btn-remove--icon">
+        <span class="btn-text">Remove</span>
+        <span class="btn-icon" aria-hidden="true">
+          <!-- small close icon SVG -->
+          <svg viewBox="0 0 20 20" width="16" height="16" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M4 4l12 12M16 4L4 16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </button>
+
+      <!-- Preview button: text on desktop, eye icon on mobile -->
+      <button type="button" class="btn btn-outline-primary btn-preview btn-preview--icon">
+        <span class="btn-text">Preview</span>
+        <span class="btn-icon" aria-hidden="true">
+          <!-- eye icon SVG -->
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+      </button>
     </div>
   </div>
 </template>
@@ -220,6 +283,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Map designer font key -> css class (same as designer)
   const fontClassMap = { 'bebas': 'font-bebas', 'anton': 'font-anton', 'oswald': 'font-oswald', 'impact': 'font-impact' };
+  window.fontClassMap = fontClassMap; // expose for modal
 
   function computeStageSize(stage, img) {
     if (!stage || !img) return null;
@@ -551,6 +615,180 @@ document.addEventListener('DOMContentLoaded', function() {
   document.fonts?.ready.then(()=> setTimeout(()=> { if (imgEl && imgEl.complete) applyLayout(); }, 120));
   if (imgEl) imgEl.addEventListener('load', ()=> setTimeout(applyLayout, 80));
   window.addEventListener('resize', ()=> setTimeout(applyLayout, 120));
+
+  /* ----------------- Mobile modal preview integration ----------------- */
+  (function() {
+    // create modal HTML and append to body (keeps blade tidy)
+    const modalHtml = `
+      <div id="player-preview-modal" class="np-modal">
+        <div class="np-modal-backdrop"></div>
+        <div class="np-modal-dialog">
+          <button id="np-modal-close" class="np-modal-close" title="Close">&times;</button>
+          <div id="np-modal-stage-wrap" style="width:100%; max-width:540px; margin:0 auto; text-align:center;"></div>
+        </div>
+      </div>
+    `;
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+    const modal = document.getElementById('player-preview-modal');
+    const modalWrap = document.getElementById('np-modal-stage-wrap');
+    const modalClose = document.getElementById('np-modal-close');
+
+    function closeModal() {
+      if (!modal) return;
+      modal.style.display = 'none';
+      modalWrap.innerHTML = '';
+      document.body.style.overflow = '';
+    }
+
+    async function showPreviewForRow(row) {
+      if (!modal || !modalWrap || !row) return;
+      const stage = document.getElementById('player-stage');
+      if (!stage) return;
+
+      const clone = stage.cloneNode(true);
+      clone.id = 'player-stage-modal-clone';
+
+      // ensure cloned image reloads
+      const modalImg = clone.querySelector('#player-base') || clone.querySelector('img');
+      const src = modalImg ? (modalImg.getAttribute('src') || '') : '';
+      if (modalImg && src) { modalImg.src = src; modalImg.style.maxWidth = '100%'; modalImg.style.height = 'auto'; }
+
+      const nameVal = (row.querySelector('.player-name')?.value || '').toUpperCase().slice(0,12) || 'NAME';
+      const numVal  = (row.querySelector('.player-number')?.value || '').replace(/\D/g,'').slice(0,3) || '09';
+      const fontVal = (row.querySelector('.player-font')?.value || '') || (window.prefill?.prefill_font || '');
+      const colorVal = (row.querySelector('.player-color')?.value || '') || (window.prefill?.prefill_color || '');
+
+      const modalOvName = clone.querySelector('#overlay-name') || clone.querySelector('.np-overlay');
+      const modalOvNum  = clone.querySelector('#overlay-number') || (clone.querySelectorAll('.np-overlay')[1] || null);
+
+      if (modalOvName) modalOvName.textContent = nameVal;
+      if (modalOvNum) modalOvNum.textContent = numVal;
+
+      try {
+        const fm = (fontVal || '').toString().toLowerCase();
+        const cls = fontClassMap[fm] || fontClassMap['bebas'];
+        if (modalOvName) modalOvName.className = 'np-overlay ' + cls;
+        if (modalOvNum) modalOvNum.className = 'np-overlay ' + cls;
+      } catch(e){}
+
+      try {
+        if (colorVal) {
+          let c = colorVal;
+          try { c = decodeURIComponent(colorVal); } catch(e){ c = colorVal; }
+          if (modalOvName) modalOvName.style.color = c;
+          if (modalOvNum) modalOvNum.style.color = c;
+        }
+      } catch(e){}
+
+      modalWrap.appendChild(clone);
+      document.body.style.overflow = 'hidden';
+      modal.style.display = 'flex';
+
+      // wait for image/fonts then compute placement similar to applyLayout
+      const waitImgs = new Promise((resolve) => {
+        if (!modalImg) return resolve();
+        if (modalImg.complete) return resolve();
+        modalImg.addEventListener('load', resolve);
+        modalImg.addEventListener('error', resolve);
+        setTimeout(resolve, 350);
+      });
+
+      (document.fonts?.ready || Promise.resolve()).then(() => {
+        waitImgs.then(() => {
+          try {
+            const modalStage = document.getElementById('player-stage-modal-clone');
+            const modalImgEl = modalStage.querySelector('#player-base') || modalStage.querySelector('img');
+            const stageRect = modalStage.getBoundingClientRect();
+            const imgRect = modalImgEl.getBoundingClientRect();
+            const s = {
+              offsetLeft: Math.round(imgRect.left - stageRect.left),
+              offsetTop: Math.round(imgRect.top - stageRect.top),
+              imgW: Math.max(1, imgRect.width),
+              imgH: Math.max(1, imgRect.height),
+              stageW: Math.max(1, stageRect.width),
+              stageH: Math.max(1, stageRect.height)
+            };
+
+            const layoutLocal = (typeof window.layoutSlots === 'object' && Object.keys(window.layoutSlots || {}).length) ? window.layoutSlots : layout;
+
+            function modalPlace(el, slot, slotKey){
+              if (!el || !slot) return;
+              const centerX = Math.round(s.offsetLeft + ((slot.left_pct||50)/100) * s.imgW + ((slot.width_pct||0)/200) * s.imgW);
+              const centerY = Math.round(s.offsetTop  + ((slot.top_pct||50)/100)  * s.imgH + ((slot.height_pct||0)/200) * s.imgH);
+              const areaWpx = Math.max(8, Math.round(((slot.width_pct||10)/100) * s.imgW));
+              const areaHpx = Math.max(8, Math.round(((slot.height_pct||10)/100) * s.imgH));
+
+              el.style.position = 'absolute';
+              el.style.left = centerX + 'px';
+              el.style.top  = centerY + 'px';
+              el.style.width = areaWpx + 'px';
+              el.style.height = areaHpx + 'px';
+              el.style.transform = 'translate(-50%,-50%) rotate(' + ((slot.rotation||0)) + 'deg)';
+              el.style.display = 'flex';
+              el.style.alignItems = 'center';
+              el.style.justifyContent = 'center';
+              el.style.pointerEvents = 'none';
+              el.style.whiteSpace = 'nowrap';
+              el.style.overflow = 'hidden';
+              el.style.boxSizing = 'border-box';
+              el.style.padding = '0 6px';
+
+              const txt = (el.textContent || '').toString().trim() || (slotKey === 'number' ? '09' : 'NAME');
+              const chars = Math.max(1, txt.length);
+              const isMobile = window.innerWidth <= 767;
+              const heightCandidate = Math.floor(areaHpx * (slotKey === 'number' ? (isMobile?1.05:1.0) : 1.0));
+              const avgCharRatio = 0.48;
+              const widthCap = Math.floor((areaWpx * 0.95) / (chars * avgCharRatio));
+              let fs = Math.floor(Math.min(heightCandidate, widthCap));
+              const maxAllowed = Math.max(14, Math.floor(s.stageW * (isMobile ? 0.45 : 0.32)));
+              fs = Math.max(8, Math.min(fs, maxAllowed));
+              fs = Math.floor(fs * 1.08);
+              el.style.fontSize = fs + 'px';
+              el.style.lineHeight = '1';
+              el.style.fontWeight = '700';
+
+              let attempts = 0;
+              while (el.scrollWidth > el.clientWidth && fs > 7 && attempts < 30) {
+                fs = Math.max(7, Math.floor(fs * 0.92));
+                el.style.fontSize = fs + 'px';
+                attempts++;
+              }
+            }
+
+            const modalNameEl = modalStage.querySelector('#overlay-name') || modalStage.querySelector('.np-overlay');
+            const modalNumEl  = modalStage.querySelector('#overlay-number') || (modalStage.querySelectorAll('.np-overlay')[1] || null);
+
+            modalPlace(modalNameEl, layoutLocal.name, 'name');
+            modalPlace(modalNumEl, layoutLocal.number, 'number');
+
+          } catch(err){ console.warn('modal placement failed', err); }
+        });
+      });
+    }
+
+    // delegate click on preview buttons (works for dynamic rows)
+    document.addEventListener('click', function(e) {
+      const btn = e.target.closest('.btn-preview');
+      if (!btn) return;
+      const row = btn.closest('.player-row');
+      if (!row) return;
+
+      // on desktop keep existing behavior; intercept only on mobile
+      if (window.innerWidth > 767) return;
+
+      e.stopPropagation();
+      e.preventDefault();
+      showPreviewForRow(row);
+    }, true);
+
+    // modal close handlers
+    modalClose?.addEventListener('click', closeModal);
+    modal?.addEventListener('click', function(e){ if (e.target === modal || e.target.classList.contains('np-modal-backdrop')) closeModal(); });
+    document.addEventListener('keydown', function(e){ if (e.key === 'Escape' && modal && modal.style.display === 'flex') closeModal(); });
+
+  })();
+
 });
 </script>
 
