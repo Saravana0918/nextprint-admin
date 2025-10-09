@@ -230,8 +230,35 @@
 <script>
 (function(){
   const $ = id => document.getElementById(id);
-  const nameEl  = $('np-name'), numEl = $('np-num'), fontEl = $('np-font'), colorEl = $('np-color');
-  const pvName  = $('np-prev-name'), pvNum = $('np-prev-num'), baseImg = $('np-base'), stage = $('np-stage');
+
+// helper: find visible input (prefer mobile if small screen)
+function findVisibleInput(id) {
+  // prefer an input inside .mobile-only on mobile
+  try {
+    if (window.innerWidth <= 767) {
+      const m = document.querySelector('.mobile-only #' + id);
+      if (m) return m;
+    }
+    // otherwise prefer desktop explicitly
+    const d = document.querySelector('.desktop-only #' + id);
+    if (d) return d;
+  } catch(e) { /* ignore */ }
+  // fallback to any id match
+  return document.getElementById(id);
+}
+
+// grab elements (use visible ones for main listeners)
+// but also keep references to both mobile+desktop to sync values
+const nameEl  = findVisibleInput('np-name');
+const numEl   = findVisibleInput('np-num');
+const fontEl  = findVisibleInput('np-font') || $('np-font');
+const colorEl = findVisibleInput('np-color') || $('np-color');
+
+const pvName  = $('np-prev-name'), pvNum = $('np-prev-num'), baseImg = $('np-base'), stage = $('np-stage');
+
+// also find possible alternate inputs (both mobile & desktop) so we can attach listeners to all
+const altNameEls = Array.from(document.querySelectorAll('#np-name')); // may include duplicate ids: select all
+const altNumEls  = Array.from(document.querySelectorAll('#np-num'));
   const btn = $('np-atc-btn'), form = $('np-atc-form'), addTeam = $('btn-add-team');
   const sizeEl = $('np-size');
   const layout = (typeof window.layoutSlots === 'object' && window.layoutSlots !== null) ? window.layoutSlots : {};
@@ -447,8 +474,24 @@
   }
 
   // events
-  if (nameEl) nameEl.addEventListener('input', ()=>{ syncPreview(); syncHidden(); updateATCState(); });
-  if (numEl) numEl.addEventListener('input', e=>{ e.target.value = e.target.value.replace(/\D/g,'').slice(0,3); syncPreview(); syncHidden(); updateATCState(); });
+  // attach input listeners to every name input found (desktop + mobile)
+altNameEls.forEach(el => {
+  el.addEventListener('input', ()=> {
+    // sync value to all matching inputs immediately (keeps desktop/mobile values identical)
+    altNameEls.forEach(x => { if (x !== el) x.value = el.value; });
+    syncPreview(); syncHidden(); updateATCState();
+  });
+});
+
+// attach input listeners to every number input found
+altNumEls.forEach(el => {
+  el.addEventListener('input', (e) => {
+    e.target.value = (e.target.value || '').replace(/\D/g,'').slice(0,3);
+    // propagate sanitized value to all number inputs
+    altNumEls.forEach(x => { if (x !== el) x.value = e.target.value; });
+    syncPreview(); syncHidden(); updateATCState();
+  });
+});
   if (fontEl) fontEl.addEventListener('change', ()=>{ applyFont(fontEl.value); syncHidden(); syncPreview(); });
   if (colorEl) colorEl.addEventListener('input', ()=>{ if(pvName) pvName.style.color = colorEl.value; if(pvNum) pvNum.style.color = colorEl.value; syncHidden(); });
 
