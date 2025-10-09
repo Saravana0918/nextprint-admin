@@ -64,6 +64,65 @@
     }
     @media (min-width: 768px) { .vt-icons { display: none !important; } }
     input:focus, select:focus { outline: 3px solid rgba(13,110,253,0.12); }
+    /* MOBILE ONLY: big rounded inputs like screenshot (<= 767px) */
+@media (max-width: 767px) {
+  /* container tweak so inputs sit nicely */
+  #np-controls { padding: 10px 6px !important; }
+
+  /* common input look */
+  #np-controls input.form-control[type="text"],
+  #np-controls input.form-control[inputmode] {
+    height: 52px !important;
+    line-height: 20px !important;
+    border-radius: 8px !important;
+    background: #ffffff !important;    /* white rounded pill */
+    color: #222 !important;
+    font-weight: 700 !important;
+    font-size: 15px !important;
+    text-align: center !important;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.12) !important;
+    border: 0 !important;
+    padding: 10px 14px !important;
+    appearance: none !important;
+    -webkit-appearance: none !important;
+  }
+
+  /* make the number input larger and bolder visually */
+  #np-num {
+    height: 60px !important;
+    font-size: 22px !important;
+    font-weight: 900 !important;
+    letter-spacing: 1px !important;
+  }
+
+  /* placeholder styling - uppercase & lighter color */
+  #np-controls input::placeholder {
+    color: rgba(0,0,0,0.45) !important;
+    text-transform: uppercase !important;
+    font-weight:700 !important;
+    letter-spacing: 1px !important;
+  }
+
+  /* focused state */
+  #np-controls input:focus {
+    outline: none !important;
+    box-shadow: 0 10px 26px rgba(0,0,0,0.18) !important;
+    transform: translateY(-1px);
+  }
+
+  /* spacing between fields */
+  #np-controls input.form-control.mb-2 { margin-bottom: 10px !important; }
+
+  /* make color picker and swatches sit below inputs without shifting layout */
+  #np-controls .np-swatch, #np-color { margin-top: 6px !important; }
+
+  /* Keep everything readable on very small screens */
+  @media (max-width: 360px) {
+    #np-controls input.form-control[type="text"] { font-size: 14px !important; height: 48px !important; }
+    #np-num { font-size: 20px !important; height: 56px !important; }
+  }
+}
+
   </style>
 </head>
 <body class="body-padding">
@@ -241,6 +300,34 @@
       stageW: Math.max(1, stageRect.width), stageH: Math.max(1, stageRect.height)
     };
   }
+
+  // Mobile-only: force uppercase and ensure maxlength enforced while typing
+(function mobileInputHelpers(){
+  function applyMobileInput() {
+    if (window.innerWidth > 767) return;
+    const nameInput = document.getElementById('np-name');
+    const numInput  = document.getElementById('np-num');
+    if (nameInput) {
+      nameInput.addEventListener('input', function(e){
+        const pos = this.selectionStart;
+        this.value = (this.value || '').toUpperCase().replace(/[^A-Z\s]/g, '').slice(0, 11);
+        try { this.setSelectionRange(pos, pos); } catch(e){}
+      });
+    }
+    if (numInput) {
+      numInput.setAttribute('inputmode','numeric');
+      numInput.addEventListener('input', function(e){
+        const pos = this.selectionStart;
+        this.value = (this.value || '').replace(/\D/g,'').slice(0,3);
+        try { this.setSelectionRange(pos, pos); } catch(e){}
+      });
+    }
+  }
+  // run on load and on orientation change/resizes
+  window.addEventListener('load', applyMobileInput);
+  window.addEventListener('orientationchange', ()=> setTimeout(applyMobileInput, 120));
+  window.addEventListener('resize', ()=> setTimeout(applyMobileInput, 120));
+})();
 
   function placeOverlay(el, slot, slotKey){
     if(!el || !slot) return;
