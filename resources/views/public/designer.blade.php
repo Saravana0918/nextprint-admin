@@ -69,11 +69,9 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 10px;
     font-family: 'Arial', sans-serif;
     padding: 6px 12px;
-    box-sizing: border-box;
-    width: 100%;
+    margin-bottom: 20px;
   }
 
   .np-field {
