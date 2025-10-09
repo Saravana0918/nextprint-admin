@@ -225,6 +225,51 @@
   console.info('originalLayoutSlots (full):', window.originalLayoutSlots);
   console.info('showUpload:', window.showUpload, 'hasArtworkSlot:', window.hasArtworkSlot);
 </script>
+<script>
+/* MUST be placed before any code that calls findPreferredSlot() */
+window.findPreferredSlot = function(){
+  try {
+    const orig = (typeof window.originalLayoutSlots === 'object' && window.originalLayoutSlots) ? window.originalLayoutSlots : {};
+    const filtered = (typeof window.layoutSlots === 'object' && window.layoutSlots) ? window.layoutSlots : {};
+    const useSlots = Object.keys(orig).length ? orig : filtered;
+    const keys = Object.keys(useSlots);
+    if (!keys.length) return null;
+
+    const arr = keys.map(k => ({ key: k, slot: useSlots[k] }));
+
+    // 1) Prefer slot that has a mask (SVG) and is on the left side (front)
+    const masked = arr.filter(i => i.slot && (i.slot.mask || i.slot.mask_svg_path));
+    if (masked.length) {
+      const front = masked.filter(i => parseFloat(i.slot.left_pct || 0) < 50);
+      if (front.length) { console.log('Using FRONT masked slot', front[0].key); return front[0].slot; }
+      console.log('Using first masked slot', masked[0].key);
+      return masked[0].slot;
+    }
+
+    // 2) Prefer named artwork/logo slots
+    const preferNames = ['logo','artwork','team_logo','graphic','image','badge','patch'];
+    for (const p of preferNames) if (useSlots[p]) { console.log('Using named slot', p); return useSlots[p]; }
+
+    // 3) Prefer any non-name/number slot on left half
+    const others = arr.filter(i => {
+      const keyLower = (i.key||'').toLowerCase();
+      const slotKey = (i.slot?.slot_key||'').toLowerCase();
+      return keyLower!=='name' && keyLower!=='number' && slotKey!=='name' && slotKey!=='number';
+    });
+    const left = others.filter(i => parseFloat(i.slot.left_pct || 0) < 50);
+    if (left.length) { console.log('Using generic front slot', left[0].key); return left[0].slot; }
+
+    // 4) fallback
+    console.log('Fallback slot used');
+    if (useSlots['number']) return useSlots['number'];
+    if (useSlots['name']) return useSlots['name'];
+    return useSlots[keys[0]] || null;
+  } catch (e) {
+    console.warn('findPreferredSlot failed', e);
+    return null;
+  }
+};
+</script>
 
 
 <script>
@@ -378,66 +423,6 @@ const altNumEls  = Array.from(document.querySelectorAll('#np-num'));
     if (layout && layout.number) placeOverlay(pvNum, layout.number, 'number'); else { pvNum.style.left='50%'; pvNum.style.top='65%'; pvNum.style.transform='translate(-50%,-50%)'; }
     renderMasks();
   }
-
-  // Choose best slot for user-uploaded image
- function findPreferredSlot(){
-  try {
-    const orig = (typeof window.originalLayoutSlots === 'object' && window.originalLayoutSlots) ? window.originalLayoutSlots : {};
-    const filtered = (typeof window.layoutSlots === 'object' && window.layoutSlots) ? window.layoutSlots : {};
-    const useSlots = Object.keys(orig).length ? orig : filtered;
-    const keys = Object.keys(useSlots);
-    if (!keys.length) return null;
-
-    // normalize
-    const arr = keys.map(k => ({ key: k, slot: useSlots[k] }));
-
-    // 1️⃣  Prefer slot with mask (SVG region)
-    const masked = arr.filter(i => i.slot && (i.slot.mask || i.slot.mask_svg_path));
-    if (masked.length) {
-      // pick front-most (left_pct < 50)
-      const front = masked.filter(i => parseFloat(i.slot.left_pct || 0) < 50);
-      if (front.length) {
-        console.log('🎯 Using FRONT masked slot:', front[0]);
-        return front[0].slot;
-      }
-      // otherwise pick first masked
-      console.log('🎯 Using first masked slot:', masked[0]);
-      return masked[0].slot;
-    }
-
-    // 2️⃣ Prefer explicit artwork/logo slot name
-    const preferNames = ['logo','artwork','team_logo','graphic','image','badge','patch'];
-    for (const p of preferNames) {
-      if (useSlots[p]) {
-        console.log('🎯 Using named logo slot:', p);
-        return useSlots[p];
-      }
-    }
-
-    // 3️⃣ Otherwise, choose any non-name/number slot on front (left half)
-    const others = arr.filter(i => {
-      const keyLower = (i.key||'').toLowerCase();
-      const slotKey = (i.slot?.slot_key||'').toLowerCase();
-      return keyLower!=='name' && keyLower!=='number' && slotKey!=='name' && slotKey!=='number';
-    });
-    const left = others.filter(i => parseFloat(i.slot.left_pct || 0) < 50);
-    if (left.length) {
-      console.log('🎯 Using generic front slot:', left[0]);
-      return left[0].slot;
-    }
-
-    // 4️⃣ fallback
-    console.log('⚠️ fallback slot used');
-    if (useSlots['number']) return useSlots['number'];
-    if (useSlots['name']) return useSlots['name'];
-    return useSlots[keys[0]] || null;
-
-  } catch (e) {
-    console.warn('findPreferredSlot failed', e);
-    return null;
-  }
-}
-
 
   // place user image inside chosen slot (cover)
   function placeUserImage(slot){
