@@ -13,27 +13,13 @@
     .font-anton{font-family:'Anton', Impact, 'Arial Black', sans-serif;}
     .font-oswald{font-family:'Oswald', Arial, sans-serif;}
     .font-impact{font-family:Impact, 'Arial Black', sans-serif;}
-
     .np-stage { position: relative; width: 100%; max-width: 534px; margin: 0 auto; border-radius:8px; padding:8px; box-sizing: border-box; overflow: visible; }
     .np-stage img { width:100%; height:auto; border-radius:6px; display:block; }
     .np-mask { position:absolute; pointer-events:none; z-index:40; transform-origin:center center; image-rendering:optimizeQuality; }
-
-    .np-overlay {
-      position: absolute;
-      color: #D4AF37;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 1.5px;
-      text-align: center;
-      text-shadow: 0 3px 10px rgba(0,0,0,0.65);
-      pointer-events: none;
-      white-space: nowrap;
-      line-height: 1;
-      transform-origin: center center;
-      z-index: 9999;
-    }
+    .np-overlay { position: absolute; color: #D4AF37; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 1.5px; text-align: center; text-shadow: 0 3px 10px rgba(0,0,0,0.65);  pointer-events: none; white-space: nowrap; line-height: 1; transform-origin: center center;
+      z-index: 9999; }
     .np-overlay::before, .np-overlay::after { content: none; }
-
     .np-swatch { width:28px; height:28px; border-radius:50%; border:1px solid #ccc; cursor:pointer; display:inline-block; }
     .np-swatch.active { outline: 2px solid rgba(0,0,0,0.08); box-shadow: 0 2px 6px rgba(0,0,0,0.06); }
 
@@ -42,16 +28,7 @@
     .right-layout{ padding-top:350px; }
     .desktop-display{ color : white; }
 
-    .np-user-image {
-      position: absolute;
-      pointer-events: auto;
-      object-fit: cover;
-      display: block;
-      transform-origin: center center;
-      z-index: 300;
-      box-shadow: 0 6px 18px rgba(0,0,0,0.25);
-      border-radius: 4px;
-    }
+    .np-user-image { position: absolute; pointer-events: auto; object-fit: cover; display: block; transform-origin: center center; z-index: 300; box-shadow: 0 6px 18px rgba(0,0,0,0.25); border-radius: 4px; }
 
     .mobile-only { display: none; }
     .desktop-only { display: block; }
@@ -68,67 +45,16 @@
     @media (min-width: 768px) { .vt-icons { display: none !important; } }
     input:focus, select:focus { outline: 3px solid rgba(13,110,253,0.12); }
     @media (max-width: 767px) {
-  .np-input-group {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    font-family: 'Arial', sans-serif;
-    padding: 6px 12px;
-    margin-bottom: 20px;
-  }
-
-  .np-field {
-    position: relative;
-    width: 86%;            /* responsive width on mobile */
-    max-width: 360px;
-    min-width: 200px;
-  }
-
-  .np-input {
-    width: 100%;
-    background: transparent; /* shows jersey/field behind */
-    border: none;
-    border-bottom: 2px solid #fff;
-    color: #fff;
-    text-align: center;
-    font-size: 20px;
-    font-weight: 800;
-    outline: none;
-    padding: 8px 0 12px 0;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-  }
-
-  /* placeholder same color as text */
-  .np-input::placeholder {
-    color: #fff;
-    opacity: 1;
-  }
-
-  /* small MAX label on bottom-right */
-  .np-max {
-    position: absolute;
-    right: 2px;
-    bottom: -18px;
-    font-size: 10px;
-    color: #fff;
-    opacity: 0.9;
-    font-weight: 700;
-    letter-spacing: 0.4px;
-  }
-
-  /* ensure numeric pad for #np-num on mobile */
-  #np-num {
-    -webkit-appearance: none;
-    appearance: none;
-  }
-
-  /* optional: slightly larger number style (if you want second input visually bigger) */
-  .np-field:nth-child(2) .np-input {
-    font-size: 28px;
-    letter-spacing: 0;
-  }
-   .mobile-only { display: block; }
+  .np-input-group { display: flex; flex-direction: column; align-items: center; font-family: 'Arial', sans-serif; padding: 6px 12px; margin-bottom: 20px; }
+ .np-field { position: relative; width: 86%; max-width: 360px; min-width: 200px; }
+ .np-input { width: 100%; background: transparent;  border: none; border-bottom: 2px solid #fff; color: #fff; text-align: center; font-size: 20px; font-weight: 800; outline: none; padding: 8px 0 12px 0;
+    text-transform: uppercase; letter-spacing: 1px; } .np-input::placeholder { color: #fff;
+    opacity: 1; }
+  .np-max { position: absolute; right: 2px; bottom: -18px; font-size: 10px; color: #fff; opacity: 0.9;
+    font-weight: 700; letter-spacing: 0.4px; }
+  #np-num {-webkit-appearance: none; appearance: none;}
+  .np-field:nth-child(2) .np-input { font-size: 28px; letter-spacing: 0; }
+  .mobile-only { display: block; }
   .desktop-only { display: none; }
 }
   </style>
@@ -182,8 +108,8 @@
       <!-- Desktop inputs (your original markup) -->
         <div class="desktop-only">
           <!-- keep your existing desktop inputs here -->
-          <input id="np-name-desktop" type="text" maxlength="12" class="form-control mb-2 text-center" placeholder="YOUR NAME">
-          <input id="np-num-desktop"  type="text" maxlength="3" inputmode="numeric" class="form-control mb-2 text-center" placeholder="09">
+          <input id="np-name" type="text" maxlength="12" class="form-control mb-2 text-center" placeholder="YOUR NAME">
+          <input id="np-num"  type="text" maxlength="3" inputmode="numeric" class="form-control mb-2 text-center" placeholder="09">
           <!-- other desktop-only elements (font picker, color dots, etc.) -->
         </div>
 
@@ -196,7 +122,7 @@
             </div>
 
             <div class="np-field">
-              <input id="np-num" type="text" maxlength="2" inputmode="numeric" class="np-input" placeholder="11">
+              <input id="np-num" type="text" maxlength="2" inputmode="numeric" class="np-input" placeholder="09">
               <span class="np-max">MAX. 2</span>
             </div>
           </div>
