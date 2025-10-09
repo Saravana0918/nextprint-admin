@@ -141,6 +141,7 @@ foreach ($areas as $a) {
 }
 
         // ensure both keys exist (fallback defaults)
+                // ensure both keys exist (fallback defaults)
         if (!isset($layoutSlots['name'])) {
             $layoutSlots['name'] = [
                 'id' => null, 'left_pct' => 10, 'top_pct' => 5, 'width_pct' => 60, 'height_pct' => 8, 'rotation' => 0, 'mask' => null
@@ -150,6 +151,64 @@ foreach ($areas as $a) {
             $layoutSlots['number'] = [
                 'id' => null, 'left_pct' => 10, 'top_pct' => 75, 'width_pct' => 30, 'height_pct' => 10, 'rotation' => 0, 'mask' => null
             ];
+        }
+
+        // ----------------------------------------------------------------
+        // Keep a copy of the full/original layout (used for detection + debug)
+        // ----------------------------------------------------------------
+        $originalLayoutSlots = $layoutSlots; // full set before front-end filtering
+
+        // ----------------------------------------------------------------
+        // Detect whether product view/layout actually has an artwork/logo area
+        // We'll only allow uploads when this is true.
+        // ----------------------------------------------------------------
+        $hasArtworkSlot = false;
+
+        if (!empty($originalLayoutSlots) && is_array($originalLayoutSlots)) {
+            foreach ($originalLayoutSlots as $slotKey => $slot) {
+                $k = strtolower((string)$slotKey);
+
+                // Named slots that typically indicate artwork/logo
+                if (in_array($k, ['logo','artwork','team_logo','graphic','image','art','badge','patch','patches'])) {
+                    $hasArtworkSlot = true;
+                    break;
+                }
+
+                // mask presence strongly implies artwork region
+                if (!empty($slot['mask']) || !empty($slot['mask_url'])) {
+                    $hasArtworkSlot = true;
+                    break;
+                }
+
+                // if slot is neither name nor number and has a meaningful size -> consider artwork
+                if (!in_array($k, ['name','number']) && !empty($slot['width_pct']) && !empty($slot['height_pct'])) {
+                    // small sizes (like <2%) likely not artwork - require a modest size
+                    if ($slot['width_pct'] > 2 || $slot['height_pct'] > 2) {
+                        $hasArtworkSlot = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // ----------------------------------------------------------------
+        // Compute showUpload flag (robust): only true when artwork region exists.
+        // (You can extend with product properties heuristics if desired.)
+        // ----------------------------------------------------------------
+        $showUpload = (bool)$hasArtworkSlot;
+
+        // Log the decision for debugging
+        \Log::info("designer: product_id={$product->id} showUpload=" . (int)$showUpload . " hasArtworkSlot=" . (int)$hasArtworkSlot);
+
+        // ----------------------------------------------------------------
+        // Filter layoutSlots passed to front-end (per your previous request we only pass name+number),
+        // but also send originalLayoutSlots so front-end can use artwork coords when needed.
+        // ----------------------------------------------------------------
+        $filteredLayoutSlots = [];
+        if (!empty($layoutSlots) && is_array($layoutSlots)) {
+            foreach (['name', 'number'] as $k) {
+                if (isset($layoutSlots[$k])) $filteredLayoutSlots[$k] = $layoutSlots[$k];
+            }
         }
 
         // ----------------------------
@@ -205,8 +264,14 @@ foreach ($areas as $a) {
             'product' => $product,
             'view'    => $view,
             'areas'   => $areas,
-            'layoutSlots' => $layoutSlots,
+            // pass filtered slots (name+number) to existing front-end code
+            'layoutSlots' => $filteredLayoutSlots,
+            // pass original full slots so front-end or debug tools can use artwork coords
+            'originalLayoutSlots' => $originalLayoutSlots,
+            'showUpload' => $showUpload,
+            'hasArtworkSlot' => $hasArtworkSlot,
             'displayPrice' => (float)$displayPrice,
         ]);
+
     }
 }

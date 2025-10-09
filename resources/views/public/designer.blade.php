@@ -40,6 +40,7 @@
     body { background-color: #929292; }
     .body-padding{ padding-top: 100px; }
     .right-layout{ padding-top:350px; }
+    .desktop-display{ color : white; }
 
     .np-user-image {
       position: absolute;
@@ -51,7 +52,7 @@
       box-shadow: 0 6px 18px rgba(0,0,0,0.25);
       border-radius: 4px;
     }
-
+    #np-upload-block { outline: 3px dashed rgba(255,0,0,0.45); padding:6px; border-radius:4px; }
     @media (max-width: 767px) {
       body { background-image: url('/images/stadium-bg.jpg'); background-size: cover; background-position: center center; background-repeat: no-repeat; min-height: 100vh; margin-top: -70px; }
       body::before { content: ""; position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 5; pointer-events: none; }
@@ -71,16 +72,28 @@
   $img = $product->image_url ?? ($product->preview_src ?? asset('images/placeholder.png'));
 
   // Normalize layoutSlots to include mask URL if available.
-  $slotsForJs = [];
+   $slotsForJs = [];
   if (!empty($layoutSlots) && is_array($layoutSlots)) {
       foreach ($layoutSlots as $k => $s) {
           $slot = (array)$s;
-          // If server-side slot may have mask_svg_path (from DB), convert to public URL
           $mask = $slot['mask'] ?? null;
           if (!$mask && !empty($slot['mask_svg_path'])) {
               $mask = '/files/' . ltrim($slot['mask_svg_path'], '/');
           }
           $slotsForJs[$k] = array_merge($slot, ['mask' => $mask ?? null]);
+      }
+  }
+
+  // originalLayoutSlots may be present (controller passes full set). Normalize similarly.
+  $originalSlotsForJs = [];
+  if (!empty($originalLayoutSlots) && is_array($originalLayoutSlots)) {
+      foreach ($originalLayoutSlots as $k => $s) {
+          $slot = (array)$s;
+          $mask = $slot['mask'] ?? null;
+          if (!$mask && !empty($slot['mask_svg_path'])) {
+              $mask = '/files/' . ltrim($slot['mask_svg_path'], '/');
+          }
+          $originalSlotsForJs[$k] = array_merge($slot, ['mask' => $mask ?? null]);
       }
   }
 @endphp
@@ -115,6 +128,7 @@
         <button type="button" class="np-swatch" data-color="#1E90FF" style="background:#1E90FF"></button>
       </div>
       <input id="np-color" type="color" class="form-control form-control-color mt-2" value="#D4AF37">
+      @if(!empty($showUpload))
       <div class="mb-2" id="np-upload-block" style="margin-top:6px;">
         <input id="np-upload-image" type="file" accept="image/*" class="form-control" />
         <div style="margin-top:6px;">
@@ -123,6 +137,9 @@
           <input id="np-user-image-scale" type="range" min="50" max="200" value="100" style="vertical-align: middle; display:none;" />
         </div>
       </div>
+      @else
+      <!-- uploader not available for this product (controller decided no artwork region) -->
+      @endif
     </div>
 
     <div class="col-md-3 np-col order-3 order-md-3 right-layout mobile-layout">
@@ -179,13 +196,23 @@
 @endphp
 
 <script>
-  // Pass normalized slots (server converted mask path to /files/.. if needed)
+  // filtered slots (name+number) — used by existing overlay logic
   window.layoutSlots = {!! json_encode($slotsForJs ?? [], JSON_NUMERIC_CHECK) !!};
+  // original full layout (may include artwork/logo slots & masks) — prefer this for uploader placement
+  window.originalLayoutSlots = {!! json_encode($originalSlotsForJs ?? [], JSON_NUMERIC_CHECK) !!};
+  // flags from controller (ensure these variables exist in controller)
+  window.showUpload = {{ !empty($showUpload) ? 'true' : 'false' }};
+  window.hasArtworkSlot = {{ !empty($hasArtworkSlot) ? 'true' : 'false' }};
+
   window.personalizationSupported = {{ !empty($layoutSlots) ? 'true' : 'false' }};
   window.variantMap = {!! json_encode($variantMap, JSON_UNESCAPED_SLASHES | JSON_NUMERIC_CHECK) !!} || {};
   window.shopfrontUrl = "{{ env('SHOPIFY_STORE_FRONT_URL', 'https://nextprint.in') }}";
-  console.info('layoutSlots:', window.layoutSlots);
+
+  console.info('layoutSlots (filtered):', window.layoutSlots);
+  console.info('originalLayoutSlots (full):', window.originalLayoutSlots);
+  console.info('showUpload:', window.showUpload, 'hasArtworkSlot:', window.hasArtworkSlot);
 </script>
+
 
 <script>
 (function(){
@@ -314,35 +341,37 @@
 
   // Choose best slot for user-uploaded image
   function findPreferredSlot(){
-    try {
-      const slots = window.layoutSlots || {};
-      const keys = Object.keys(slots);
-      if (!keys.length) return null;
+  try {
+    const orig = (typeof window.originalLayoutSlots === 'object' && window.originalLayoutSlots) ? window.originalLayoutSlots : {};
+    const filtered = (typeof window.layoutSlots === 'object' && window.layoutSlots) ? window.layoutSlots : {};
+    const useSlots = Object.keys(orig).length ? orig : filtered;
+    const keys = Object.keys(useSlots);
+    if (!keys.length) return null;
 
-      // Prefer explicit artwork/logo names
-      const preferNames = ['logo','artwork','team_logo','graphic','image','art'];
-      for (const p of preferNames) if (slots[p]) return slots[p];
+    // Prefer explicit artwork/logo names
+    const preferNames = ['logo','artwork','team_logo','graphic','image','art','badge','patch'];
+    for (const p of preferNames) if (useSlots[p]) return useSlots[p];
 
-      // Prefer any slot that is not name/number
-      for (const k of keys) {
-        const s = slots[k];
-        const keyLower = (k || '').toString().toLowerCase();
-        const slotKey = (s && (s.slot_key || '')).toString().toLowerCase();
-        if (keyLower !== 'name' && keyLower !== 'number' && slotKey !== 'name' && slotKey !== 'number') return s;
-      }
+    // Prefer any slot that is not name/number
+    for (const k of keys) {
+      const s = useSlots[k];
+      const keyLower = (k || '').toString().toLowerCase();
+      const slotKey = (s && (s.slot_key || '')).toString().toLowerCase();
+      if (keyLower !== 'name' && keyLower !== 'number' && slotKey !== 'name' && slotKey !== 'number') return s;
+    }
 
-      // Prefer a slot that has a mask or template — likely artwork
-      for (const k of keys) {
-        const s = slots[k];
-        if (s && (s.mask || s.mask_svg_path || s.template_id)) return s;
-      }
+    // Prefer a slot that has a mask or template
+    for (const k of keys) {
+      const s = useSlots[k];
+      if (s && (s.mask || s.mask_svg_path || s.template_id)) return s;
+    }
 
-      // fallback to number then name then first
-      if (slots['number']) return slots['number'];
-      if (slots['name']) return slots['name'];
-      return slots[keys[0]] || null;
-    } catch(e) { console.warn('findPreferredSlot failed', e); return null; }
-  }
+    if (useSlots['number']) return useSlots['number'];
+    if (useSlots['name']) return useSlots['name'];
+    return useSlots[keys[0]] || null;
+  } catch(e) { console.warn('findPreferredSlot failed', e); return null; }
+}
+
 
   // place user image inside chosen slot (cover)
   function placeUserImage(slot){
@@ -571,29 +600,6 @@
     tx += ' scale(' + userImgScale + ')';
     userImg.style.transform = tx;
     userImg.style.zIndex = 300;
-  }
-
-  function findPreferredSlot(){
-    try {
-      const slots = window.layoutSlots || {};
-      const keys = Object.keys(slots);
-      if (!keys.length) return null;
-      const preferNames = ['logo','artwork','team_logo','graphic','image','art'];
-      for (const p of preferNames) if (slots[p]) return slots[p];
-      for (const k of keys) {
-        const s = slots[k];
-        const keyLower = (k || '').toString().toLowerCase();
-        const slotKey = (s && (s.slot_key || '')).toString().toLowerCase();
-        if (keyLower !== 'name' && keyLower !== 'number' && slotKey !== 'name' && slotKey !== 'number') return s;
-      }
-      for (const k of keys) {
-        const s = slots[k];
-        if (s && (s.mask || s.mask_svg_path || s.template_id)) return s;
-      }
-      if (slots['number']) return slots['number'];
-      if (slots['name']) return slots['name'];
-      return slots[keys[0]] || null;
-    } catch(e) { console.warn('findPreferredSlot failed', e); return null; }
   }
 
   // ---- upload helper: sends file to server, returns public URL ----
