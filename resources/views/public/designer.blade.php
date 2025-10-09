@@ -53,6 +53,9 @@
       border-radius: 4px;
     }
 
+    .mobile-only { display: none; }
+    .desktop-only { display: block; }
+
     @media (max-width: 767px) {
       body { background-image: url('/images/stadium-bg.jpg'); background-size: cover; background-position: center center; background-repeat: no-repeat; min-height: 100vh; margin-top: -70px; }
       body::before { content: ""; position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 5; pointer-events: none; }
@@ -125,6 +128,8 @@
     font-size: 28px;
     letter-spacing: 0;
   }
+   .mobile-only { display: block; }
+  .desktop-only { display: none; }
 }
   </style>
 </head>
@@ -174,17 +179,28 @@
     </div>
 
     <div class="col-md-3 np-col order-2 order-md-1" id="np-controls">
-      <div class="np-input-group">
-        <div class="np-field">
-          <input id="np-name" type="text" maxlength="11" class="np-input" placeholder="YOUR NAME">
-          <span class="np-max">MAX. 11</span>
+      <!-- Desktop inputs (your original markup) -->
+        <div class="desktop-only">
+          <!-- keep your existing desktop inputs here -->
+          <input id="np-name-desktop" type="text" maxlength="12" class="form-control mb-2 text-center" placeholder="YOUR NAME">
+          <input id="np-num-desktop"  type="text" maxlength="3" inputmode="numeric" class="form-control mb-2 text-center" placeholder="09">
+          <!-- other desktop-only elements (font picker, color dots, etc.) -->
         </div>
 
-        <div class="np-field">
-          <input id="np-num" type="text" maxlength="2" inputmode="numeric" class="np-input" placeholder="11">
-          <span class="np-max">MAX. 2</span>
+        <!-- Mobile inputs (what you added) -->
+        <div class="mobile-only">
+          <div class="np-input-group">
+            <div class="np-field">
+              <input id="np-name" type="text" maxlength="11" class="np-input" placeholder="YOUR NAME">
+              <span class="np-max">MAX. 11</span>
+            </div>
+
+            <div class="np-field">
+              <input id="np-num" type="text" maxlength="2" inputmode="numeric" class="np-input" placeholder="11">
+              <span class="np-max">MAX. 2</span>
+            </div>
+          </div>
         </div>
-      </div>
       <select id="np-font" class="form-select mb-2">
         <option value="bebas">Bebas Neue</option>
         <option value="anton">Anton</option>
