@@ -99,161 +99,138 @@
   {{ $rows->links() }}
 </div>
 </div>
-<!-- Preview Upload Modal -->
-<div class="modal fade" id="previewModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog">
-    <form id="previewUploadForm" enctype="multipart/form-data" class="modal-content">
-      @csrf
-      <div class="modal-header">
-        <h5 class="modal-title">Product Preview Settings</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-
-      <div class="modal-body">
-        <input type="file" id="preview_image" name="preview_image" accept="image/*" class="form-control mb-2" />
-        <div class="text-center">
-          <img id="currentPreview" src="" alt="current preview" class="preview-img" style="display:none; max-width:100%; margin-top:10px;" />
+<!-- Product Preview Modal (put near end of blade) -->
+<div class="modal fade" id="productPreviewModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <form id="product-preview-form">
+        <div class="modal-header">
+          <h5 class="modal-title">Product Preview Settings</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
-        <div id="previewAlert" class="alert d-none mt-2" role="alert"></div>
-      </div>
-
-      <div class="modal-footer">
-        <button type="button" id="deletePreviewBtn" class="btn btn-danger" style="display:none;">Delete Preview</button>
-        <button type="submit" class="btn btn-primary">Upload</button>
-      </div>
-    </form>
+        <div class="modal-body text-center">
+          <input type="file" id="preview-file" name="preview_image" accept="image/*" class="form-control mb-3">
+          <img id="preview-thumb" src="" style="max-width:120px; max-height:120px; object-fit:contain; display:none; margin:auto;">
+          <div id="preview-alert" class="alert alert-danger mt-3" style="display:none;"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" id="delete-preview-btn" class="btn btn-danger">Delete Preview</button>
+          <button type="submit" id="upload-preview-btn" class="btn btn-primary">Upload</button>
+        </div>
+      </form>
+    </div>
   </div>
 </div>
+
 @push('scripts')
 <script>
-document.addEventListener('DOMContentLoaded', function () {
+document.addEventListener('DOMContentLoaded', function(){
+  const modalEl = document.getElementById('productPreviewModal');
+  const bsModal = new bootstrap.Modal(modalEl);
+  let currentProductId = null;
 
-  let activeProductId = null;
-  const previewModalEl = document.getElementById('previewModal');
-  const currentPreview = document.getElementById('currentPreview');
-  const previewForm = document.getElementById('previewUploadForm');
-  const previewFileInput = document.getElementById('preview_image');
-  const deleteBtn = document.getElementById('deletePreviewBtn');
-  const previewAlert = document.getElementById('previewAlert');
-
-  const bsModal = new bootstrap.Modal(previewModalEl);
-
-  function getCsrfToken() {
-    // try meta
-    const meta = document.querySelector('meta[name="csrf-token"]');
-    if (meta && meta.getAttribute) return meta.getAttribute('content');
-    // try hidden input in page (if any)
-    const hidden = document.querySelector('input[name="_token"]');
-    if (hidden && hidden.value) return hidden.value;
-    // try window.Laravel if defined
-    if (window.Laravel && window.Laravel.csrfToken) return window.Laravel.csrfToken;
-    return null;
-  }
-
-  function showAlert(message, type='info'){
-    previewAlert.classList.remove('d-none','alert-success','alert-danger','alert-info');
-    previewAlert.classList.add('alert-' + (type === 'danger' ? 'danger' : (type === 'success' ? 'success' : 'info')));
-    previewAlert.textContent = message;
-  }
-
-  document.querySelectorAll('.btn-settings').forEach(btn => {
-    btn.addEventListener('click', function () {
-      activeProductId = this.dataset.productId;
-      const url = this.dataset.productPreview || '';
-      previewFileInput.value = '';
-      previewAlert.classList.add('d-none');
-      if (url) {
-        currentPreview.src = url;
-        currentPreview.style.display = 'inline-block';
-        deleteBtn.style.display = 'inline-block';
+  // Open modal when 'Settings' clicked
+  document.querySelectorAll('.btn-settings').forEach(btn=>{
+    btn.addEventListener('click', function(){
+      currentProductId = this.dataset.productId;
+      const preview = this.dataset.productPreview || '';
+      document.getElementById('preview-alert').style.display = 'none';
+      const thumb = document.getElementById('preview-thumb');
+      if(preview){
+        thumb.src = preview;
+        thumb.style.display = 'block';
       } else {
-        currentPreview.style.display = 'none';
-        deleteBtn.style.display = 'none';
+        thumb.style.display = 'none';
       }
+      document.getElementById('preview-file').value = '';
       bsModal.show();
     });
   });
 
-  previewForm.addEventListener('submit', async function (e) {
+  // preview file read
+  document.getElementById('preview-file').addEventListener('change', function(e){
+    const f = e.target.files && e.target.files[0];
+    if(!f) return;
+    const reader = new FileReader();
+    reader.onload = function(ev){
+      const thumb = document.getElementById('preview-thumb');
+      thumb.src = ev.target.result;
+      thumb.style.display = 'block';
+    };
+    reader.readAsDataURL(f);
+  });
+
+  // Upload form submit
+  document.getElementById('product-preview-form').addEventListener('submit', async function(e){
     e.preventDefault();
-    previewAlert.classList.add('d-none');
-    if (!activeProductId) { showAlert('No product selected', 'danger'); return; }
+    if(!currentProductId) return;
 
-    const file = previewFileInput.files && previewFileInput.files[0];
-    if (!file) { showAlert('Please choose an image file.', 'danger'); return; }
-
-    const fd = new FormData();
-    fd.append('preview_image', file);
-
-    const token = getCsrfToken();
-    if (!token) {
-      showAlert('CSRF token not found — add <meta name="csrf-token"> to layout', 'danger');
-      console.error('CSRF token missing. Add <meta name="csrf-token" content="{{ csrf_token() }}"> to your layout.');
+    const fileInput = document.getElementById('preview-file');
+    if(!fileInput.files || !fileInput.files[0]){
+      showError('Please choose an image first.');
       return;
     }
+    const fd = new FormData();
+    fd.append('_token', '{{ csrf_token() }}');
+    fd.append('preview_image', fileInput.files[0]);
 
+    const url = '/admin/products/' + currentProductId + '/preview';
     try {
-      const resp = await fetch(`/admin/products/${activeProductId}/preview`, {
+      const resp = await fetch(url, {
         method: 'POST',
         body: fd,
-        headers: { 'X-CSRF-TOKEN': token },
         credentials: 'same-origin'
       });
-
-      console.log('Upload response status', resp.status);
-      const json = await resp.json().catch(()=>null);
-      console.log('Upload response body', json);
-
-      if (resp.ok && json && json.success) {
-        showAlert('Uploaded successfully', 'success');
-        // update dataset for settings button
-        const btn = document.querySelector('.btn-settings[data-product-id="'+activeProductId+'"]');
-        if (btn && json.url) btn.dataset.productPreview = json.url;
-        // update preview thumbnail in table if exists
-        const row = document.querySelector('.btn-settings[data-product-id="'+activeProductId+'"]').closest('td').parentNode;
-        if (row) {
-          const img = row.querySelector('td img');
-          if (img && json.url) img.src = json.url;
-        }
-        setTimeout(()=> location.reload(), 700);
-      } else {
-        let msg = 'Upload failed';
-        if (json && json.errors) msg = json.errors.join('; ');
-        if (json && json.message) msg = json.message;
-        showAlert(msg, 'danger');
+      const json = await resp.json().catch(()=>({}));
+      if(!resp.ok){
+        const msg = (json && json.message) ? json.message : 'Upload failed';
+        showError(msg);
+        return;
       }
+      // success: update thumbnail in row
+      const newUrl = json.url || '';
+      // update button dataset + table preview img
+      const settingBtn = document.querySelector('.btn-settings[data-product-id="'+currentProductId+'"]');
+      if(settingBtn) settingBtn.dataset.productPreview = newUrl;
+
+      // find row preview <img> in table and update src
+      const rowImg = document.querySelector('button[data-product-id="'+currentProductId+'"]').closest('td').parentNode.querySelector('td img');
+      if(rowImg) rowImg.src = newUrl;
+
+      bsModal.hide();
     } catch (err) {
-      console.error('Upload exception', err);
-      showAlert('Upload error (see console)', 'danger');
+      showError('Upload failed (network)');
     }
   });
 
-  deleteBtn.addEventListener('click', async function () {
-    if (!activeProductId) return;
-    if (!confirm('Delete preview for this product?')) return;
-    const token = getCsrfToken();
-    if (!token) { showAlert('CSRF token not found', 'danger'); return; }
-
+  // Delete preview
+  document.getElementById('delete-preview-btn').addEventListener('click', async function(){
+    if(!currentProductId) return;
+    if(!confirm('Delete preview for this product?')) return;
+    const url = '/admin/products/' + currentProductId + '/preview';
     try {
-      const resp = await fetch(`/admin/products/${activeProductId}/preview`, {
+      const resp = await fetch(url, {
         method: 'DELETE',
-        headers: { 'X-CSRF-TOKEN': token, 'Content-Type': 'application/json' },
+        headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
         credentials: 'same-origin'
       });
-      const json = await resp.json().catch(()=>null);
-      console.log('Delete response', resp.status, json);
-      if (resp.ok && json && json.success) {
-        showAlert('Removed', 'success');
-        setTimeout(()=> location.reload(), 600);
-      } else {
-        showAlert('Delete failed', 'danger');
-      }
-    } catch (err) {
-      console.error('Delete exception', err);
-      showAlert('Delete error (see console)', 'danger');
+      if(!resp.ok) { showError('Delete failed'); return; }
+      // clear local
+      const settingBtn = document.querySelector('.btn-settings[data-product-id="'+currentProductId+'"]');
+      if(settingBtn) settingBtn.dataset.productPreview = '';
+      const rowImg = document.querySelector('button[data-product-id="'+currentProductId+'"]').closest('td').parentNode.querySelector('td img');
+      if(rowImg) rowImg.src = '{{ asset("images/placeholder.png") }}';
+      bsModal.hide();
+    } catch(e){
+      showError('Delete failed');
     }
   });
 
+  function showError(msg){
+    const a = document.getElementById('preview-alert');
+    a.innerText = msg;
+    a.style.display = 'block';
+  }
 });
 </script>
 @endpush

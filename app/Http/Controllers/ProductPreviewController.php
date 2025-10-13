@@ -4,76 +4,54 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use App\Models\Product;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\Validator;
+use App\Models\Product;
 
 class ProductPreviewController extends Controller
 {
-    // Upload preview image
+    // upload or replace preview for a product
     public function upload(Request $request, Product $product)
     {
-        $validator = Validator::make($request->all(), [
+        $request->validate([
             'preview_image' => 'required|image|mimes:png,jpg,jpeg,webp|max:6144',
         ]);
 
-        if ($validator->fails()) {
-            return response()->json(['success' => false, 'errors' => $validator->errors()->all()], 422);
-        }
-
-        $file = $request->file('preview_image');
-        if (!$file) {
-            return response()->json(['success' => false, 'message' => 'No file'], 400);
-        }
-
-        // optional: delete existing preview file if stored in public disk
+        // remove old file if stored in /storage/app/public/...
         if ($product->preview_src) {
-            try {
-                $oldPath = $this->stripStoragePrefix($product->preview_src);
-                if ($oldPath) Storage::disk('public')->delete($oldPath);
-            } catch (\Throwable $e) {
-                // ignore delete errors
+            // if preview_src starts with '/storage/' we can remove storage path
+            $url = $product->preview_src;
+            // transform url -> storage path
+            if (Str::startsWith($url, '/storage/')) {
+                $path = str_replace('/storage/', '', $url);
+                try { Storage::disk('public')->delete($path); } catch (\Throwable $e) {}
             }
         }
 
-        $filename = 'preview_' . time() . '_' . Str::random(6) . '.' . $file->getClientOriginalExtension();
-        $path = $file->storeAs('previews', $filename, 'public'); // storage/app/public/previews/...
+        $file = $request->file('preview_image');
+        $filename = 'preview_' . $product->id . '_' . time() . '.' . $file->getClientOriginalExtension();
+        $path = $file->storeAs('previews', $filename, 'public'); // stored in storage/app/public/previews
 
-        $url = Storage::url($path); // /storage/previews/...
+        if (!$path) {
+            return response()->json(['success'=>false,'message'=>'Upload failed'], 500);
+        }
 
-        $product->preview_src = $url;
+        // set public URL
+        $product->preview_src = '/storage/' . $path;
         $product->save();
 
-        return response()->json(['success' => true, 'url' => $url, 'message' => 'Uploaded']);
+        return response()->json(['success'=>true,'url'=>$product->preview_src]);
     }
 
-    // Remove preview
-    public function remove(Request $request, Product $product)
+    // delete existing preview
+    public function destroy(Request $request, Product $product)
     {
-        if ($product->preview_src) {
-            try {
-                $oldPath = $this->stripStoragePrefix($product->preview_src);
-                if ($oldPath) Storage::disk('public')->delete($oldPath);
-            } catch (\Throwable $e) {}
+        if ($product->preview_src && Str::startsWith($product->preview_src, '/storage/')) {
+            $path = str_replace('/storage/', '', $product->preview_src);
+            try { Storage::disk('public')->delete($path); } catch (\Throwable $e) {}
         }
         $product->preview_src = null;
         $product->save();
-
-        return response()->json(['success' => true, 'message' => 'Removed']);
-    }
-
-    protected function stripStoragePrefix($url)
-    {
-        if (!$url) return null;
-        // handles "/storage/..." or full URL "https://domain/storage/..."
-        $path = $url;
-        // if full URL, parse path
-        if (parse_url($url, PHP_URL_PATH)) {
-            $path = parse_url($url, PHP_URL_PATH);
-        }
-        // remove leading /storage/
-        $path = preg_replace('#^/storage/#', '', $path);
-        return $path ?: null;
+        return response()->json(['success'=>true]);
     }
 }

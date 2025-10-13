@@ -62,6 +62,12 @@ Route::prefix('admin')->name('admin.')->group(function () {
     Route::get('/api/print-methods',          [PrintMethodController::class, 'search'])->name('print-methods.search');
 
     Route::delete('/decoration-areas/{template}', [DecorationAreaController::class, 'destroy'])->name('decoration.destroy');
+    Route::post('products/{product}/preview', [ProductPreviewController::class, 'upload'])
+         ->name('products.preview.upload');
+
+    // delete preview (DELETE)
+    Route::delete('products/{product}/preview', [ProductPreviewController::class, 'destroy'])
+         ->name('products.preview.delete');
 }); // end admin
 
 Route::get('/admin/login', [AdminAuthController::class, 'showLoginForm'])->name('admin.login');
@@ -88,13 +94,6 @@ Route::post('/team/store', [TeamController::class,'store'])->name('team.store');
 Route::get('/team/{team}', [TeamController::class,'show'])->name('team.show');
 
 Route::post('/save-preview', [App\Http\Controllers\PreviewController::class, 'store'])->name('preview.store');
-
-Route::prefix('admin')->middleware(['auth','can:admin'])->group(function(){
-    Route::post('/admin/products/{product}/upload-preview', [\App\Http\Controllers\Admin\ProductPreviewController::class, 'upload'])
-         ->name('admin.products.upload_preview');
-});
-Route::post('/admin/products/{product}/preview', [ProductPreviewController::class, 'upload'])->name('admin.products.preview.upload');
-Route::delete('/admin/products/{product}/preview', [ProductPreviewController::class, 'upload']); // or separate delete method
 
 Route::get('/p/{handle}', [StoreController::class, 'show'])->name('store.product');
 Route::get('/api/public/products/{handle}/layout',  [PublicProductController::class, 'layout']);
