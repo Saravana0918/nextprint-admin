@@ -62,10 +62,10 @@
 <body class="body-padding">
 
 @php
-  $img = $product->image_url ?? ($product->preview_src ?? asset('images/placeholder.png'));
+  $img = $product->preview_src ?? ($product->image_url ?? asset('images/placeholder.png'));
 
   // Normalize layoutSlots to include mask URL if available.
-   $slotsForJs = [];
+  $slotsForJs = [];
   if (!empty($layoutSlots) && is_array($layoutSlots)) {
       foreach ($layoutSlots as $k => $s) {
           $slot = (array)$s;

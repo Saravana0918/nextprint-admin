@@ -189,14 +189,13 @@ document.addEventListener('DOMContentLoaded', function(){
       }
       // success: update thumbnail in row
       const newUrl = json.url || '';
-      // update button dataset + table preview img
       const settingBtn = document.querySelector('.btn-settings[data-product-id="'+currentProductId+'"]');
-      if(settingBtn) settingBtn.dataset.productPreview = newUrl;
-
-      // find row preview <img> in table and update src
-      const rowImg = document.querySelector('button[data-product-id="'+currentProductId+'"]').closest('td').parentNode.querySelector('td img');
-      if(rowImg) rowImg.src = newUrl;
-
+      if (settingBtn) {
+        settingBtn.dataset.productPreview = newUrl;
+        const tr = settingBtn.closest('tr');
+        const rowImg = tr ? tr.querySelector('td:nth-child(2) img') : null;
+        if (rowImg) rowImg.src = newUrl;
+      }
       bsModal.hide();
     } catch (err) {
       showError('Upload failed (network)');
