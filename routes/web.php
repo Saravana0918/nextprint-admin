@@ -93,6 +93,8 @@ Route::prefix('admin')->middleware(['auth','can:admin'])->group(function(){
     Route::post('/admin/products/{product}/upload-preview', [\App\Http\Controllers\Admin\ProductPreviewController::class, 'upload'])
          ->name('admin.products.upload_preview');
 });
+Route::post('/admin/products/{product}/preview', [ProductPreviewController::class, 'upload'])->name('admin.products.preview.upload');
+Route::delete('/admin/products/{product}/preview', [ProductPreviewController::class, 'upload']); // or separate delete method
 
 Route::get('/p/{handle}', [StoreController::class, 'show'])->name('store.product');
 Route::get('/api/public/products/{handle}/layout',  [PublicProductController::class, 'layout']);
