@@ -136,8 +136,25 @@ document.addEventListener('DOMContentLoaded', function () {
   const deleteBtn = document.getElementById('deletePreviewBtn');
   const previewAlert = document.getElementById('previewAlert');
 
-  // bootstrap modal instance
   const bsModal = new bootstrap.Modal(previewModalEl);
+
+  function getCsrfToken() {
+    // try meta
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    if (meta && meta.getAttribute) return meta.getAttribute('content');
+    // try hidden input in page (if any)
+    const hidden = document.querySelector('input[name="_token"]');
+    if (hidden && hidden.value) return hidden.value;
+    // try window.Laravel if defined
+    if (window.Laravel && window.Laravel.csrfToken) return window.Laravel.csrfToken;
+    return null;
+  }
+
+  function showAlert(message, type='info'){
+    previewAlert.classList.remove('d-none','alert-success','alert-danger','alert-info');
+    previewAlert.classList.add('alert-' + (type === 'danger' ? 'danger' : (type === 'success' ? 'success' : 'info')));
+    previewAlert.textContent = message;
+  }
 
   document.querySelectorAll('.btn-settings').forEach(btn => {
     btn.addEventListener('click', function () {
@@ -159,18 +176,21 @@ document.addEventListener('DOMContentLoaded', function () {
 
   previewForm.addEventListener('submit', async function (e) {
     e.preventDefault();
-    if (!activeProductId) return alert('No product selected');
+    previewAlert.classList.add('d-none');
+    if (!activeProductId) { showAlert('No product selected', 'danger'); return; }
 
     const file = previewFileInput.files && previewFileInput.files[0];
-    if (!file) {
-      showAlert('Please choose an image file.', 'danger');
-      return;
-    }
+    if (!file) { showAlert('Please choose an image file.', 'danger'); return; }
 
     const fd = new FormData();
     fd.append('preview_image', file);
 
-    const token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    const token = getCsrfToken();
+    if (!token) {
+      showAlert('CSRF token not found — add <meta name="csrf-token"> to layout', 'danger');
+      console.error('CSRF token missing. Add <meta name="csrf-token" content="{{ csrf_token() }}"> to your layout.');
+      return;
+    }
 
     try {
       const resp = await fetch(`/admin/products/${activeProductId}/preview`, {
@@ -179,18 +199,22 @@ document.addEventListener('DOMContentLoaded', function () {
         headers: { 'X-CSRF-TOKEN': token },
         credentials: 'same-origin'
       });
-      const json = await resp.json();
-      if (resp.ok && json.success) {
+
+      console.log('Upload response status', resp.status);
+      const json = await resp.json().catch(()=>null);
+      console.log('Upload response body', json);
+
+      if (resp.ok && json && json.success) {
         showAlert('Uploaded successfully', 'success');
-        // update preview image in table row (if present)
+        // update dataset for settings button
         const btn = document.querySelector('.btn-settings[data-product-id="'+activeProductId+'"]');
-        if (btn) btn.dataset.productPreview = json.url || '';
+        if (btn && json.url) btn.dataset.productPreview = json.url;
         // update preview thumbnail in table if exists
-        const imgCell = document.querySelector('button.btn-settings[data-product-id="'+activeProductId+'"]').closest('td').parentNode.querySelector('td img');
-        if (imgCell && json.url) {
-          imgCell.src = json.url;
+        const row = document.querySelector('.btn-settings[data-product-id="'+activeProductId+'"]').closest('td').parentNode;
+        if (row) {
+          const img = row.querySelector('td img');
+          if (img && json.url) img.src = json.url;
         }
-        // keep the modal open briefly then reload to be safe (or just update DOM)
         setTimeout(()=> location.reload(), 700);
       } else {
         let msg = 'Upload failed';
@@ -199,43 +223,36 @@ document.addEventListener('DOMContentLoaded', function () {
         showAlert(msg, 'danger');
       }
     } catch (err) {
-      console.error(err);
-      showAlert('Upload error', 'danger');
+      console.error('Upload exception', err);
+      showAlert('Upload error (see console)', 'danger');
     }
   });
 
   deleteBtn.addEventListener('click', async function () {
     if (!activeProductId) return;
     if (!confirm('Delete preview for this product?')) return;
-    const token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    const token = getCsrfToken();
+    if (!token) { showAlert('CSRF token not found', 'danger'); return; }
+
     try {
       const resp = await fetch(`/admin/products/${activeProductId}/preview`, {
         method: 'DELETE',
         headers: { 'X-CSRF-TOKEN': token, 'Content-Type': 'application/json' },
         credentials: 'same-origin'
       });
-      const json = await resp.json();
-      if (resp.ok && json.success) {
+      const json = await resp.json().catch(()=>null);
+      console.log('Delete response', resp.status, json);
+      if (resp.ok && json && json.success) {
         showAlert('Removed', 'success');
-        // update DOM
-        const btn = document.querySelector('.btn-settings[data-product-id="'+activeProductId+'"]');
-        if (btn) btn.dataset.productPreview = '';
-        // refresh page to reflect changes
         setTimeout(()=> location.reload(), 600);
       } else {
         showAlert('Delete failed', 'danger');
       }
     } catch (err) {
-      console.error(err);
-      showAlert('Delete error', 'danger');
+      console.error('Delete exception', err);
+      showAlert('Delete error (see console)', 'danger');
     }
   });
-
-  function showAlert(message, type='info'){
-    previewAlert.classList.remove('d-none','alert-success','alert-danger','alert-info');
-    previewAlert.classList.add('alert-' + (type === 'danger' ? 'danger' : (type === 'success' ? 'success' : 'info')));
-    previewAlert.textContent = message;
-  }
 
 });
 </script>
