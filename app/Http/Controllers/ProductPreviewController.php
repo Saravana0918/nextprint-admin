@@ -14,7 +14,7 @@ class ProductPreviewController extends Controller
     public function upload(Request $request, Product $product)
     {
         $request->validate([
-            'preview_image' => 'required|image|mimes:png,jpg,jpeg,webp|max:6144',
+            'preview_image' => 'required|image|mimes:png,jpg,jpeg,webp|max:20480',
         ]);
 
         // remove old file if stored in /storage/app/public/...
