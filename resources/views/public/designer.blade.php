@@ -62,33 +62,24 @@
 <body class="body-padding">
 
 @php
-  $img = $product->image_url ?? ($product->preview_src ?? asset('images/placeholder.png'));
+  // prefer admin-uploaded preview_src first, then product image_url, then placeholder
+  $preview = $product->preview_src ?? null;
 
-  // Normalize layoutSlots to include mask URL if available.
-   $slotsForJs = [];
-  if (!empty($layoutSlots) && is_array($layoutSlots)) {
-      foreach ($layoutSlots as $k => $s) {
-          $slot = (array)$s;
-          $mask = $slot['mask'] ?? null;
-          if (!$mask && !empty($slot['mask_svg_path'])) {
-              $mask = '/files/' . ltrim($slot['mask_svg_path'], '/');
-          }
-          $slotsForJs[$k] = array_merge($slot, ['mask' => $mask ?? null]);
+  if ($preview) {
+      // if preview is stored as full url or starts with /storage, use it directly
+      if (preg_match('/^https?:\\/\\//', $preview) || str_starts_with($preview, '/storage')) {
+          $img = $preview;
+      } else {
+          // if preview is stored as Storage path 'products/previews/xxx.png', convert to storage url
+          $img = Storage::url($preview);
       }
+  } else {
+      // fallback to image_url or placeholder
+      $img = $product->image_url ?? asset('images/placeholder.png');
   }
 
-  // originalLayoutSlots may be present (controller passes full set). Normalize similarly.
-  $originalSlotsForJs = [];
-  if (!empty($originalLayoutSlots) && is_array($originalLayoutSlots)) {
-      foreach ($originalLayoutSlots as $k => $s) {
-          $slot = (array)$s;
-          $mask = $slot['mask'] ?? null;
-          if (!$mask && !empty($slot['mask_svg_path'])) {
-              $mask = '/files/' . ltrim($slot['mask_svg_path'], '/');
-          }
-          $originalSlotsForJs[$k] = array_merge($slot, ['mask' => $mask ?? null]);
-      }
-  }
+  // final safety
+  if (empty($img)) $img = asset('images/placeholder.png');
 @endphp
 
 <div class="container">
@@ -220,6 +211,8 @@
   window.personalizationSupported = {{ !empty($layoutSlots) ? 'true' : 'false' }};
   window.variantMap = {!! json_encode($variantMap, JSON_UNESCAPED_SLASHES | JSON_NUMERIC_CHECK) !!} || {};
   window.shopfrontUrl = "{{ env('SHOPIFY_STORE_FRONT_URL', 'https://nextprint.in') }}";
+  window.productPreviewSrc = {!! json_encode($product->preview_src ?? null) !!};
+  window.lastUploadedLogoUrl = window.productPreviewSrc || null; // keeps add-team / uploader logic consistent
 
   console.info('layoutSlots (filtered):', window.layoutSlots);
   console.info('originalLayoutSlots (full):', window.originalLayoutSlots);

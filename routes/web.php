@@ -89,6 +89,11 @@ Route::get('/team/{team}', [TeamController::class,'show'])->name('team.show');
 
 Route::post('/save-preview', [App\Http\Controllers\PreviewController::class, 'store'])->name('preview.store');
 
+Route::prefix('admin')->middleware(['auth','can:admin'])->group(function(){
+    Route::post('/admin/products/{product}/upload-preview', [\App\Http\Controllers\Admin\ProductPreviewController::class, 'upload'])
+         ->name('admin.products.upload_preview');
+});
+
 Route::get('/p/{handle}', [StoreController::class, 'show'])->name('store.product');
 Route::get('/api/public/products/{handle}/layout',  [PublicProductController::class, 'layout']);
 

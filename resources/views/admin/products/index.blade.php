@@ -84,6 +84,9 @@
       <a href="{{ route('admin.products.decoration', $p->id) }}" class="btn btn-primary btn-sm">
         Decoration Area (Front)
       </a>
+      <button type="button" class="btn btn-secondary btn-sm ms-1 btn-settings" data-product-id="{{ $product->id }}" data-product-preview="{{ $product->preview_src ?? '' }}">
+        Settings
+      </button>
     </td>
   </tr>
 @endforeach
