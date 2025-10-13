@@ -62,11 +62,11 @@ Route::prefix('admin')->name('admin.')->group(function () {
     Route::get('/api/print-methods',          [PrintMethodController::class, 'search'])->name('print-methods.search');
 
     Route::delete('/decoration-areas/{template}', [DecorationAreaController::class, 'destroy'])->name('decoration.destroy');
-    Route::post('products/{product}/preview', [ProductPreviewController::class, 'upload'])
+    Route::post('/products/{product}/preview', [ProductPreviewController::class, 'upload'])
          ->name('products.preview.upload');
 
     // delete preview (DELETE)
-    Route::delete('products/{product}/preview', [ProductPreviewController::class, 'destroy'])
+    Route::delete('/products/{product}/preview', [ProductPreviewController::class, 'destroy'])
          ->name('products.preview.delete');
 }); // end admin
 
