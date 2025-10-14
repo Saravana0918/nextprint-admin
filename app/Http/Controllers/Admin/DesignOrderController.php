@@ -13,24 +13,25 @@ class DesignOrderController extends Controller
      */
     public function index()
     {
-        // Join with team_players (or your team table) and product table
-        // Adjust the table names according to your DB structure
-        $rows = DB::table('team_players')
-            ->join('products', 'team_players.product_id', '=', 'products.id')
-            ->select(
-                'team_players.id',
-                'team_players.shopify_order_id',
-                'team_players.name',
-                'team_players.number',
-                'team_players.preview_image',
-                'team_players.created_at',
-                'products.name as product_name',
-                'products.id as product_id'
-            )
-            ->orderBy('team_players.created_at', 'desc')
-            ->get();
+        // join with products table (if you have one) to get product name
+        // adjust table/column names based on your schema (products table, name/title columns)
+        $rows = DB::table('design_orders as d')
+            ->leftJoin('products as p', 'p.id', '=', 'd.product_id')
+            ->select([
+                'd.id',
+                'd.shopify_order_id',
+                'd.product_id',
+                DB::raw("COALESCE(p.name, p.title, '') as product_name"),
+                // alias DB columns to match blade: 'name' and 'number'
+                DB::raw("d.name_text as name"),
+                DB::raw("d.number_text as number"),
+                'd.preview_image',
+                'd.created_at'
+            ])
+            ->orderBy('d.created_at', 'desc')
+            ->paginate(25);
 
-        return view('admin.design_orders.index', compact('rows'));
+        return view('admin.design_orders.index', ['rows' => $rows]);
     }
 
     /**

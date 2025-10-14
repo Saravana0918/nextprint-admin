@@ -576,39 +576,99 @@ altNumEls.forEach(el => {
 
   // add to cart submit (keeps your original behavior)
   form?.addEventListener('submit', async function(evt){
-    evt.preventDefault();
-    const size = $('np-size')?.value || '';
-    if (!size) { alert('Please select a size.'); return; }
-    if (!NAME_RE.test(nameEl.value||'') || !NUM_RE.test(numEl.value||'')) { alert('Please enter valid Name and Number'); return; }
-    syncHidden();
-    const variantId = (document.getElementById('np-variant-id') || { value: '' }).value;
-    if (!variantId || !/^\d+$/.test(variantId)) { alert('Variant not selected or invalid. Please re-select size.'); return; }
-    if (btn) { btn.disabled = true; btn.textContent = 'Adding...'; }
+  evt.preventDefault();
+  const size = document.getElementById('np-size')?.value || '';
+  if (!size) { alert('Please select a size.'); return; }
+  if (!NAME_RE.test(nameEl.value||'') || !NUM_RE.test(numEl.value||'')) { alert('Please enter valid Name and Number'); return; }
+  syncHidden();
+  const variantId = (document.getElementById('np-variant-id') || { value: '' }).value;
+  if (!variantId || !/^\d+$/.test(variantId)) { alert('Variant not selected or invalid. Please re-select size.'); return; }
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+
+  try {
+    // capture canvas preview (you already have this)
     try {
-      try {
-        const canvas = await html2canvas(stage, { useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1 });
-        const dataUrl = canvas.toDataURL('image/png');
-        $('np-preview-hidden').value = dataUrl;
-      } catch(e) { console.warn('html2canvas failed, continuing without preview:', e); }
-      const properties = { 'Name': $('np-name-hidden')?.value || '', 'Number': $('np-num-hidden')?.value || '', 'Font': $('np-font-hidden')?.value || '', 'Color': $('np-color-hidden')?.value || '' };
-      const qty = Math.max(1, parseInt($('np-qty')?.value || '1', 10));
-      const bodyArr = [];
-      bodyArr.push('id=' + encodeURIComponent(variantId));
-      bodyArr.push('quantity=' + encodeURIComponent(qty));
-      for (const k in properties) { bodyArr.push('properties[' + encodeURIComponent(k) + ']=' + encodeURIComponent(properties[k])); }
-      const body = bodyArr.join('&');
-      const resp = await fetch('/cart/add', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body, credentials: 'same-origin' });
-      const shopfront = (window.shopfrontUrl || '').replace(/\/+$/,'');
-      const redirectUrl = shopfront + '/cart/' + variantId + ':' + qty;
-      window.location.href = redirectUrl;
-    } catch (err) {
-      console.error('Add to cart error', err);
-      alert('Something went wrong adding to cart.');
-    } finally {
+      const canvas = await html2canvas(stage, { useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1 });
+      const dataUrl = canvas.toDataURL('image/png');
+      document.getElementById('np-preview-hidden').value = dataUrl;
+    } catch(e) {
+      console.warn('html2canvas failed, continuing without preview:', e);
+    }
+
+    // Prepare payload for saving design order
+    const payload = {
+      product_id: document.getElementById('np-product-id')?.value || null,
+      shopify_product_id: document.getElementById('np-shopify-product-id')?.value || null,
+      variant_id: document.getElementById('np-variant-id')?.value || '',
+      name: document.getElementById('np-name-hidden')?.value || '',
+      number: document.getElementById('np-num-hidden')?.value || '',
+      font: document.getElementById('np-font-hidden')?.value || '',
+      color: document.getElementById('np-color-hidden')?.value || '',
+      size: document.getElementById('np-size')?.value || '',
+      quantity: parseInt(document.getElementById('np-qty')?.value || '1', 10),
+      preview_src: document.getElementById('np-preview-hidden')?.value || '',
+      uploaded_logo_url: document.getElementById('np-uploaded-logo-url')?.value || (window.lastUploadedLogoUrl || null),
+      // players is optional; team flow will send players as JSON when present
+      players: window.currentPlayers || null,
+      shopify_order_id: null
+    };
+
+    // send to server
+    const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+    const resp = await fetch('/design-order', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': token
+      },
+      credentials: 'same-origin',
+      body: JSON.stringify(payload)
+    });
+
+    const json = await resp.json().catch(()=>null);
+    if (!resp.ok || !json || !json.success) {
+      console.warn('design-order save failed', json);
+      // optionally continue to cart if you want, or stop – here we continue but notify
+      alert('Customization save failed. Please try again or contact admin.');
+      if (btn) { btn.disabled = false; btn.textContent = 'Add to Cart'; }
+      return;
+    }
+
+    const designOrderId = json.order_id || null;
+
+    // Now proceed with original add-to-cart behavior but include designOrderId in properties
+    const properties = {
+      'Name': document.getElementById('np-name-hidden')?.value || '',
+      'Number': document.getElementById('np-num-hidden')?.value || '',
+      'Font': document.getElementById('np-font-hidden')?.value || '',
+      'Color': document.getElementById('np-color-hidden')?.value || ''
+    };
+    if (designOrderId) properties['DesignOrderId'] = designOrderId;
+
+    // Build form body for /cart/add
+    const bodyArr = [];
+    const qty = Math.max(1, parseInt(document.getElementById('np-qty')?.value || '1', 10));
+    bodyArr.push('id=' + encodeURIComponent(variantId));
+    bodyArr.push('quantity=' + encodeURIComponent(qty));
+    for (const k in properties) {
+      bodyArr.push('properties[' + encodeURIComponent(k) + ']=' + encodeURIComponent(properties[k]));
+    }
+    const body = bodyArr.join('&');
+
+    // send to shopify cart
+    const cartResp = await fetch('/cart/add', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body, credentials: 'same-origin' });
+    const shopfront = (window.shopfrontUrl || '').replace(/\/+$/,'');
+    const redirectUrl = shopfront + '/cart/' + variantId + ':' + qty;
+    window.location.href = redirectUrl;
+  } catch (err) {
+    console.error('Add to cart + save error', err);
+    alert('Something went wrong saving customization or adding to cart.');
+    if (btn) { btn.disabled = false; btn.textContent = 'Add to Cart'; }
+  } finally {
       if (btn) { btn.disabled = false; btn.textContent = 'Add to Cart'; }
     }
   });
-
 })();
 </script>
 
