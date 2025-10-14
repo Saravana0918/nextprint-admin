@@ -188,7 +188,7 @@
         <div class="mb-2">
           <input id="np-qty" name="quantity" type="number" min="1" value="1" class="form-control">
         </div>
-
+        <button id="save-design-btn" class="btn btn-primary">Save Design (Save)</button>
         <button id="np-atc-btn" type="submit" class="btn btn-primary">Add to Cart</button>
         <a href="#" class="btn btn-success" id="btn-add-team" style="margin-left:8px;">Add Team Players</a>
       </form>
@@ -229,6 +229,131 @@
   console.info('originalLayoutSlots (full):', window.originalLayoutSlots);
   console.info('showUpload:', window.showUpload, 'hasArtworkSlot:', window.hasArtworkSlot);
 </script>
+<script>
+(function(){
+  // Helper: get query param
+  function getQueryParam(name) {
+    const url = new URL(window.location.href);
+    return url.searchParams.get(name);
+  }
+
+  // Elements - change selectors if your inputs are different
+  const btn = document.getElementById('save-design-btn');
+  const nameInput = document.getElementById('np-name');   // your screenshot had this id
+  const numInput  = document.getElementById('np-num');    // your screenshot had this id
+  const fontSelect = document.querySelector('select');     // adjust if multiple selects
+  const colorElems = document.querySelectorAll('.color-dot'); // if you use custom color dots - else use an input
+  const sizeSelect = document.querySelector('select[name="size"]') || document.querySelector('#size-select');
+  const qtyInput = document.querySelector('input[name="quantity"]') || document.querySelector('#qty');
+  const previewImg = document.querySelector('#designer-preview img') || document.querySelector('.preview-img'); // adapt to your preview element
+
+  // fallback: get some values from URL query (product_id, view_id)
+  const productIdFromUrl = getQueryParam('product_id') || getQueryParam('productId') || null;
+  const shopifyProductIdFromUrl = getQueryParam('view_id') || getQueryParam('shopify_product_id') || null;
+
+  // CSRF token (for web route)
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+
+  async function getPreviewDataUrl() {
+    if (!previewImg) return null;
+    const src = previewImg.getAttribute('src') || previewImg.dataset.src;
+    if (!src) return null;
+
+    // if already data URL
+    if (src.startsWith('data:image/')) return src;
+
+    // if it's a remote URL, try to fetch as blob and convert to base64
+    try {
+      const res = await fetch(src, {mode: 'cors'});
+      const blob = await res.blob();
+      return await blobToDataURL(blob);
+    } catch (err) {
+      // fallback: send the URL directly
+      return src;
+    }
+  }
+
+  function blobToDataURL(blob) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  function pickColor() {
+    // modify according to how color is selected. Example: .selected class on a color dot
+    const selectedColorElem = document.querySelector('.color-dot.selected') || document.querySelector('.color-dot.active');
+    if (selectedColorElem) {
+      return selectedColorElem.dataset.color || selectedColorElem.getAttribute('data-color') || selectedColorElem.value;
+    }
+    // fallback to color input if exists
+    const colorInput = document.querySelector('input[type="color"]');
+    if (colorInput) return colorInput.value;
+    return null;
+  }
+
+  btn && btn.addEventListener('click', async function(e){
+    e.preventDefault();
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+
+    try {
+      const preview_src = await getPreviewDataUrl();
+
+      const payload = {
+        product_id: productIdFromUrl ? parseInt(productIdFromUrl) : null,
+        shopify_product_id: shopifyProductIdFromUrl || null,
+        variant_id: null,
+        name: nameInput ? nameInput.value.trim() : null,
+        number: numInput ? numInput.value.trim() : null,
+        font: fontSelect ? (fontSelect.value || fontSelect.options[fontSelect.selectedIndex]?.text) : null,
+        color: pickColor() || null,
+        size: sizeSelect ? (sizeSelect.value || null) : null,
+        quantity: qtyInput ? (parseInt(qtyInput.value) || 1) : 1,
+        preview_src: preview_src || null,
+        players: null,
+        shopify_order_id: null
+      };
+
+      const res = await fetch('{{ url("/design-order") }}', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': csrfToken
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        console.error('Save error', data);
+        alert('Save failed: ' + (data.message || 'Server error'));
+        btn.disabled = false;
+        btn.textContent = 'Save Design (Save)';
+        return;
+      }
+
+      // success
+      alert('Design saved! Order ID: ' + (data.order_id || '—'));
+      // optionally redirect to admin orders, or refresh UI
+      // window.location.href = '/admin/design-orders';
+      btn.disabled = false;
+      btn.textContent = 'Save Design (Saved)';
+    } catch (err) {
+      console.error(err);
+      alert('Save failed, check console.');
+      btn.disabled = false;
+      btn.textContent = 'Save Design (Save)';
+    }
+  });
+
+})();
+</script>
+
 <script>
 /* MUST be placed before any code that calls findPreferredSlot() */
 window.findPreferredSlot = function(){
