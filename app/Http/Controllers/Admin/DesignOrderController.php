@@ -14,19 +14,19 @@ class DesignOrderController extends Controller
 public function index()
 {
     $rows = DB::table('design_orders as d')
-        ->leftJoin('products as p', 'p.id', '=', 'd.product_id')
-        ->select([
-            'd.id',
-            'd.shopify_order_id',
-            'd.product_id',
-            DB::raw("p.name as product_name"),        // product table 'name' exists
-            DB::raw("d.customer_name as name"),       // alias to view expected 'name'
-            DB::raw("d.customer_number as number"),   // alias to view expected 'number'
-            DB::raw("d.preview_src as preview_image"),// alias preview_src -> preview_image
-            'd.created_at'
-        ])
-        ->orderBy('d.created_at', 'desc')
-        ->paginate(25);
+    ->leftJoin('products as p', 'p.id', '=', 'd.product_id')
+    ->select([
+        'd.id',
+        'd.shopify_product_id',
+        'd.product_id',
+        DB::raw("COALESCE(p.name, p.title) as product_name"),
+        DB::raw("d.name_text as name"),
+        DB::raw("d.number_text as number"),
+        DB::raw("d.preview_src as preview_image"),
+        'd.created_at'
+    ])
+    ->orderBy('d.created_at', 'desc')
+    ->paginate(25);
 
     return view('admin.design_orders.index', ['rows' => $rows]);
 }
@@ -37,13 +37,10 @@ public function index()
 public function show($id)
 {
     $order = DB::table('design_orders as d')
-        ->leftJoin('products as p', 'p.id', '=', 'd.product_id')
-        ->select([
-            'd.*',
-            DB::raw("p.name as product_name")
-        ])
-        ->where('d.id', $id)
-        ->first();
+    ->leftJoin('products as p', 'p.id', '=', 'd.product_id')
+    ->select(['d.*', DB::raw("p.name as product_name")])
+    ->where('d.id', $id)
+    ->first();
 
     if (!$order) {
         abort(404, 'Design order not found');

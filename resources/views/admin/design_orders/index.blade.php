@@ -1,6 +1,8 @@
 @extends('layouts.app')
 
 @section('content')
+@php use Illuminate\Support\Str; @endphp
+
 <div class="container py-4">
   <div class="d-flex justify-content-between align-items-center mb-3">
     <h2 class="mb-0">Design Orders</h2>
@@ -14,7 +16,7 @@
       <thead>
         <tr>
           <th>ID</th>
-          <th>Shopify Order</th>
+          <th>Shopify Product</th>
           <th>Product</th>
           <th>Name</th>
           <th>Number</th>
@@ -27,36 +29,41 @@
         @forelse($rows as $row)
           <tr>
             <td>{{ $row->id }}</td>
-            <td>{{ $row->shopify_order_id ?: '—' }}</td>
 
-            <td style="min-width:200px">
-              {{ $row->product_name ?? $row->product_id ?? '—' }}
+            <td style="min-width:140px">
               @if(!empty($row->shopify_product_id))
-                <div class="text-muted small">shopify: {{ $row->shopify_product_id }}</div>
+                <div>#{{ $row->shopify_product_id }}</div>
+              @else
+                <div class="text-muted">—</div>
               @endif
             </td>
 
-            <td>{{ $row->name ?? $row->customer_name ?? '—' }}</td>
-            <td>{{ $row->number ?? $row->customer_number ?? '—' }}</td>
+            <td style="min-width:200px">
+              {{ $row->product_name ?? $row->product_id ?? '—' }}
+            </td>
 
-            <td style="width:80px">
-              @if(!empty($row->preview_image) || !empty($row->preview_src))
-                @php
-                  // support both alias names: preview_image (alias) or preview_src (original)
-                  $preview = $row->preview_image ?? $row->preview_src ?? null;
-                  $previewUrl = $preview;
-                  if ($preview && (Str::startsWith($preview, '/storage') || Str::startsWith($preview, 'storage'))) {
+            {{-- Use name_text / number_text (DB columns) --}}
+            <td>{{ $row->name_text ?? '—' }}</td>
+            <td>{{ $row->number_text ?? '—' }}</td>
+
+            <td style="width:90px">
+              @php
+                $preview = $row->preview_src ?? null;
+                $previewUrl = null;
+                if (!empty($preview)) {
+                  if (Str::startsWith($preview, '/storage') || Str::startsWith($preview, 'storage')) {
                     $previewUrl = asset($preview);
+                  } else {
+                    // allow absolute http(s) or data:image
+                    $previewUrl = $preview;
                   }
-                @endphp
+                }
+              @endphp
 
-                @if($previewUrl)
-                  <a href="{{ $previewUrl }}" target="_blank" title="Open preview">
-                    <img src="{{ $previewUrl }}" width="56" height="56" style="object-fit:cover; border-radius:4px;" alt="preview">
-                  </a>
-                @else
-                  <span class="text-muted small">—</span>
-                @endif
+              @if($previewUrl)
+                <a href="{{ $previewUrl }}" target="_blank" title="Open preview">
+                  <img src="{{ $previewUrl }}" width="56" height="56" style="object-fit:cover; border-radius:4px;" alt="preview">
+                </a>
               @else
                 <span class="text-muted small">—</span>
               @endif
