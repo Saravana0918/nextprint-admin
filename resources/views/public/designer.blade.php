@@ -188,7 +188,9 @@
         <div class="mb-2">
           <input id="np-qty" name="quantity" type="number" min="1" value="1" class="form-control">
         </div>
-
+        <button id="np-save-all-btn" type="button" class="btn btn-outline-secondary" style="margin-left:8px;">
+        Save All
+      </button>
         <button id="np-atc-btn" type="submit" class="btn btn-primary">Add to Cart</button>
         <a href="#" class="btn btn-success" id="btn-add-team" style="margin-left:8px;">Add Team Players</a>
       </form>
@@ -611,7 +613,115 @@ altNumEls.forEach(el => {
 
 })();
 </script>
+<script>
+  (async function(){
+  const saveBtn = document.getElementById('np-save-all-btn');
+  if (!saveBtn) return;
 
+  async function uploadPreviewIfNeeded() {
+    // If you already have a server temp upload endpoint (designer.upload_temp),
+    // we should upload the canvas or user-provided image there and get a public URL.
+    // Else return null.
+    const previewHidden = document.getElementById('np-preview-hidden');
+    if (!previewHidden || !previewHidden.value) return null;
+
+    // If previewHidden is a dataURL (data:image/png;base64,...), upload it to /designer/upload-temp
+    const dataUrl = previewHidden.value;
+    if (!dataUrl.startsWith('data:')) {
+      // If it's already a URL, just return it.
+      return dataUrl;
+    }
+
+    try {
+      const blob = (await (await fetch(dataUrl)).blob());
+      const fd = new FormData();
+      fd.append('file', blob, 'preview.png');
+      // if your route expects CSRF, include it
+      const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+      const resp = await fetch('{{ route("designer.upload_temp") }}', {
+        method: 'POST',
+        body: fd,
+        headers: token ? { 'X-CSRF-TOKEN': token } : undefined,
+        credentials: 'same-origin'
+      });
+      const json = await resp.json().catch(()=>null);
+      if (resp.ok && json && json.url) return json.url;
+    } catch (e) {
+      console.warn('Preview upload failed', e);
+    }
+    return null;
+  }
+
+  saveBtn.addEventListener('click', async function(){
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving...';
+
+    try {
+      // Collect values
+      const name = (document.getElementById('np-name')?.value || '').toUpperCase().slice(0,120);
+      const number = (document.getElementById('np-num')?.value || '').replace(/\D/g,'').slice(0,10);
+      const font = (document.getElementById('np-font')?.value || '');
+      const color = (document.getElementById('np-color')?.value || '');
+      const productId = document.getElementById('np-product-id')?.value || '';
+      const variantId = document.getElementById('np-variant-id')?.value || '';
+      const previewHidden = document.getElementById('np-preview-hidden');
+
+      // Ensure canvas data exists by generating if missing
+      if (previewHidden && !previewHidden.value) {
+        try {
+          const canvas = await html2canvas(document.getElementById('np-stage'), { useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1 });
+          previewHidden.value = canvas.toDataURL('image/png');
+        } catch(e){ console.warn('html2canvas failed:', e); }
+      }
+
+      // upload preview to get public URL (optional but recommended)
+      const previewUrl = await uploadPreviewIfNeeded(); // may return null
+
+      const payload = {
+        shopify_order_id: null, // optional if you have a shopify checkout id
+        line_item_id: null,
+        product_id: productId,
+        variant_id: variantId,
+        download_url: null, // optional
+        name: name || null,
+        number: number || null,
+        font: font || null,
+        color: color || null,
+        preview_src: previewUrl || (previewHidden?.value || null),
+        payload: {
+          // put any extra state you want to keep for debugging (layoutSlots, overlays etc)
+          layoutSlots: window.layoutSlots || null
+        },
+        status: 'new'
+      };
+
+      // POST to endpoint
+      const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+      const resp = await fetch('/design-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': token },
+        credentials: 'same-origin',
+        body: JSON.stringify(payload)
+      });
+
+      const json = await resp.json().catch(()=>null);
+      if (resp.ok && json && json.success) {
+        alert('Saved. Order id: ' + (json.order_id || '—'));
+        // optional: redirect to admin design orders filtered page
+        // window.location.href = '/admin/design-orders?product_id=' + encodeURIComponent(productId);
+      } else {
+        alert('Save failed: ' + (json?.message || resp.statusText || 'Server error'));
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Save failed (network). Check console.');
+    } finally {
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save All';
+    }
+  });
+})();
+</script>
 <script>
 (function(){
   const uploadEl = document.getElementById('np-upload-image');

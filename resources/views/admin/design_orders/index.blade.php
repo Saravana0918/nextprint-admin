@@ -12,10 +12,10 @@
       <td>{{ $r->customer_name }}</td>
       <td>{{ $r->customer_number }}</td>
       <td>
-        @if($r->preview_src)
-          <img src="{{ $r->preview_src }}" style="width:60px;height:60px;object-fit:cover" />
+       @if($r->preview_src)
+        <img src="{{ $r->preview_src }}" style="width:60px;height:60px;object-fit:cover" alt="preview">
         @elseif(!empty($r->payload['image_url']))
-          <img src="{{ $r->payload['image_url'] }}" style="width:60px;height:60px;object-fit:cover" />
+        <img src="{{ $r->payload['image_url'] }}" style="width:60px;height:60px;object-fit:cover" alt="preview">
         @endif
       </td>
       <td>{{ $r->created_at->format('Y-m-d H:i') }}</td>
