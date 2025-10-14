@@ -13,96 +13,93 @@ class DesignOrderController extends Controller
 {
     public function store(Request $request)
     {
-        // Basic validation (adjust rules as needed)
-        $validated = $request->validate([
+        // validate inputs (lenient so frontend won't fail)
+        $data = $request->validate([
             'product_id' => 'nullable|integer',
             'shopify_product_id' => 'nullable|string',
             'variant_id' => 'nullable|string',
-            'name' => 'nullable|string|max:50',
-            'number' => 'nullable|string|max:10',
+            'name' => 'nullable|string|max:100',
+            'number' => 'nullable|string|max:20',
             'font' => 'nullable|string|max:100',
             'color' => 'nullable|string|max:20',
             'size' => 'nullable|string|max:50',
-            'quantity' => 'nullable|integer|min:1',
-            'preview_src' => 'nullable|string', // dataURL or public URL
+            'quantity' => 'nullable|integer',
+            'preview_src' => 'nullable|string',
             'uploaded_logo_url' => 'nullable|string',
-            'players' => 'nullable', // JSON array expected
-            'shopify_order_id' => 'nullable|string',
+            'players' => 'nullable',
+            'shopify_order_id' => 'nullable|string'
         ]);
 
-        // 1) handle preview image: if data:image/*;base64, decode and store
-        $previewUrl = null;
-        if (!empty($validated['preview_src'])) {
-            $src = $validated['preview_src'];
-            if (preg_match('/^data:image\/(\w+);base64,/', $src, $type)) {
-                $imageData = substr($src, strpos($src, ',') + 1);
-                $imageData = base64_decode($imageData);
-                if ($imageData === false) {
-                    // ignore, will store null
-                } else {
-                    $ext = strtolower($type[1]);
-                    if ($ext === 'jpeg') $ext = 'jpg';
-                    $filename = 'design_previews/'. date('Ymd') . '/' . Str::random(12) . '.' . $ext;
+        // default values
+        $now = Carbon::now()->toDateTimeString();
+
+        // 1) handle preview_src if it's a data URL
+        $previewStoredPath = null;
+        if (!empty($data['preview_src'])) {
+            $src = $data['preview_src'];
+            if (preg_match('/^data:image\/(\w+);base64,/', $src, $m)) {
+                $ext = strtolower($m[1]) === 'jpeg' ? 'jpg' : strtolower($m[1]);
+                $imageData = base64_decode(substr($src, strpos($src, ',') + 1));
+                if ($imageData !== false) {
+                    $filename = 'design_previews/' . date('Ymd') . '/' . Str::random(12) . '.' . $ext;
                     Storage::disk('public')->put($filename, $imageData);
-                    $previewUrl = Storage::url($filename); // /storage/design_previews/...
+                    $previewStoredPath = '/storage/' . $filename; // public URL prefix used in views
                 }
             } else {
-                // preview_src may already be a public URL
-                $previewUrl = $src;
+                // if already a URL, store it directly
+                $previewStoredPath = $src;
             }
         }
 
-        // 2) create design_orders row
-        $now = Carbon::now()->toDateTimeString();
-        $data = [
-            'shopify_order_id' => $validated['shopify_order_id'] ?? null,
-            'product_id' => $validated['product_id'] ?? null,
-            'shopify_product_id' => $validated['shopify_product_id'] ?? null,
-            'variant_id' => $validated['variant_id'] ?? null,
-            'name_text' => isset($validated['name']) ? strtoupper(trim($validated['name'])) : null,
-            'number_text' => isset($validated['number']) ? preg_replace('/\D+/', '', $validated['number']) : null,
-            'font' => $validated['font'] ?? null,
-            'color' => $validated['color'] ?? null,
-            'size' => $validated['size'] ?? null,
-            'quantity' => $validated['quantity'] ?? 1,
-            'preview_image' => $previewUrl,
-            'uploaded_logo_url' => $validated['uploaded_logo_url'] ?? null,
-            'players' => is_string($request->players) ? json_decode($request->players, true) : ($request->players ?? null),
-            'properties' => null,
-            'created_at' => $now,
-            'updated_at' => $now
+        // 2) prepare DB insert (match your columns)
+        $insert = [
+            'shopify_order_id'   => $data['shopify_order_id'] ?? null,
+            'shopify_line_item_id'=> null,
+            'product_id'         => $data['product_id'] ?? null,
+            'variant_id'         => $data['variant_id'] ?? null,
+            'customer_name'      => isset($data['name']) ? strtoupper(trim($data['name'])) : null,
+            'customer_number'    => isset($data['number']) ? preg_replace('/\D/','', $data['number']) : null,
+            'font'               => $data['font'] ?? null,
+            'color'              => $data['color'] ?? null,
+            'preview_src'        => $previewStoredPath,
+            'download_url'       => null,
+            'payload'            => json_encode($request->all()), // raw payload for debugging
+            'status'             => 'new',
+            'created_at'         => $now,
+            'updated_at'         => $now
         ];
 
-        $id = DB::table('design_orders')->insertGetId($data);
+        $designOrderId = DB::table('design_orders')->insertGetId($insert);
 
-        // 3) if players array present, also insert into team_players (one row per player)
-        try {
-            $players = $data['players'] ?? null;
-            if ($players && is_array($players)) {
-                foreach ($players as $p) {
-                    // Expect each player item: name, number, size, preview_image (optional)
-                    DB::table('team_players')->insert([
-                        'shopify_order_id' => $validated['shopify_order_id'] ?? null,
-                        'product_id' => $validated['product_id'] ?? null,
-                        'name' => $p['name'] ?? null,
-                        'number' => isset($p['number']) ? preg_replace('/\D+/', '', $p['number']) : null,
-                        'size' => $p['size'] ?? null,
-                        'font' => $p['font'] ?? $validated['font'] ?? null,
-                        'color' => $p['color'] ?? $validated['color'] ?? null,
-                        'preview_image' => $p['preview_image'] ?? $previewUrl ?? null,
-                        'created_at' => $now,
-                    ]);
+        // 3) if players sent as JSON array, insert into team_players table (if desired)
+        $players = $request->input('players');
+        if (!empty($players)) {
+            try {
+                $playersArr = is_string($players) ? json_decode($players, true) : $players;
+                if (is_array($playersArr)) {
+                    foreach ($playersArr as $p) {
+                        DB::table('team_players')->insert([
+                            'shopify_order_id' => $data['shopify_order_id'] ?? null,
+                            'product_id' => $data['product_id'] ?? null,
+                            'name' => $p['name'] ?? null,
+                            'number' => isset($p['number']) ? preg_replace('/\D/','',$p['number']) : null,
+                            'size' => $p['size'] ?? null,
+                            'font' => $p['font'] ?? $data['font'] ?? null,
+                            'color' => $p['color'] ?? $data['color'] ?? null,
+                            'preview_image' => $p['preview_image'] ?? $previewStoredPath ?? null,
+                            'created_at' => $now
+                        ]);
+                    }
                 }
+            } catch (\Exception $e) {
+                \Log::error('Team players insert error: '.$e->getMessage());
             }
-        } catch (\Exception $e) {
-            // don't break main save — just log error
-            \Log::error('Unable to save team players: ' . $e->getMessage());
         }
 
         return response()->json([
             'success' => true,
-            'order_id' => $id,
-            'preview_url' => $previewUrl,
+            'order_id' => $designOrderId,
+            'preview_url' => $previewStoredPath
         ]);
     }
 }
