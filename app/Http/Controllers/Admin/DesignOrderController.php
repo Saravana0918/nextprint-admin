@@ -12,46 +12,55 @@ class DesignOrderController extends Controller
      * Show all design orders (team player entries)
      */
     public function index()
-    {
-        // join with products table (if you have one) to get product name
-        // adjust table/column names based on your schema (products table, name/title columns)
-        $rows = DB::table('design_orders as d')
-            ->leftJoin('products as p', 'p.id', '=', 'd.product_id')
-            ->select([
+{
+    $rows = DB::table('design_orders as d')
+        ->leftJoin('products as p', 'p.id', '=', 'd.product_id')
+        ->select([
             'd.id',
             'd.shopify_order_id',
             'd.product_id',
-            // Use only the columns that really exist in your products table
-            DB::raw("p.name as product_name"),
+            DB::raw("p.name as product_name"),     // <- use p.name (exists in your table)
             DB::raw("d.name_text as name"),
             DB::raw("d.number_text as number"),
             'd.preview_image',
             'd.created_at'
         ])
-            ->orderBy('d.created_at', 'desc')
-            ->paginate(25);
+        ->orderBy('d.created_at', 'desc')
+        ->paginate(25);
 
-        return view('admin.design_orders.index', ['rows' => $rows]);
-    }
+    return view('admin.design_orders.index', ['rows' => $rows]);
+}
 
     /**
      * Show details for a specific order (all players under same shopify_order_id)
      */
     public function show($id)
-    {
-        // Find first record
-        $first = DB::table('team_players')->where('id', $id)->first();
+{
+    $order = DB::table('design_orders as d')
+        ->leftJoin('products as p', 'p.id', '=', 'd.product_id')
+        ->select([
+            'd.*',
+            DB::raw("p.name as product_name")
+        ])
+        ->where('d.id', $id)
+        ->first();
 
-        if (!$first) {
-            abort(404, 'Design order not found.');
-        }
-
-        // Fetch all players in same Shopify order
-        $players = DB::table('team_players')
-            ->where('shopify_order_id', $first->shopify_order_id)
-            ->orderBy('id', 'asc')
-            ->get();
-
-        return view('admin.design_orders.show', compact('first', 'players'));
+    if (!$order) {
+        abort(404, 'Design order not found');
     }
+
+    // load players linked by product_id or shopify_order_id (adjust as per your linking)
+    $players = DB::table('team_players')
+        ->where('product_id', $order->product_id)
+        ->where(function($q) use ($order) {
+            if (!empty($order->shopify_order_id)) {
+                $q->orWhere('shopify_order_id', $order->shopify_order_id);
+            }
+            $q->orWhere('created_at', '>=', now()->subDays(30)); // fallback - optional
+        })
+        ->orderBy('id')
+        ->get();
+
+    return view('admin.design_orders.show', compact('order', 'players'));
+}
 }
