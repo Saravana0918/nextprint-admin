@@ -188,7 +188,7 @@
         <div class="mb-2">
           <input id="np-qty" name="quantity" type="number" min="1" value="1" class="form-control">
         </div>
-
+        <button id="np-save-btn" type="button" class="btn btn-warning mb-2">Save Customization</button>
         <button id="np-atc-btn" type="submit" class="btn btn-primary">Add to Cart</button>
         <a href="#" class="btn btn-success" id="btn-add-team" style="margin-left:8px;">Add Team Players</a>
       </form>
@@ -309,6 +309,10 @@ const pvName  = $('np-prev-name'), pvNum = $('np-prev-num'), baseImg = $('np-bas
 const altNameEls = Array.from(document.querySelectorAll('#np-name')); // may include duplicate ids: select all
 const altNumEls  = Array.from(document.querySelectorAll('#np-num'));
   const btn = $('np-atc-btn'), form = $('np-atc-form'), addTeam = $('btn-add-team');
+  if (btn) {
+  btn.disabled = true;
+  btn.dataset.enabledAfterSave = 'false'; // flag for logic
+}
   const sizeEl = $('np-size');
   const layout = (typeof window.layoutSlots === 'object' && window.layoutSlots !== null) ? window.layoutSlots : {};
   const NAME_RE = /^[A-Za-z ]{1,12}$/, NUM_RE = /^\d{1,3}$/;
@@ -571,9 +575,121 @@ altNumEls.forEach(el => {
   window.addEventListener('orientationchange', ()=> setTimeout(applyLayout, 200));
   document.fonts?.ready.then(()=> setTimeout(applyLayout, 120));
 
+  // ---- Save customization handler ----
+const saveBtn = document.getElementById('np-save-btn');
+const designOrderHidden = document.getElementById('np-design-order-id');
+const uploadedLogoHidden = document.getElementById('np-uploaded-logo-url');
+
+async function enableAddToCartUI(designId, previewDataUrl, uploadedUrl) {
+  // store values in hidden inputs so backend add-to-cart gets them
+  if (designOrderHidden) designOrderHidden.value = designId || '';
+  if (previewHidden) previewHidden.value = previewDataUrl || '';
+  if (uploadedLogoHidden) uploadedLogoHidden.value = uploadedUrl || '';
+  if (btn) {
+    btn.disabled = false;
+    btn.dataset.enabledAfterSave = 'true';
+    btn.classList.remove('btn-secondary'); // optional cosmetic
+  }
+  if (saveBtn) {
+    saveBtn.textContent = 'Saved';
+    saveBtn.disabled = true;
+  }
+}
+
+async function saveCustomization() {
+  // validate before saving
+  syncHidden(); // ensure hidden fields are up-to-date
+  const name = (document.getElementById('np-name-hidden')?.value || '').trim();
+  const number = (document.getElementById('np-num-hidden')?.value || '').trim();
+  const size = (document.getElementById('np-size')?.value || '').trim();
+
+  if (!size) { alert('Please select a size before saving.'); return; }
+  if (!name || !/^[A-Za-z ]{1,12}$/.test(name)) { alert('Please enter a valid name (letters only).'); return; }
+  if (!number || !/^\d{1,3}$/.test(number)) { alert('Please enter a valid number.'); return; }
+
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving...'; }
+
+  // capture preview using html2canvas (best effort)
+  let previewDataUrl = '';
+  try {
+    const canvas = await html2canvas(stage, { useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1 });
+    previewDataUrl = canvas.toDataURL('image/png');
+    if (previewHidden) previewHidden.value = previewDataUrl;
+  } catch (err) {
+    console.warn('Preview capture failed', err);
+  }
+
+  // prepare payload (send preview and form metadata)
+  const payload = {
+    product_id: document.getElementById('np-product-id')?.value || '',
+    shopify_product_id: document.getElementById('np-shopify-product-id')?.value || '',
+    variant_id: document.getElementById('np-variant-id')?.value || '',
+    size: size,
+    quantity: document.getElementById('np-qty')?.value || '1',
+    name_text: document.getElementById('np-name-hidden')?.value || '',
+    number_text: document.getElementById('np-num-hidden')?.value || '',
+    font: document.getElementById('np-font-hidden')?.value || '',
+    color: document.getElementById('np-color-hidden')?.value || '',
+    uploaded_logo_url: document.getElementById('np-uploaded-logo-url')?.value || '',
+    preview_data: previewDataUrl || ''
+  };
+
+  // CSRF
+  const tokenMeta = document.querySelector('meta[name="csrf-token"]');
+  const csrf = tokenMeta ? tokenMeta.getAttribute('content') : '';
+
+  try {
+    const resp = await fetch('/design-order', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': csrf
+      },
+      credentials: 'same-origin',
+      body: JSON.stringify(payload)
+    });
+
+    const json = await resp.json().catch(()=>null);
+    if (resp.ok && json && (json.id || json.design_order_id)) {
+      const designId = json.id || json.design_order_id;
+      const publicPreview = json.preview_url || '';
+      const uploadedUrl = json.uploaded_logo_url || payload.uploaded_logo_url || '';
+      // enable add to cart and set hidden fields
+      enableAddToCartUI(designId, previewDataUrl || publicPreview, uploadedUrl);
+      alert('Customization saved successfully. You can now Add to Cart.');
+    } else {
+      console.error('Save response error', json);
+      alert('Could not save customization. Please try again.');
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Customization'; }
+    }
+  } catch (err) {
+    console.error('Save error', err);
+    alert('Network/server error saving customization.');
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save Customization'; }
+  }
+}
+
+if (saveBtn) {
+  saveBtn.addEventListener('click', function(e){
+    e.preventDefault();
+    saveCustomization();
+  });
+}
+
+
   // add to cart submit (keeps your original behavior)
   form?.addEventListener('submit', async function(evt){
-    evt.preventDefault();
+  evt.preventDefault();
+
+  // require customization to be saved before adding to cart
+  const designId = document.getElementById('np-design-order-id')?.value || '';
+  if (!designId) {
+    alert('Please click "Save Customization" before adding to cart.');
+    return;
+  }
+
+  const size = $('np-size')?.value || '';
+  if (!size) { alert('Please select a size.'); return; }
     const size = $('np-size')?.value || '';
     if (!size) { alert('Please select a size.'); return; }
     if (!NAME_RE.test(nameEl.value||'') || !NUM_RE.test(numEl.value||'')) { alert('Please enter valid Name and Number'); return; }
