@@ -168,6 +168,7 @@
         <input type="hidden" name="product_id" id="np-product-id" value="{{ $product->id ?? $product->local_id ?? '' }}">
         <input type="hidden" name="shopify_product_id" id="np-shopify-product-id" value="{{ $product->shopify_product_id ?? $product->shopify_id ?? '' }}">
         <input type="hidden" name="variant_id" id="np-variant-id" value="">
+        <input type="hidden" id="np-design-order-id" name="design_order_id" value="">
 
         @php
           $sizeOptions = [];
@@ -188,7 +189,7 @@
         <div class="mb-2">
           <input id="np-qty" name="quantity" type="number" min="1" value="1" class="form-control">
         </div>
-
+        <button id="np-save-btn" type="button" class="btn btn-warning mb-2">Save Customization</button>
         <button id="np-atc-btn" type="submit" class="btn btn-primary">Add to Cart</button>
         <a href="#" class="btn btn-success" id="btn-add-team" style="margin-left:8px;">Add Team Players</a>
       </form>
@@ -792,5 +793,132 @@ async function handleFile(file) {
 </script>
 
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script>
+/*
+  Save Customization button behaviour.
+  NOTE: This script assumes html2canvas is already loaded (place AFTER html2canvas script).
+  It does NOT change or disable the Add to Cart button — Add to Cart remains untouched.
+*/
+(function(){
+  const saveBtn = document.getElementById('np-save-btn');
+  if (!saveBtn) return;
+
+  const stage = document.getElementById('np-stage');
+  const previewHidden = document.getElementById('np-preview-hidden'); // existing hidden field
+  const designOrderHidden = document.getElementById('np-design-order-id');
+  const qtyEl = document.getElementById('np-qty');
+  const sizeEl = document.getElementById('np-size');
+
+  // find visible name/number inputs (works with your mobile/desktop duplicates)
+  function findVisible(id) {
+    try {
+      if (window.innerWidth <= 767) {
+        const m = document.querySelector('.mobile-only #' + id);
+        if (m) return m;
+      }
+      const d = document.querySelector('.desktop-only #' + id);
+      if (d) return d;
+    } catch(e){}
+    return document.getElementById(id);
+  }
+  const nameVisible = findVisible('np-name');
+  const numVisible = findVisible('np-num');
+
+  async function capturePreview() {
+    if (!stage || typeof html2canvas === 'undefined') return '';
+    try {
+      const canvas = await html2canvas(stage, { useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1 });
+      return canvas.toDataURL('image/png');
+    } catch (err) {
+      console.warn('html2canvas failed:', err);
+      return '';
+    }
+  }
+
+  async function saveCustomization() {
+    // ensure hidden fields are synchronized by triggering input/change events (your page listeners update hidden fields)
+    try {
+      if (nameVisible) nameVisible.dispatchEvent(new Event('input', { bubbles:true }));
+      if (numVisible) numVisible.dispatchEvent(new Event('input', { bubbles:true }));
+      if (sizeEl) sizeEl.dispatchEvent(new Event('change', { bubbles:true }));
+    } catch(e){ /* ignore */ }
+
+    // basic validation
+    const nameVal = (document.getElementById('np-name-hidden')?.value || '').trim();
+    const numVal  = (document.getElementById('np-num-hidden')?.value || '').trim();
+    const sizeVal = (sizeEl?.value || '').trim();
+    if (!sizeVal) { alert('Please select a size before saving.'); return; }
+
+    // optional: warn if both name & number empty
+    if (!nameVal && !numVal && !confirm('No name or number entered. Save anyway?')) return;
+
+    // UI feedback
+    saveBtn.disabled = true;
+    const prevText = saveBtn.textContent;
+    saveBtn.textContent = 'Saving...';
+
+    // capture preview
+    let previewData = '';
+    try { previewData = await capturePreview(); } catch(e){ previewData = ''; }
+
+    // payload — send same fields admin expects
+    const payload = {
+      product_id: document.getElementById('np-product-id')?.value || '',
+      shopify_product_id: document.getElementById('np-shopify-product-id')?.value || '',
+      variant_id: document.getElementById('np-variant-id')?.value || '',
+      size: sizeVal,
+      quantity: (qtyEl?.value || '1'),
+      name_text: document.getElementById('np-name-hidden')?.value || '',
+      number_text: document.getElementById('np-num-hidden')?.value || '',
+      font: document.getElementById('np-font-hidden')?.value || '',
+      color: document.getElementById('np-color-hidden')?.value || '',
+      uploaded_logo_url: document.getElementById('np-uploaded-logo-url')?.value || '',
+      preview_data: previewData // base64 PNG (optional). Server may also accept preview separately.
+    };
+
+    // CSRF token (blade provides it in meta)
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+    try {
+      const resp = await fetch('/design-order', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': csrf
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify(payload)
+      });
+
+      const json = await resp.json().catch(()=>null);
+      if (resp.ok && json && (json.id || json.design_order_id)) {
+        const id = json.id || json.design_order_id;
+        if (designOrderHidden) designOrderHidden.value = id;
+        // also keep preview hidden populated (Add to Cart uses np-preview-hidden)
+        if (previewHidden && previewData) previewHidden.value = previewData;
+
+        saveBtn.textContent = 'Saved';
+        alert('Customization saved successfully (ID: ' + id + '). It will appear in Design Orders in admin.');
+      } else {
+        console.error('Save failed: ', json);
+        alert('Save failed. Check server logs or console.');
+        saveBtn.disabled = false;
+        saveBtn.textContent = prevText;
+      }
+    } catch (err) {
+      console.error('Network error saving customization', err);
+      alert('Network error while saving customization.');
+      saveBtn.disabled = false;
+      saveBtn.textContent = prevText;
+    }
+  }
+
+  saveBtn.addEventListener('click', function(e){
+    e.preventDefault();
+    saveCustomization();
+  });
+})();
+</script>
+
 </body>
 </html>
