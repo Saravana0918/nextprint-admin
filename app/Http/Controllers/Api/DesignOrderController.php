@@ -35,7 +35,7 @@ class DesignOrderController extends Controller
         $now = Carbon::now()->toDateTimeString();
         $previewStoredPath = null;
 
-        // handle data:image base64
+        // handle base64 preview_src if sent
         if (!empty($v['preview_src'])) {
             $src = $v['preview_src'];
             if (preg_match('/^data:image\/(\w+);base64,/', $src, $m)) {
@@ -43,37 +43,33 @@ class DesignOrderController extends Controller
                 $imageData = base64_decode(substr($src, strpos($src, ',') + 1));
                 if ($imageData !== false) {
                     $filename = 'design_previews/' . date('Ymd') . '/' . Str::random(12) . '.' . $ext;
-                    try {
-                        Storage::disk('public')->put($filename, $imageData);
-                        $previewStoredPath = '/storage/' . $filename;
-                    } catch (Exception $e) {
-                        Log::error('Preview save failed: ' . $e->getMessage());
-                        $previewStoredPath = null;
-                    }
+                    Storage::disk('public')->put($filename, $imageData);
+                    $previewStoredPath = '/storage/' . $filename;
                 }
             } else {
-                // already a URL
                 $previewStoredPath = $src;
             }
         }
 
         // prepare insert (matching your columns)
+        // ✅ Fixed insert array matching your actual table columns
         $insert = [
-            'shopify_order_id'    => $v['shopify_order_id'] ?? null,
-            'shopify_line_item_id'=> null,
-            'product_id'          => $v['product_id'] ?? null,
-            'variant_id'          => $v['variant_id'] ?? null,
-            'customer_name'       => isset($v['name']) ? strtoupper(trim($v['name'])) : null,
-            'customer_number'     => isset($v['number']) ? preg_replace('/\D/','', $v['number']) : null,
-            'font'                => $v['font'] ?? null,
-            'color'               => $v['color'] ?? null,
-            'preview_src'         => $previewStoredPath,
-            'download_url'        => null,
-            'payload'             => json_encode($request->all()),
-            'status'              => 'new',
-            'created_at'          => $now,
-            'updated_at'          => $now
+            'product_id'         => $v['product_id'] ?? null,
+            'shopify_product_id' => $v['shopify_product_id'] ?? null,
+            'variant_id'         => $v['variant_id'] ?? null,
+            'size'               => $v['size'] ?? null,
+            'quantity'           => $v['quantity'] ?? 1,
+            'name_text'          => isset($v['name']) ? strtoupper(trim($v['name'])) : null,
+            'number_text'        => isset($v['number']) ? preg_replace('/\D/', '', $v['number']) : null,
+            'font'               => $v['font'] ?? null,
+            'color'              => $v['color'] ?? null,
+            'uploaded_logo_url'  => $v['uploaded_logo_url'] ?? null,
+            'preview_src'        => $previewStoredPath ?? $v['preview_src'] ?? null,
+            'raw_payload'        => json_encode($request->all()),
+            'created_at'         => $now,
+            'updated_at'         => $now
         ];
+
 
         try {
             $designOrderId = DB::table('design_orders')->insertGetId($insert);
