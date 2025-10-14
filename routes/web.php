@@ -16,7 +16,7 @@ use App\Http\Controllers\PublicDesignerController;
 use App\Http\Controllers\TeamController;
 use App\Http\Controllers\ProductPreviewController;
 use App\Http\Controllers\Admin\AdminAuthController;
-use App\Http\Controllers\Api\DesignOrderController;
+
 
 /*
 | Webhooks (CSRF-exempt) - ensure /webhooks/shopify is added to VerifyCsrfToken::$except
@@ -71,7 +71,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
     Route::delete('products/{product}/preview', [ProductPreviewController::class, 'destroy'])
          ->name('products.preview.delete');
     // Design orders (admin group already prefixes 'admin.' and '/admin')
-    Route::post('/design-order', [DesignOrderController::class, 'store'])->name('design.order.store');
+    Route::get('/design-orders', [\App\Http\Controllers\Admin\DesignOrderController::class, 'index'])
+        ->name('design-orders.index');
 
     Route::get('/design-orders/{id}', [\App\Http\Controllers\Admin\DesignOrderController::class, 'show'])
         ->name('design-orders.show');
