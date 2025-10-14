@@ -69,8 +69,13 @@ Route::prefix('admin')->name('admin.')->group(function () {
     // delete preview (DELETE)
     Route::delete('products/{product}/preview', [ProductPreviewController::class, 'destroy'])
          ->name('products.preview.delete');
-    Route::get('/admin/design-orders', [\App\Http\Controllers\Admin\DesignOrderController::class,'index'])->name('admin.design-orders.index');
-    Route::get('/admin/design-orders/{id}', [\App\Http\Controllers\Admin\DesignOrderController::class,'show'])->name('admin.design-orders.show');
+    // Design orders (admin group already prefixes 'admin.' and '/admin')
+    Route::get('/design-orders', [\App\Http\Controllers\Admin\DesignOrderController::class, 'index'])
+        ->name('design-orders.index');
+
+    Route::get('/design-orders/{id}', [\App\Http\Controllers\Admin\DesignOrderController::class, 'show'])
+        ->name('design-orders.show');
+
 }); // end admin
 
 Route::get('/admin/login', [AdminAuthController::class, 'showLoginForm'])->name('admin.login');
