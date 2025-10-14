@@ -8,13 +8,15 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
+use Exception;
+use Log;
 
 class DesignOrderController extends Controller
 {
     public function store(Request $request)
     {
-        // validate inputs (lenient so frontend won't fail)
-        $data = $request->validate([
+        // basic validation (lenient)
+        $v = $request->validate([
             'product_id' => 'nullable|integer',
             'shopify_product_id' => 'nullable|string',
             'variant_id' => 'nullable|string',
@@ -30,48 +32,57 @@ class DesignOrderController extends Controller
             'shopify_order_id' => 'nullable|string'
         ]);
 
-        // default values
         $now = Carbon::now()->toDateTimeString();
-
-        // 1) handle preview_src if it's a data URL
         $previewStoredPath = null;
-        if (!empty($data['preview_src'])) {
-            $src = $data['preview_src'];
+
+        // handle data:image base64
+        if (!empty($v['preview_src'])) {
+            $src = $v['preview_src'];
             if (preg_match('/^data:image\/(\w+);base64,/', $src, $m)) {
                 $ext = strtolower($m[1]) === 'jpeg' ? 'jpg' : strtolower($m[1]);
                 $imageData = base64_decode(substr($src, strpos($src, ',') + 1));
                 if ($imageData !== false) {
                     $filename = 'design_previews/' . date('Ymd') . '/' . Str::random(12) . '.' . $ext;
-                    Storage::disk('public')->put($filename, $imageData);
-                    $previewStoredPath = '/storage/' . $filename; // public URL prefix used in views
+                    try {
+                        Storage::disk('public')->put($filename, $imageData);
+                        $previewStoredPath = '/storage/' . $filename;
+                    } catch (Exception $e) {
+                        Log::error('Preview save failed: ' . $e->getMessage());
+                        $previewStoredPath = null;
+                    }
                 }
             } else {
-                // if already a URL, store it directly
+                // already a URL
                 $previewStoredPath = $src;
             }
         }
 
-        // 2) prepare DB insert (match your columns)
+        // prepare insert (matching your columns)
         $insert = [
-            'shopify_order_id'   => $data['shopify_order_id'] ?? null,
+            'shopify_order_id'    => $v['shopify_order_id'] ?? null,
             'shopify_line_item_id'=> null,
-            'product_id'         => $data['product_id'] ?? null,
-            'variant_id'         => $data['variant_id'] ?? null,
-            'customer_name'      => isset($data['name']) ? strtoupper(trim($data['name'])) : null,
-            'customer_number'    => isset($data['number']) ? preg_replace('/\D/','', $data['number']) : null,
-            'font'               => $data['font'] ?? null,
-            'color'              => $data['color'] ?? null,
-            'preview_src'        => $previewStoredPath,
-            'download_url'       => null,
-            'payload'            => json_encode($request->all()), // raw payload for debugging
-            'status'             => 'new',
-            'created_at'         => $now,
-            'updated_at'         => $now
+            'product_id'          => $v['product_id'] ?? null,
+            'variant_id'          => $v['variant_id'] ?? null,
+            'customer_name'       => isset($v['name']) ? strtoupper(trim($v['name'])) : null,
+            'customer_number'     => isset($v['number']) ? preg_replace('/\D/','', $v['number']) : null,
+            'font'                => $v['font'] ?? null,
+            'color'               => $v['color'] ?? null,
+            'preview_src'         => $previewStoredPath,
+            'download_url'        => null,
+            'payload'             => json_encode($request->all()),
+            'status'              => 'new',
+            'created_at'          => $now,
+            'updated_at'          => $now
         ];
 
-        $designOrderId = DB::table('design_orders')->insertGetId($insert);
+        try {
+            $designOrderId = DB::table('design_orders')->insertGetId($insert);
+        } catch (Exception $e) {
+            Log::error('Design order insert failed: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'DB insert failed'], 500);
+        }
 
-        // 3) if players sent as JSON array, insert into team_players table (if desired)
+        // optional: insert team players (if provided)
         $players = $request->input('players');
         if (!empty($players)) {
             try {
@@ -79,20 +90,20 @@ class DesignOrderController extends Controller
                 if (is_array($playersArr)) {
                     foreach ($playersArr as $p) {
                         DB::table('team_players')->insert([
-                            'shopify_order_id' => $data['shopify_order_id'] ?? null,
-                            'product_id' => $data['product_id'] ?? null,
+                            'shopify_order_id' => $v['shopify_order_id'] ?? null,
+                            'product_id' => $v['product_id'] ?? null,
                             'name' => $p['name'] ?? null,
                             'number' => isset($p['number']) ? preg_replace('/\D/','',$p['number']) : null,
                             'size' => $p['size'] ?? null,
-                            'font' => $p['font'] ?? $data['font'] ?? null,
-                            'color' => $p['color'] ?? $data['color'] ?? null,
+                            'font' => $p['font'] ?? $v['font'] ?? null,
+                            'color' => $p['color'] ?? $v['color'] ?? null,
                             'preview_image' => $p['preview_image'] ?? $previewStoredPath ?? null,
                             'created_at' => $now
                         ]);
                     }
                 }
-            } catch (\Exception $e) {
-                \Log::error('Team players insert error: '.$e->getMessage());
+            } catch (Exception $e) {
+                Log::error('Players insert error: ' . $e->getMessage());
             }
         }
 
