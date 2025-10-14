@@ -230,74 +230,6 @@
   console.info('showUpload:', window.showUpload, 'hasArtworkSlot:', window.hasArtworkSlot);
 </script>
 <script>
-(async function(){
-  const btn = document.getElementById('save-design-btn'); // ensure this id exists
-  if (!btn) return;
-
-  btn.addEventListener('click', async function(e){
-    e.preventDefault();
-    btn.disabled = true;
-    btn.textContent = 'Saving...';
-
-    // basic selectors from your page - adjust if yours differ
-    const name = document.getElementById('np-name')?.value || null;
-    const number = document.getElementById('np-num')?.value || null;
-    const font = document.querySelector('select[name="font"]')?.value || document.querySelector('select')?.value || null;
-    const size = document.querySelector('select[name="size"]')?.value || null;
-    const qty = document.querySelector('input[name="quantity"]')?.value || document.querySelector('input[type="number"]')?.value || 1;
-
-    // preview image: adjust selector to match your preview <img> or canvas
-    const previewImg = document.querySelector('.preview-img') || document.querySelector('#designer-preview img');
-    const preview_src = previewImg ? previewImg.src : null;
-
-    const payload = {
-      product_id: parseInt(new URL(location.href).searchParams.get('product_id')) || null,
-      shopify_product_id: new URL(location.href).searchParams.get('view_id') || null,
-      name: name,
-      number: number,
-      font: font,
-      color: document.querySelector('input[type="color"]')?.value || null,
-      size: size,
-      quantity: parseInt(qty) || 1,
-      preview_src: preview_src
-    };
-
-    try {
-      const res = await fetch('{{ route("admin.design.order.store") }}', {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-        },
-        body: JSON.stringify(payload)
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        console.error('Save failed', data);
-        alert('Save failed: ' + (data.message || res.status));
-        btn.disabled = false;
-        btn.textContent = 'Add to Cart';
-        return;
-      }
-
-      alert('Saved! Order ID: ' + (data.order_id || '—'));
-      // optional: redirect to admin list
-      // window.location.href = '{{ url("/admin/design-orders") }}';
-      btn.disabled = false;
-      btn.textContent = 'Add to Cart';
-    } catch (err) {
-      console.error(err);
-      alert('Save failed, check console.');
-      btn.disabled = false;
-      btn.textContent = 'Add to Cart';
-    }
-  });
-})();
-</script>
-<script>
 /* MUST be placed before any code that calls findPreferredSlot() */
 window.findPreferredSlot = function(){
   try {
@@ -341,6 +273,154 @@ window.findPreferredSlot = function(){
     return null;
   }
 };
+async function composePreviewDataURL(options = {}) {
+
+
+const img = new Image();
+img.crossOrigin = 'anonymous';
+img.src = baseSrc;
+
+
+await new Promise(resolve => {
+if (img.complete && img.naturalWidth) return resolve();
+img.onload = () => resolve();
+img.onerror = () => resolve();
+});
+
+
+const canvas = document.createElement('canvas');
+canvas.width = canvasW;
+canvas.height = canvasH;
+const ctx = canvas.getContext('2d');
+ctx.fillStyle = '#ffffff';
+ctx.fillRect(0,0,canvasW,canvasH);
+
+
+// draw base image centered and fit
+const imgW = img.naturalWidth || canvasW;
+const imgH = img.naturalHeight || canvasH;
+const imgRatio = imgW / imgH;
+let drawW = canvasW, drawH = canvasH;
+if (imgRatio > canvasW / canvasH) { drawW = canvasW; drawH = Math.round(canvasW / imgRatio); }
+else { drawH = canvasH; drawW = Math.round(canvasH * imgRatio); }
+const dx = Math.round((canvasW - drawW) / 2);
+const dy = Math.round((canvasH - drawH) / 2);
+try { ctx.drawImage(img, dx, dy, drawW, drawH); } catch(e) { console.warn('drawImage failed', e); }
+
+
+// choose font family mapping
+const fontMap = { bebas: 'Bebas Neue, Arial', anton: 'Anton, Arial', oswald: 'Oswald, Arial', impact: 'Impact, Arial' };
+const fontFamily = fontMap[fontKey] || fontMap.bebas;
+
+
+// draw name (upper back area) - tweak positions if needed
+if (name) {
+const nameFontSize = Math.round(canvasW * 0.06);
+ctx.font = `${nameFontSize}px ${fontFamily}`;
+ctx.fillStyle = color;
+ctx.textAlign = 'center';
+ctx.textBaseline = 'middle';
+const nameX = Math.round(canvasW * 0.72);
+const nameY = Math.round(canvasH * 0.38);
+ctx.lineWidth = Math.max(2, Math.round(nameFontSize * 0.08));
+ctx.strokeStyle = '#000';
+ctx.strokeText(name, nameX, nameY);
+ctx.fillText(name, nameX, nameY);
+}
+
+
+// draw number (lower back area)
+if (number) {
+const numFontSize = Math.round(canvasW * 0.1);
+ctx.font = `bold ${numFontSize}px ${fontFamily}`;
+ctx.fillStyle = color;
+ctx.textAlign = 'center';
+ctx.textBaseline = 'middle';
+const numX = Math.round(canvasW * 0.72);
+const numY = Math.round(canvasH * 0.57);
+ctx.lineWidth = Math.max(3, Math.round(numFontSize * 0.08));
+ctx.strokeStyle = '#000';
+ctx.strokeText(number, numX, numY);
+ctx.fillText(number, numX, numY);
+}
+
+
+return canvas.toDataURL('image/png', 0.92);
+}
+(async function(){
+const name = document.getElementById('np-name')?.value || null;
+const number = document.getElementById('np-num')?.value || null;
+const font = document.getElementById('np-font')?.value || null;
+const size = document.getElementById('np-size')?.value || null;
+const qty = parseInt(document.getElementById('np-qty')?.value || '1', 10) || 1;
+const color = document.getElementById('np-color')?.value || null;
+
+
+// compose preview from stage (canvas dataURL)
+let preview_src = null;
+try {
+preview_src = await composePreviewDataURL({ width: 1200, height: 900 });
+} catch (err) {
+console.warn('composePreviewDataURL failed', err);
+}
+
+
+// fallback: try to read base img src if compose failed
+if (!preview_src) {
+const base = document.getElementById('np-base');
+preview_src = base ? base.src : null;
+}
+
+
+const payload = {
+product_id: parseInt(document.getElementById('np-product-id')?.value) || null,
+shopify_product_id: document.getElementById('np-shopify-product-id')?.value || null,
+name: name,
+number: number,
+font: font,
+color: color,
+size: size,
+quantity: qty,
+preview_src: preview_src
+};
+
+
+try {
+const res = await fetch('{{ route("admin.design.order.store") }}', {
+method: 'POST',
+headers: {
+'Accept': 'application/json',
+'Content-Type': 'application/json',
+'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+},
+body: JSON.stringify(payload)
+});
+
+
+const data = await res.json();
+if (!res.ok) {
+console.error('Save failed', data);
+alert('Save failed: ' + (data.message || res.status));
+btn.disabled = false;
+btn.textContent = 'Save Design (Save)';
+return;
+}
+
+
+alert('Saved! Order ID: ' + (data.order_id || '—'));
+// optionally redirect to admin list
+// window.location.href = '{{ url("/admin/design-orders") }}';
+
+
+} catch (err) {
+console.error(err);
+alert('Save failed, check console.');
+} finally {
+btn.disabled = false;
+btn.textContent = 'Save Design (Save)';
+}
+});
+
 </script>
 
 
