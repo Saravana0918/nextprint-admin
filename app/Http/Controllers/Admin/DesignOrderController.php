@@ -18,16 +18,16 @@ class DesignOrderController extends Controller
         $rows = DB::table('design_orders as d')
             ->leftJoin('products as p', 'p.id', '=', 'd.product_id')
             ->select([
-                'd.id',
-                'd.shopify_order_id',
-                'd.product_id',
-                DB::raw("COALESCE(p.name, p.title, '') as product_name"),
-                // alias DB columns to match blade: 'name' and 'number'
-                DB::raw("d.name_text as name"),
-                DB::raw("d.number_text as number"),
-                'd.preview_image',
-                'd.created_at'
-            ])
+            'd.id',
+            'd.shopify_order_id',
+            'd.product_id',
+            // Use only the columns that really exist in your products table
+            DB::raw("p.name as product_name"),
+            DB::raw("d.name_text as name"),
+            DB::raw("d.number_text as number"),
+            'd.preview_image',
+            'd.created_at'
+        ])
             ->orderBy('d.created_at', 'desc')
             ->paginate(25);
 
