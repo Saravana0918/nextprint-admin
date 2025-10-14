@@ -6,48 +6,68 @@ use Illuminate\Http\Request;
 use App\Models\DesignOrder;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class DesignOrderController extends Controller
 {
     public function store(Request $request)
     {
-        // basic validation (adjust rules as needed)
-        $data = $request->validate([
-            'shopify_order_id'  => 'nullable|string',
-            'line_item_id'      => 'nullable|string',
-            'product_id'        => 'nullable|string',
-            'variant_id'        => 'nullable|string',
-            'download_url'      => 'nullable|url',
-            'name'              => 'nullable|string|max:120',
-            'number'            => 'nullable|string|max:10',
-            'font'              => 'nullable|string|max:50',
-            'color'             => 'nullable|string|max:20',
-            'preview_src'       => 'nullable|string', // public URL or /storage/.. path
-            'payload'           => 'nullable|array',
-            'status'            => 'nullable|string',
+        $data = $request->all();
+
+        // Simple validation-ish
+        if (!empty($data['players']) && is_array($data['players'])) {
+            $createdIds = [];
+
+            foreach ($data['players'] as $p) {
+                // sanitize fields
+                $name = Arr::get($p, 'name') ? substr(trim(Arr::get($p, 'name')), 0, 64) : null;
+                $number = Arr::get($p, 'number') ? substr(preg_replace('/\D+/', '', Arr::get($p, 'number')), 0, 6) : null;
+                $font = Arr::get($p, 'font') ?? Arr::get($data, 'prefill_font') ?? null;
+                $color = Arr::get($p, 'color') ?? Arr::get($data, 'prefill_color') ?? null;
+                $variantId = Arr::get($p, 'variant_id') ?? null;
+
+                $order = new DesignOrder();
+                $order->shopify_order_id = Arr::get($data, 'shopify_order_id') ?? null;
+                $order->shopify_line_item_id = Arr::get($data, 'shopify_line_item_id') ?? null;
+                $order->product_id = Arr::get($data, 'product_id') ?? null;
+                $order->variant_id = $variantId;
+                $order->customer_name = $name;
+                $order->customer_number = $number;
+                $order->font = $font;
+                $order->color = $color;
+                $order->preview_src = Arr::get($data, 'preview_src') ?? null;
+                $order->download_url = Arr::get($data, 'download_url') ?? null;
+                $order->payload = $data; // store full payload for debugging / retrieval
+                $order->status = 'new';
+                $order->save();
+
+                $createdIds[] = $order->id;
+            }
+
+            return response()->json(['success'=>true, 'order_ids'=>$createdIds], 201);
+        }
+
+        // fallback for single (older) format. Keep compatibility
+        // read single fields
+        $shopifyOrderId = Arr::get($data, 'order_id') ?? Arr::get($data, 'shopify_order_id') ?? null;
+        $name = Arr::get($data, 'name') ?? Arr::get($data, 'customer_name') ?? null;
+        $number = Arr::get($data, 'number') ?? Arr::get($data, 'customer_number') ?? null;
+
+        $order = DesignOrder::create([
+            'shopify_order_id' => $shopifyOrderId,
+            'shopify_line_item_id' => Arr::get($data, 'line_item_id') ?? null,
+            'product_id' => Arr::get($data, 'product_id') ?? null,
+            'variant_id' => Arr::get($data, 'variant_id') ?? null,
+            'customer_name' => $name,
+            'customer_number' => $number,
+            'font' => Arr::get($data, 'font') ?? null,
+            'color' => Arr::get($data, 'color') ?? null,
+            'preview_src' => Arr::get($data, 'preview_src') ?? null,
+            'download_url' => Arr::get($data, 'download_url') ?? null,
+            'payload' => $data,
+            'status' => 'new'
         ]);
 
-        // create record
-        try {
-            $order = DesignOrder::create([
-                'shopify_order_id' => $data['shopify_order_id'] ?? null,
-                'shopify_line_item_id' => $data['line_item_id'] ?? null,
-                'product_id'       => $data['product_id'] ?? null,
-                'variant_id'       => $data['variant_id'] ?? null,
-                'download_url'     => $data['download_url'] ?? null,
-                'customer_name'    => $data['name'] ?? null,
-                'customer_number'  => $data['number'] ?? null,
-                'font'             => $data['font'] ?? null,
-                'color'            => $data['color'] ?? null,
-                'preview_src'      => $data['preview_src'] ?? null,
-                'payload'          => $data['payload'] ?? null,
-                'status'           => $data['status'] ?? 'new',
-            ]);
-
-            return response()->json(['success'=>true,'order_id'=>$order->id], 201);
-        } catch (\Throwable $e) {
-            Log::error('DesignOrder store failed: '.$e->getMessage(), ['data'=>$data]);
-            return response()->json(['success'=>false,'message'=>'Save failed'], 500);
-        }
+        return response()->json(['success'=>true, 'order_id'=>$order->id], 201);
     }
 }

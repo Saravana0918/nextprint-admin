@@ -198,6 +198,12 @@
 
         <div class="mb-3">
           <button type="button" id="btn-add-row" class="btn btn-primary">ADD NEW</button>
+
+          <!-- Save All button -->
+          <button type="button" id="btn-save-all" class="btn btn-info">
+            Save All
+          </button>
+
           <button type="submit" class="btn btn-success">Add To Cart</button>
           <a href="{{ url()->previous() }}" class="btn btn-secondary">Back</a>
         </div>
@@ -265,6 +271,7 @@ document.addEventListener('DOMContentLoaded', function() {
   const tpl = document.getElementById('player-row-template');
   const addBtn = document.getElementById('btn-add-row');
   const form = document.getElementById('team-form');
+  const saveAllBtn = document.getElementById('btn-save-all');
 
   const stageEl = document.getElementById('player-stage');
   const imgEl = document.getElementById('player-base');
@@ -608,6 +615,104 @@ document.addEventListener('DOMContentLoaded', function() {
     } catch(err) {
       console.error(err);
       alert('Network/server error. Check console.');
+    }
+  });
+
+   async function collectPlayersForSave() {
+    const rows = list.querySelectorAll('.player-row');
+    const players = [];
+    rows.forEach(r => {
+      const name = (r.querySelector('.player-name')?.value || '').toString().toUpperCase().slice(0,12);
+      const number = (r.querySelector('.player-number')?.value || '').replace(/\D/g,'').slice(0,3);
+      const size = (r.querySelector('.player-size')?.value || '').toString();
+      const font = (r.querySelector('.player-font')?.value || '') || (window.prefill?.prefill_font || '');
+      const color = (r.querySelector('.player-color')?.value || '') || (window.prefill?.prefill_color || '');
+      if (!name && !number) return;
+      let variantId = '';
+      try {
+        variantId = window.variantMap ? (window.variantMap[size] || window.variantMap[size.toUpperCase()] || window.variantMap[size.toLowerCase()] || '') : '';
+      } catch (e) { variantId = ''; }
+
+      players.push({
+        name: name,
+        number: number,
+        size: size,
+        font: font,
+        color: color,
+        variant_id: variantId
+      });
+    });
+    return players;
+  }
+
+  saveAllBtn.addEventListener('click', async function(e) {
+    e.preventDefault();
+    // simple UI feedback
+    saveAllBtn.disabled = true;
+    const origText = saveAllBtn.textContent;
+    saveAllBtn.textContent = 'Saving...';
+
+    try {
+      const players = await collectPlayersForSave();
+      if (!players.length) {
+        alert('Add at least one player to save.');
+        saveAllBtn.disabled = false;
+        saveAllBtn.textContent = origText;
+        return;
+      }
+
+      // gather metadata from page
+      const productId = form.querySelector('input[name="product_id"]')?.value || null;
+      const shopifyProductId = form.querySelector('input[name="shopify_product_id"]')?.value || null;
+      // preview_src: use current preview image src (player-base)
+      const previewImg = document.getElementById('player-base');
+      const previewSrc = (previewImg && previewImg.getAttribute('src')) ? previewImg.getAttribute('src') : '';
+
+      // build payload similar to designer save
+      const payload = {
+        product_id: productId,
+        shopify_product_id: shopifyProductId,
+        players: players,
+        prefill_font: window.prefill?.prefill_font || window.prefill?.font || '',
+        prefill_color: window.prefill?.prefill_color || window.prefill?.color || '',
+        preview_src: previewSrc,
+        team_logo_url: hiddenTeamLogo?.value || ''
+      };
+
+      const token = document.querySelector('input[name="_token"]')?.value || '';
+
+      const resp = await fetch('/design-order', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-CSRF-TOKEN': token
+        },
+        body: JSON.stringify(payload),
+        credentials: 'same-origin'
+      });
+
+      const json = await resp.json().catch(()=>null);
+      if (!resp.ok) {
+        alert((json && (json.message || json.error)) || 'Save failed');
+      } else {
+        // success — server should return order_ids array or order_id for single
+        if (json.order_ids && Array.isArray(json.order_ids)) {
+          alert('Saved. Orders created: ' + json.order_ids.join(', '));
+          // redirect to admin design orders index (optional)
+          // window.location.href = '/admin/design-orders';
+        } else if (json.order_id) {
+          alert('Saved. Order id: ' + json.order_id);
+        } else {
+          alert('Saved.');
+        }
+      }
+    } catch(err) {
+      console.error(err);
+      alert('Network/server error. See console.');
+    } finally {
+      saveAllBtn.disabled = false;
+      saveAllBtn.textContent = origText;
     }
   });
 
