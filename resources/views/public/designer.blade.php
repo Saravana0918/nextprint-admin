@@ -13,13 +13,12 @@
     .font-anton{font-family:'Anton', Impact, 'Arial Black', sans-serif;}
     .font-oswald{font-family:'Oswald', Arial, sans-serif;}
     .font-impact{font-family:Impact, 'Arial Black', sans-serif;}
-    .np-stage { position: relative; width: 100%; max-width: 534px; margin: 0 auto; border-radius:8px; padding:8px; box-sizing: border-box; overflow: visible; }
+    .np-stage { position: relative; width: 100%; max-width: 534px; margin: 0 auto; border-radius:8px; padding:8px; box-sizing: border-box; overflow: visible; background:#eee; }
     .np-stage img { width:100%; height:auto; border-radius:6px; display:block; }
     .np-mask { position:absolute; pointer-events:none; z-index:40; transform-origin:center center; image-rendering:optimizeQuality; }
     .np-overlay { position: absolute; color: #D4AF37; font-weight: 700; text-transform: uppercase;
       letter-spacing: 1.5px; text-align: center; text-shadow: 0 3px 10px rgba(0,0,0,0.65);  pointer-events: none; white-space: nowrap; line-height: 1; transform-origin: center center;
-      z-index: 9999; }
-    .np-overlay::before, .np-overlay::after { content: none; }
+      z-index: 9999; padding: 0 6px; }
     .np-swatch { width:28px; height:28px; border-radius:50%; border:1px solid #ccc; cursor:pointer; display:inline-block; }
     .np-swatch.active { outline: 2px solid rgba(0,0,0,0.08); box-shadow: 0 2px 6px rgba(0,0,0,0.06); }
 
@@ -45,18 +44,16 @@
     @media (min-width: 768px) { .vt-icons { display: none !important; } }
     input:focus, select:focus { outline: 3px solid rgba(13,110,253,0.12); }
     @media (max-width: 767px) {
-  .np-input-group { display: flex; flex-direction: column; align-items: center; font-family: 'Arial', sans-serif; padding: 6px 12px; margin-bottom: 20px; }
- .np-field { position: relative; width: 86%; max-width: 360px; min-width: 200px; }
- .np-input { width: 100%; background: transparent;  border: none; border-bottom: 2px solid #fff; color: #fff; text-align: center; font-size: 20px; font-weight: 800; outline: none; padding: 8px 0 12px 0;
-    text-transform: uppercase; letter-spacing: 1px; } .np-input::placeholder { color: #fff;
-    opacity: 1; }
-  .np-max { position: absolute; right: 2px; bottom: -18px; font-size: 10px; color: #fff; opacity: 0.9;
-    font-weight: 700; letter-spacing: 0.4px; }
-  #np-num {-webkit-appearance: none; appearance: none;}
-  .np-field:nth-child(2) .np-input { font-size: 28px; letter-spacing: 0; }
-  .mobile-only { display: block; }
-  .desktop-only { display: none; }
-}
+      .np-input-group { display: flex; flex-direction: column; align-items: center; font-family: 'Arial', sans-serif; padding: 6px 12px; margin-bottom: 20px; }
+      .np-field { position: relative; width: 86%; max-width: 360px; min-width: 200px; }
+      .np-input { width: 100%; background: transparent;  border: none; border-bottom: 2px solid #fff; color: #fff; text-align: center; font-size: 20px; font-weight: 800; outline: none; padding: 8px 0 12px 0;
+        text-transform: uppercase; letter-spacing: 1px; } .np-input::placeholder { color: #fff; opacity: 1; }
+      .np-max { position: absolute; right: 2px; bottom: -18px; font-size: 10px; color: #fff; opacity: 0.9; font-weight: 700; letter-spacing: 0.4px; }
+      #np-num {-webkit-appearance: none; appearance: none;}
+      .np-field:nth-child(2) .np-input { font-size: 28px; letter-spacing: 0; }
+      .mobile-only { display: block; }
+      .desktop-only { display: none; }
+    }
   </style>
 </head>
 <body class="body-padding">
@@ -76,8 +73,6 @@
           $slotsForJs[$k] = array_merge($slot, ['mask' => $mask ?? null]);
       }
   }
-
-  // originalLayoutSlots may be present (controller passes full set). Normalize similarly.
   $originalSlotsForJs = [];
   if (!empty($originalLayoutSlots) && is_array($originalLayoutSlots)) {
       foreach ($originalLayoutSlots as $k => $s) {
@@ -105,34 +100,32 @@
     </div>
 
     <div class="col-md-3 np-col order-2 order-md-1" id="np-controls">
-      <!-- Desktop inputs (your original markup) -->
-        <div class="desktop-only">
-          <!-- keep your existing desktop inputs here -->
-          <input id="np-name" type="text" maxlength="12" class="form-control mb-2 text-center" placeholder="YOUR NAME">
-          <input id="np-num"  type="text" maxlength="3" inputmode="numeric" class="form-control mb-2 text-center" placeholder="09">
-          <!-- other desktop-only elements (font picker, color dots, etc.) -->
-        </div>
+      <div class="desktop-only mb-2">
+        <input id="np-name" type="text" maxlength="12" class="form-control mb-2 text-center" placeholder="YOUR NAME">
+        <input id="np-num"  type="text" maxlength="3" inputmode="numeric" class="form-control mb-2 text-center" placeholder="09">
+      </div>
 
-        <!-- Mobile inputs (what you added) -->
-        <div class="mobile-only">
-          <div class="np-input-group">
-            <div class="np-field">
-              <input id="np-name" type="text" maxlength="11" class="np-input" placeholder="YOUR NAME">
-              <span class="np-max">MAX. 11</span>
-            </div>
+      <div class="mobile-only">
+        <div class="np-input-group">
+          <div class="np-field">
+            <input id="np-name-mobile" type="text" maxlength="11" class="np-input" placeholder="YOUR NAME">
+            <span class="np-max">MAX. 11</span>
+          </div>
 
-            <div class="np-field">
-              <input id="np-num" type="text" maxlength="2" inputmode="numeric" class="np-input" placeholder="09">
-              <span class="np-max">MAX. 2</span>
-            </div>
+          <div class="np-field">
+            <input id="np-num-mobile" type="text" maxlength="2" inputmode="numeric" class="np-input" placeholder="09">
+            <span class="np-max">MAX. 2</span>
           </div>
         </div>
+      </div>
+
       <select id="np-font" class="form-select mb-2">
         <option value="bebas">Bebas Neue</option>
         <option value="anton">Anton</option>
         <option value="oswald">Oswald</option>
         <option value="impact">Impact</option>
       </select>
+
       <div class="mb-2">
         <button type="button" class="np-swatch" data-color="#FFFFFF" style="background:#FFF"></button>
         <button type="button" class="np-swatch" data-color="#000000" style="background:#000"></button>
@@ -140,7 +133,9 @@
         <button type="button" class="np-swatch" data-color="#FF0000" style="background:#FF0000"></button>
         <button type="button" class="np-swatch" data-color="#1E90FF" style="background:#1E90FF"></button>
       </div>
+
       <input id="np-color" type="color" class="form-control form-control-color mt-2" value="#D4AF37">
+
       @if(!empty($showUpload))
       <div class="mb-2" id="np-upload-block" style="margin-top:6px;">
         <input id="np-upload-image" type="file" accept="image/*" class="form-control" />
@@ -150,8 +145,6 @@
           <input id="np-user-image-scale" type="range" min="50" max="200" value="100" style="vertical-align: middle; display:none;" />
         </div>
       </div>
-      @else
-      <!-- uploader not available for this product (controller decided no artwork region) -->
       @endif
     </div>
 
@@ -168,14 +161,6 @@
         <input type="hidden" name="product_id" id="np-product-id" value="{{ $product->id ?? $product->local_id ?? '' }}">
         <input type="hidden" name="shopify_product_id" id="np-shopify-product-id" value="{{ $product->shopify_product_id ?? $product->shopify_id ?? '' }}">
         <input type="hidden" name="variant_id" id="np-variant-id" value="">
-
-        @php
-          $sizeOptions = [];
-          if (!empty($product) && $product->relationLoaded('variants') && $product->variants->count()) {
-              $sizeOptions = $product->variants->pluck('option_value')->map(fn($x)=>trim((string)$x))->unique()->values()->all();
-          }
-        @endphp
-
         <div class="mb-2">
           <select id="np-size" name="size" class="form-select" required>
             <option value="">Select Size</option>
@@ -188,16 +173,18 @@
         <div class="mb-2">
           <input id="np-qty" name="quantity" type="number" min="1" value="1" class="form-control">
         </div>
-        <button id="save-design-btn" class="btn btn-primary">Save Design (Save)</button>
-        <button id="np-atc-btn" type="submit" class="btn btn-primary">Add to Cart</button>
-        <a href="#" class="btn btn-success" id="btn-add-team" style="margin-left:8px;">Add Team Players</a>
+
+        <div class="d-flex gap-2">
+          <button id="save-design-btn" type="button" class="btn btn-primary">Save Design</button>
+          <button id="np-atc-btn" type="submit" class="btn btn-secondary">Add to Cart</button>
+          <a href="#" class="btn btn-success ms-auto" id="btn-add-team">Add Team Players</a>
+        </div>
       </form>
     </div>
   </div>
 </div>
 
 @php
-  // variant map
   $variantMap = [];
   if (!empty($product) && $product->relationLoaded('variants')) {
       foreach ($product->variants as $v) {
@@ -209,28 +196,21 @@
 @endphp
 
 @php
-  // Prefer preview_src (admin uploaded) first, then product image_url, else placeholder
   $img = $product->preview_src ?? ($product->image_url ?? asset('images/placeholder.png'));
 @endphp
+
 <script>
-  // filtered slots (name+number) — used by existing overlay logic
   window.layoutSlots = {!! json_encode($slotsForJs ?? [], JSON_NUMERIC_CHECK) !!};
-  // original full layout (may include artwork/logo slots & masks) — prefer this for uploader placement
   window.originalLayoutSlots = {!! json_encode($originalSlotsForJs ?? [], JSON_NUMERIC_CHECK) !!};
-  // flags from controller (ensure these variables exist in controller)
   window.showUpload = {{ !empty($showUpload) ? 'true' : 'false' }};
   window.hasArtworkSlot = {{ !empty($hasArtworkSlot) ? 'true' : 'false' }};
-
   window.personalizationSupported = {{ !empty($layoutSlots) ? 'true' : 'false' }};
   window.variantMap = {!! json_encode($variantMap, JSON_UNESCAPED_SLASHES | JSON_NUMERIC_CHECK) !!} || {};
   window.shopfrontUrl = "{{ env('SHOPIFY_STORE_FRONT_URL', 'https://nextprint.in') }}";
-
-  console.info('layoutSlots (filtered):', window.layoutSlots);
-  console.info('originalLayoutSlots (full):', window.originalLayoutSlots);
-  console.info('showUpload:', window.showUpload, 'hasArtworkSlot:', window.hasArtworkSlot);
 </script>
+
 <script>
-/* MUST be placed before any code that calls findPreferredSlot() */
+/* helper: choose preferred artwork slot */
 window.findPreferredSlot = function(){
   try {
     const orig = (typeof window.originalLayoutSlots === 'object' && window.originalLayoutSlots) ? window.originalLayoutSlots : {};
@@ -238,235 +218,144 @@ window.findPreferredSlot = function(){
     const useSlots = Object.keys(orig).length ? orig : filtered;
     const keys = Object.keys(useSlots);
     if (!keys.length) return null;
-
     const arr = keys.map(k => ({ key: k, slot: useSlots[k] }));
-
-    // 1) Prefer slot that has a mask (SVG) and is on the left side (front)
     const masked = arr.filter(i => i.slot && (i.slot.mask || i.slot.mask_svg_path));
     if (masked.length) {
       const front = masked.filter(i => parseFloat(i.slot.left_pct || 0) < 50);
-      if (front.length) { console.log('Using FRONT masked slot', front[0].key); return front[0].slot; }
-      console.log('Using first masked slot', masked[0].key);
+      if (front.length) return front[0].slot;
       return masked[0].slot;
     }
-
-    // 2) Prefer named artwork/logo slots
     const preferNames = ['logo','artwork','team_logo','graphic','image','badge','patch'];
-    for (const p of preferNames) if (useSlots[p]) { console.log('Using named slot', p); return useSlots[p]; }
-
-    // 3) Prefer any non-name/number slot on left half
+    for (const p of preferNames) if (useSlots[p]) return useSlots[p];
     const others = arr.filter(i => {
       const keyLower = (i.key||'').toLowerCase();
       const slotKey = (i.slot?.slot_key||'').toLowerCase();
       return keyLower!=='name' && keyLower!=='number' && slotKey!=='name' && slotKey!=='number';
     });
     const left = others.filter(i => parseFloat(i.slot.left_pct || 0) < 50);
-    if (left.length) { console.log('Using generic front slot', left[0].key); return left[0].slot; }
-
-    // 4) fallback
-    console.log('Fallback slot used');
+    if (left.length) return left[0].slot;
     if (useSlots['number']) return useSlots['number'];
     if (useSlots['name']) return useSlots['name'];
     return useSlots[keys[0]] || null;
-  } catch (e) {
-    console.warn('findPreferredSlot failed', e);
-    return null;
-  }
+  } catch(e) { return null; }
 };
-async function composePreviewDataURL(options = {}) {
-
-
-const img = new Image();
-img.crossOrigin = 'anonymous';
-img.src = baseSrc;
-
-
-await new Promise(resolve => {
-if (img.complete && img.naturalWidth) return resolve();
-img.onload = () => resolve();
-img.onerror = () => resolve();
-});
-
-
-const canvas = document.createElement('canvas');
-canvas.width = canvasW;
-canvas.height = canvasH;
-const ctx = canvas.getContext('2d');
-ctx.fillStyle = '#ffffff';
-ctx.fillRect(0,0,canvasW,canvasH);
-
-
-// draw base image centered and fit
-const imgW = img.naturalWidth || canvasW;
-const imgH = img.naturalHeight || canvasH;
-const imgRatio = imgW / imgH;
-let drawW = canvasW, drawH = canvasH;
-if (imgRatio > canvasW / canvasH) { drawW = canvasW; drawH = Math.round(canvasW / imgRatio); }
-else { drawH = canvasH; drawW = Math.round(canvasH * imgRatio); }
-const dx = Math.round((canvasW - drawW) / 2);
-const dy = Math.round((canvasH - drawH) / 2);
-try { ctx.drawImage(img, dx, dy, drawW, drawH); } catch(e) { console.warn('drawImage failed', e); }
-
-
-// choose font family mapping
-const fontMap = { bebas: 'Bebas Neue, Arial', anton: 'Anton, Arial', oswald: 'Oswald, Arial', impact: 'Impact, Arial' };
-const fontFamily = fontMap[fontKey] || fontMap.bebas;
-
-
-// draw name (upper back area) - tweak positions if needed
-if (name) {
-const nameFontSize = Math.round(canvasW * 0.06);
-ctx.font = `${nameFontSize}px ${fontFamily}`;
-ctx.fillStyle = color;
-ctx.textAlign = 'center';
-ctx.textBaseline = 'middle';
-const nameX = Math.round(canvasW * 0.72);
-const nameY = Math.round(canvasH * 0.38);
-ctx.lineWidth = Math.max(2, Math.round(nameFontSize * 0.08));
-ctx.strokeStyle = '#000';
-ctx.strokeText(name, nameX, nameY);
-ctx.fillText(name, nameX, nameY);
-}
-
-
-// draw number (lower back area)
-if (number) {
-const numFontSize = Math.round(canvasW * 0.1);
-ctx.font = `bold ${numFontSize}px ${fontFamily}`;
-ctx.fillStyle = color;
-ctx.textAlign = 'center';
-ctx.textBaseline = 'middle';
-const numX = Math.round(canvasW * 0.72);
-const numY = Math.round(canvasH * 0.57);
-ctx.lineWidth = Math.max(3, Math.round(numFontSize * 0.08));
-ctx.strokeStyle = '#000';
-ctx.strokeText(number, numX, numY);
-ctx.fillText(number, numX, numY);
-}
-
-
-return canvas.toDataURL('image/png', 0.92);
-}
-(async function(){
-const name = document.getElementById('np-name')?.value || null;
-const number = document.getElementById('np-num')?.value || null;
-const font = document.getElementById('np-font')?.value || null;
-const size = document.getElementById('np-size')?.value || null;
-const qty = parseInt(document.getElementById('np-qty')?.value || '1', 10) || 1;
-const color = document.getElementById('np-color')?.value || null;
-
-
-// compose preview from stage (canvas dataURL)
-let preview_src = null;
-try {
-preview_src = await composePreviewDataURL({ width: 1200, height: 900 });
-} catch (err) {
-console.warn('composePreviewDataURL failed', err);
-}
-
-
-// fallback: try to read base img src if compose failed
-if (!preview_src) {
-const base = document.getElementById('np-base');
-preview_src = base ? base.src : null;
-}
-
-
-const payload = {
-product_id: parseInt(document.getElementById('np-product-id')?.value) || null,
-shopify_product_id: document.getElementById('np-shopify-product-id')?.value || null,
-name: name,
-number: number,
-font: font,
-color: color,
-size: size,
-quantity: qty,
-preview_src: preview_src
-};
-
-
-try {
-const res = await fetch('{{ route("admin.design.order.store") }}', {
-method: 'POST',
-headers: {
-'Accept': 'application/json',
-'Content-Type': 'application/json',
-'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-},
-body: JSON.stringify(payload)
-});
-
-
-const data = await res.json();
-if (!res.ok) {
-console.error('Save failed', data);
-alert('Save failed: ' + (data.message || res.status));
-btn.disabled = false;
-btn.textContent = 'Save Design (Save)';
-return;
-}
-
-
-alert('Saved! Order ID: ' + (data.order_id || '—'));
-// optionally redirect to admin list
-// window.location.href = '{{ url("/admin/design-orders") }}';
-
-
-} catch (err) {
-console.error(err);
-alert('Save failed, check console.');
-} finally {
-btn.disabled = false;
-btn.textContent = 'Save Design (Save)';
-}
-});
-
 </script>
 
-
 <script>
-(function(){
-  const $ = id => document.getElementById(id);
+/**
+ * Compose preview: draw base image + name + number into a canvas and return dataURL
+ * tweak positions/sizes if your template layout differs
+ */
+async function composePreviewDataURL(options = {}) {
+  const baseImgEl = document.getElementById('np-base');
+  const name = (document.getElementById('np-name')?.value || document.getElementById('np-name-mobile')?.value || '').trim().toUpperCase();
+  const number = (document.getElementById('np-num')?.value || document.getElementById('np-num-mobile')?.value || '').trim();
+  const fontKey = document.getElementById('np-font')?.value || 'bebas';
+  const color = document.getElementById('np-color')?.value || '#FFFFFF';
+  const canvasW = options.width || 1200;
+  const canvasH = options.height || 900;
 
-// helper: find visible input (prefer mobile if small screen)
-function findVisibleInput(id) {
-  // prefer an input inside .mobile-only on mobile
-  try {
-    if (window.innerWidth <= 767) {
-      const m = document.querySelector('.mobile-only #' + id);
-      if (m) return m;
-    }
-    // otherwise prefer desktop explicitly
-    const d = document.querySelector('.desktop-only #' + id);
-    if (d) return d;
-  } catch(e) { /* ignore */ }
-  // fallback to any id match
-  return document.getElementById(id);
-}
+  if (!baseImgEl) return null;
+  const baseSrc = baseImgEl.getAttribute('src');
+  if (!baseSrc) return null;
 
-// grab elements (use visible ones for main listeners)
-// but also keep references to both mobile+desktop to sync values
-const nameEl  = findVisibleInput('np-name');
-const numEl   = findVisibleInput('np-num');
-const fontEl  = findVisibleInput('np-font') || $('np-font');
-const colorEl = findVisibleInput('np-color') || $('np-color');
+  // load image with crossOrigin when possible
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.src = baseSrc;
 
-const pvName  = $('np-prev-name'), pvNum = $('np-prev-num'), baseImg = $('np-base'), stage = $('np-stage');
+  await new Promise(resolve => {
+    if (img.complete && img.naturalWidth) return resolve();
+    img.onload = () => resolve();
+    img.onerror = () => resolve(); // continue even if load fails
+  });
 
-// also find possible alternate inputs (both mobile & desktop) so we can attach listeners to all
-const altNameEls = Array.from(document.querySelectorAll('#np-name')); // may include duplicate ids: select all
-const altNumEls  = Array.from(document.querySelectorAll('#np-num'));
-  const btn = $('np-atc-btn'), form = $('np-atc-form'), addTeam = $('btn-add-team');
-  const sizeEl = $('np-size');
-  const layout = (typeof window.layoutSlots === 'object' && window.layoutSlots !== null) ? window.layoutSlots : {};
-  const NAME_RE = /^[A-Za-z ]{1,12}$/, NUM_RE = /^\d{1,3}$/;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvasW;
+  canvas.height = canvasH;
+  const ctx = canvas.getContext('2d');
 
-  function applyFont(val){
-    const map = {bebas:'font-bebas', anton:'font-anton', oswald:'font-oswald', impact:'font-impact'};
-    const cls = map[val] || 'font-bebas';
-    [pvName, pvNum].forEach(el => { if(el) el.className = 'np-overlay ' + cls; });
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvasW, canvasH);
+
+  // draw base image scaled to canvas
+  const imgW = img.naturalWidth || canvasW;
+  const imgH = img.naturalHeight || canvasH;
+  const imgRatio = imgW / imgH;
+  let drawW = canvasW, drawH = canvasH;
+  if (imgRatio > canvasW / canvasH) { drawW = canvasW; drawH = Math.round(canvasW / imgRatio); }
+  else { drawH = canvasH; drawW = Math.round(canvasH * imgRatio); }
+  const dx = Math.round((canvasW - drawW) / 2);
+  const dy = Math.round((canvasH - drawH) / 2);
+  try { ctx.drawImage(img, dx, dy, drawW, drawH); } catch(e) { console.warn('drawImage failed', e); }
+
+  const fontMap = { bebas: 'Bebas Neue, Arial', anton: 'Anton, Arial', oswald: 'Oswald, Arial', impact: 'Impact, Arial' };
+  const fontFamily = fontMap[fontKey] || fontMap.bebas;
+
+  // NAME (upper back)
+  if (name) {
+    const nameFontSize = Math.round(canvasW * 0.06);
+    ctx.font = `${nameFontSize}px ${fontFamily}`;
+    ctx.fillStyle = color;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const nameX = Math.round(canvasW * 0.72);
+    const nameY = Math.round(canvasH * 0.38);
+    ctx.lineWidth = Math.max(2, Math.round(nameFontSize * 0.08));
+    ctx.strokeStyle = '#000';
+    ctx.strokeText(name, nameX, nameY);
+    ctx.fillText(name, nameX, nameY);
   }
 
+  // NUMBER (lower back)
+  if (number) {
+    const numFontSize = Math.round(canvasW * 0.1);
+    ctx.font = `bold ${numFontSize}px ${fontFamily}`;
+    ctx.fillStyle = color;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const numX = Math.round(canvasW * 0.72);
+    const numY = Math.round(canvasH * 0.57);
+    ctx.lineWidth = Math.max(3, Math.round(numFontSize * 0.08));
+    ctx.strokeStyle = '#000';
+    ctx.strokeText(number, numX, numY);
+    ctx.fillText(number, numX, numY);
+  }
+
+  return canvas.toDataURL('image/png', 0.92);
+}
+</script>
+
+<script>
+(async function(){
+  // element helpers
+  const get = id => document.getElementById(id);
+  const nameInputs = [get('np-name'), get('np-name-mobile')].filter(Boolean);
+  const numInputs = [get('np-num'), get('np-num-mobile')].filter(Boolean);
+  const fontEl = get('np-font');
+  const colorEl = get('np-color');
+  const pvName = get('np-prev-name'), pvNum = get('np-prev-num'), baseImg = get('np-base'), stage = get('np-stage');
+  const saveBtn = get('save-design-btn'), addToCartBtn = get('np-atc-btn'), form = get('np-atc-form'), addTeam = get('btn-add-team');
+
+  // sync name+number between mobile/desktop inputs and update preview overlay
+  function syncPreview() {
+    const nameVal = (nameInputs[0]?.value || nameInputs[1]?.value || '').toString().toUpperCase();
+    const numVal = (numInputs[0]?.value || numInputs[1]?.value || '').toString().replace(/\D/g,'');
+    nameInputs.forEach(i => i && (i.value = nameVal));
+    numInputs.forEach(i => i && (i.value = numVal));
+    if (pvName) pvName.textContent = nameVal || 'NAME';
+    if (pvNum) pvNum.textContent = numVal || '09';
+    applyLayout(); // position overlays
+  }
+
+  function syncHidden() {
+    if (get('np-name-hidden')) get('np-name-hidden').value = (nameInputs[0]?.value || '').toUpperCase();
+    if (get('np-num-hidden')) get('np-num-hidden').value = (numInputs[0]?.value || '').replace(/\D/g,'');
+    if (get('np-font-hidden')) get('np-font-hidden').value = fontEl?.value || '';
+    if (get('np-color-hidden')) get('np-color-hidden').value = colorEl?.value || '';
+  }
+
+  // small placement helpers (similar to your existing logic)
   function computeStageSize(){
     if (!baseImg || !stage) return null;
     const stageRect = stage.getBoundingClientRect();
@@ -480,30 +369,26 @@ const altNumEls  = Array.from(document.querySelectorAll('#np-num'));
   }
 
   function placeOverlay(el, slot, slotKey){
-    if(!el || !slot) return;
-    const s = computeStageSize(); if(!s) return;
+    if (!el) return;
+    const s = computeStageSize(); if (!s) return;
+    // default: center-ish if no slot
+    if (!slot) {
+      const cx = s.stageW * 0.5, cy = s.stageH * (slotKey==='number' ? 0.62 : 0.4);
+      el.style.left = cx + 'px'; el.style.top = cy + 'px';
+      el.style.transform = 'translate(-50%,-50%)';
+      return;
+    }
     const centerX = Math.round(s.offsetLeft + ((slot.left_pct||0)/100) * s.imgW + ((slot.width_pct||0)/200)*s.imgW);
     const centerY = Math.round(s.offsetTop  + ((slot.top_pct||0)/100)  * s.imgH + ((slot.height_pct||0)/200)*s.imgH);
     const areaWpx = Math.max(8, Math.round(((slot.width_pct||10)/100) * s.imgW));
     const areaHpx = Math.max(8, Math.round(((slot.height_pct||10)/100) * s.imgH));
-
-    el.style.position = 'absolute';
     el.style.left = centerX + 'px';
     el.style.top  = centerY + 'px';
     el.style.width = areaWpx + 'px';
     el.style.height = areaHpx + 'px';
     el.style.transform = 'translate(-50%,-50%) rotate(' + ((slot.rotation||0)) + 'deg)';
-    el.style.display = 'flex';
-    el.style.alignItems = 'center';
-    el.style.justifyContent = 'center';
-    el.style.boxSizing = 'border-box';
-    el.style.padding = '0 6px';
-    el.style.whiteSpace = 'nowrap';
-    el.style.overflow = 'hidden';
-    el.style.pointerEvents = 'none';
-    el.style.zIndex = (slotKey === 'number' ? 99995 : 99994);
-
-    const text = (el.textContent || '').toString().trim() || (slotKey === 'number' ? '09' : 'NAME');
+    // font sizing basic approach
+    const text = (el.textContent || '').toString().trim();
     const chars = Math.max(1, text.length);
     const isMobile = window.innerWidth <= 767;
     const heightCandidate = Math.floor(areaHpx * (slotKey === 'number' ? (isMobile ? 1.05 : 1.00) : 1.00));
@@ -512,154 +397,57 @@ const altNumEls  = Array.from(document.querySelectorAll('#np-num'));
     let fontSize = Math.floor(Math.min(heightCandidate, widthCap) * (slotKey === 'number' ? 0.98 : 1.0));
     const maxAllowed = Math.max(14, Math.floor(s.stageW * (isMobile ? 0.45 : 0.32)));
     fontSize = Math.max(8, Math.min(fontSize, maxAllowed));
-    fontSize = Math.floor(fontSize * 1.10);
-    el.style.fontSize = fontSize + 'px';
-    el.style.lineHeight = '1';
-    el.style.fontWeight = '700';
-
-    let attempts = 0;
-    while (el.scrollWidth > el.clientWidth && fontSize > 7 && attempts < 30) {
-      fontSize = Math.max(7, Math.floor(fontSize * 0.92));
-      el.style.fontSize = fontSize + 'px';
-      attempts++;
-    }
+    el.style.fontSize = Math.floor(fontSize * 1.10) + 'px';
   }
 
-  // Renders stored masks (if any) as images positioned on-stage
-  function renderMasks() {
-    const layout = window.layoutSlots || {};
-    const stage = document.getElementById('np-stage');
-    const baseImg = document.getElementById('np-base');
-    if (!layout || !stage || !baseImg) return;
-    const stageRect = stage.getBoundingClientRect();
-    const imgRect = baseImg.getBoundingClientRect();
-    const s = {
-      offsetLeft: Math.round(imgRect.left - stageRect.left),
-      offsetTop: Math.round(imgRect.top - stageRect.top),
-      imgW: Math.max(1,imgRect.width),
-      imgH: Math.max(1,imgRect.height)
-    };
-
-    Object.keys(layout).forEach(key => {
-      const slot = layout[key];
-      if (!slot || !slot.mask) return;
-      const id = 'mask-' + key;
-      let el = document.getElementById(id);
-      if (!el) {
-        el = document.createElement('img');
-        el.id = id;
-        el.src = slot.mask;
-        el.className = 'np-mask';
-        el.style.position = 'absolute';
-        el.style.pointerEvents = 'none';
-        el.style.zIndex = 40;
-        el.style.opacity = 1;
-        el.style.objectFit = 'contain';
-        stage.appendChild(el);
-      }
-      const cx = Math.round(s.offsetLeft + ((slot.left_pct||0)/100)*s.imgW + ((slot.width_pct||0)/200)*s.imgW);
-      const cy = Math.round(s.offsetTop + ((slot.top_pct||0)/100)*s.imgH + ((slot.height_pct||0)/200)*s.imgH);
-      const wpx = Math.round(((slot.width_pct||10)/100)*s.imgW);
-      const hpx = Math.round(((slot.height_pct||10)/100)*s.imgH);
-      el.style.left = (cx - wpx/2) + 'px';
-      el.style.top = (cy - hpx/2) + 'px';
-      el.style.width = wpx + 'px';
-      el.style.height = hpx + 'px';
-      el.style.transform = 'rotate(' + (slot.rotation||0) + 'deg)';
-    });
-  }
-
+  // we reuse findPreferredSlot
   function applyLayout(){
-    if (!baseImg || !baseImg.complete) return;
-    if (layout && layout.name) placeOverlay(pvName, layout.name, 'name'); else { pvName.style.left='50%'; pvName.style.top='45%'; pvName.style.transform='translate(-50%,-50%)'; }
-    if (layout && layout.number) placeOverlay(pvNum, layout.number, 'number'); else { pvNum.style.left='50%'; pvNum.style.top='65%'; pvNum.style.transform='translate(-50%,-50%)'; }
-    renderMasks();
+    try {
+      const slot = window.findPreferredSlot();
+      placeOverlay(pvName, slot && slot.name ? slot.name : slot, 'name');
+      placeOverlay(pvNum, slot && slot.number ? slot.number : slot, 'number');
+      // render mask images if provided
+      if (window.layoutSlots) {
+        Object.keys(window.layoutSlots).forEach(k => {
+          const s = window.layoutSlots[k];
+          if (!s || !s.mask) return;
+          const id = 'mask-' + k;
+          let el = document.getElementById(id);
+          if (!el) {
+            el = document.createElement('img');
+            el.id = id;
+            el.className = 'np-mask';
+            el.src = s.mask;
+            el.style.position = 'absolute';
+            el.style.pointerEvents = 'none';
+            el.style.zIndex = 40;
+            el.style.objectFit = 'contain';
+            stage.appendChild(el);
+          }
+          const st = computeStageSize();
+          if (!st) return;
+          const cx = Math.round(st.offsetLeft + ((s.left_pct||0)/100)*st.imgW + ((s.width_pct||0)/200)*st.imgW);
+          const cy = Math.round(st.offsetTop + ((s.top_pct||0)/100)*st.imgH + ((s.height_pct||0)/200)*st.imgH);
+          const wpx = Math.round(((s.width_pct||10)/100)*st.imgW);
+          const hpx = Math.round(((s.height_pct||10)/100)*st.imgH);
+          el.style.left = (cx - wpx/2) + 'px';
+          el.style.top = (cy - hpx/2) + 'px';
+          el.style.width = wpx + 'px';
+          el.style.height = hpx + 'px';
+          el.style.transform = 'rotate(' + (s.rotation||0) + 'deg)';
+        });
+      }
+    } catch(e) { /* ignore */ }
   }
 
-  // place user image inside chosen slot (cover)
-  function placeUserImage(slot){
-    if (!userImg) return;
-    const s = computeStageSize(); if (!s) return;
+  // sync listeners for inputs
+  nameInputs.forEach(el => el && el.addEventListener('input', ()=> { syncPreview(); syncHidden(); }));
+  numInputs.forEach(el => el && el.addEventListener('input', ()=> { syncPreview(); syncHidden(); }));
+  if (fontEl) fontEl.addEventListener('change', ()=> { pvName.className = 'np-overlay font-' + (fontEl.value||'bebas'); pvNum.className = 'np-overlay font-' + (fontEl.value||'bebas'); syncHidden(); });
+  if (colorEl) colorEl.addEventListener('input', ()=> { pvName.style.color = colorEl.value; pvNum.style.color = colorEl.value; syncHidden(); });
 
-    // no slot → center cover stage image
-    if (!slot || !slot.width_pct) {
-      const left = Math.round(s.stageW/2);
-      const top  = Math.round(s.stageH/2);
-      const wpx = Math.round(s.imgW * 0.8);
-      const hpx = Math.round(s.imgH * 0.8);
-      userImg.style.left = left + 'px';
-      userImg.style.top  = top + 'px';
-      userImg.style.width = wpx + 'px';
-      userImg.style.height = hpx + 'px';
-      userImg.style.transform = 'translate(-50%,-50%) scale(' + userImgScale + ')';
-      userImg.style.zIndex = 300;
-      return;
-    }
-
-    const centerX = Math.round(s.offsetLeft + ((slot.left_pct||50)/100) * s.imgW + ((slot.width_pct||0)/200)*s.imgW);
-    const centerY = Math.round(s.offsetTop + ((slot.top_pct||50)/100) * s.imgH + ((slot.height_pct||0)/200)*s.imgH);
-    const areaWpx = Math.max(8, Math.round(((slot.width_pct||10)/100) * s.imgW));
-    const areaHpx = Math.max(8, Math.round(((slot.height_pct||10)/100) * s.imgH));
-
-    // Cover the area — userImgScale multiplies area dimension
-    const scaledW = Math.round(areaWpx * (userImgScale));
-    const scaledH = Math.round(areaHpx * (userImgScale));
-
-    userImg.style.left = centerX + 'px';
-    userImg.style.top  = centerY + 'px';
-    userImg.style.width = scaledW + 'px';
-    userImg.style.height = scaledH + 'px';
-
-    let tx = 'translate(-50%,-50%)';
-    if (slot.rotation) tx += ' rotate(' + slot.rotation + 'deg)';
-    tx += ' scale(' + userImgScale + ')';
-    userImg.style.transform = tx;
-    userImg.style.zIndex = 300; // below overlays but above masks
-  }
-
-  function syncPreview(){
-    if (pvName && nameEl) pvName.textContent = (nameEl.value || 'NAME').toUpperCase();
-    if (pvNum && numEl) pvNum.textContent = (numEl.value || '09').replace(/\D/g,'');
-    applyLayout();
-  }
-
-  function syncHidden(){
-    const n = $('np-name-hidden'), nm = $('np-num-hidden'), f = $('np-font-hidden'), c = $('np-color-hidden');
-    if (n) n.value = (nameEl ? (nameEl.value||'') : '').toUpperCase().trim();
-    if (nm) nm.value = (numEl ? (numEl.value||'') : '').replace(/\D/g,'').trim();
-    if (f) f.value = fontEl ? fontEl.value : '';
-    if (c) c.value = colorEl ? colorEl.value : '';
-    const size = $('np-size')?.value || '';
-    if (window.variantMap && size) {
-      const k = (size || '').toString();
-      $('np-variant-id').value = window.variantMap[k] || window.variantMap[k.toUpperCase()] || window.variantMap[k.toLowerCase()] || '';
-    } else { if ($('np-variant-id')) $('np-variant-id').value = ''; }
-  }
-
-  // events
-  // attach input listeners to every name input found (desktop + mobile)
-altNameEls.forEach(el => {
-  el.addEventListener('input', ()=> {
-    // sync value to all matching inputs immediately (keeps desktop/mobile values identical)
-    altNameEls.forEach(x => { if (x !== el) x.value = el.value; });
-    syncPreview(); syncHidden(); updateATCState();
-  });
-});
-
-// attach input listeners to every number input found
-altNumEls.forEach(el => {
-  el.addEventListener('input', (e) => {
-    e.target.value = (e.target.value || '').replace(/\D/g,'').slice(0,3);
-    // propagate sanitized value to all number inputs
-    altNumEls.forEach(x => { if (x !== el) x.value = e.target.value; });
-    syncPreview(); syncHidden(); updateATCState();
-  });
-});
-  if (fontEl) fontEl.addEventListener('change', ()=>{ applyFont(fontEl.value); syncHidden(); syncPreview(); });
-  if (colorEl) colorEl.addEventListener('input', ()=>{ if(pvName) pvName.style.color = colorEl.value; if(pvNum) pvNum.style.color = colorEl.value; syncHidden(); });
-
-  document.querySelectorAll('.np-swatch').forEach(b=>{
-    b.addEventListener('click', ()=>{
+  document.querySelectorAll('.np-swatch').forEach(b => {
+    b.addEventListener('click', ()=> {
       document.querySelectorAll('.np-swatch').forEach(x=>x.classList.remove('active'));
       b.classList.add('active');
       if (colorEl) colorEl.value = b.dataset.color;
@@ -669,78 +457,90 @@ altNumEls.forEach(el => {
     });
   });
 
-  function updateATCState(){ if (!btn) return; btn.disabled = false; }
-
-  if (sizeEl) {
-    sizeEl.addEventListener('change', function(){
-      const sizeVal = (sizeEl.value || '').toString();
-      if (window.variantMap) {
-        const k = sizeVal;
-        const variant = window.variantMap[k] || window.variantMap[k.toUpperCase()] || window.variantMap[k.toLowerCase()] || '';
-        if (document.getElementById('np-variant-id')) document.getElementById('np-variant-id').value = variant;
-      }
-      syncHidden();
-      syncPreview();
-    });
-    try { sizeEl.dispatchEvent(new Event('change')); } catch(e) {}
-  }
-
-  if (addTeam) addTeam.addEventListener('click', function(e) {
-  e.preventDefault();
-  const productId = $('np-product-id')?.value || null;
-  const params = new URLSearchParams();
-  if (productId) params.set('product_id', productId);
-  if (nameEl?.value) params.set('prefill_name', nameEl.value);
-  if (numEl?.value) params.set('prefill_number', numEl.value.replace(/\D/g,'')); 
-  if (fontEl?.value) params.set('prefill_font', fontEl.value);
-  if (colorEl?.value) params.set('prefill_color', encodeURIComponent(colorEl.value));
-  const sizeVal = $('np-size')?.value || '';
-  if (sizeVal) params.set('prefill_size', sizeVal);
-  try { if (window.layoutSlots && Object.keys(window.layoutSlots || {}).length) params.set('layoutSlots', encodeURIComponent(JSON.stringify(window.layoutSlots))); } catch (err) {}
-  // NEW: include public logo URL (if available)
-  try {
-    if (window.lastUploadedLogoUrl) params.set('prefill_logo', encodeURIComponent(window.lastUploadedLogoUrl));
-  } catch(e){}
-
-  const base = "{{ route('team.create') }}";
-  window.location.href = base + (params.toString() ? ('?' + params.toString()) : '');
-});
-
-
-
-  // init
-  applyFont(fontEl?.value || 'bebas');
-  if (pvName && colorEl) pvName.style.color = colorEl.value;
-  if (pvNum && colorEl) pvNum.style.color = colorEl.value;
-  syncPreview(); syncHidden(); updateATCState();
-
-  baseImg.addEventListener('load', ()=> setTimeout(applyLayout, 80));
+  // initial sync
+  pvName.className = 'np-overlay font-bebas';
+  pvNum.className = 'np-overlay font-bebas';
+  if (colorEl) { pvName.style.color = colorEl.value; pvNum.style.color = colorEl.value; }
+  syncPreview(); syncHidden();
+  baseImg.addEventListener('load', ()=> setTimeout(applyLayout, 60));
   window.addEventListener('resize', ()=> setTimeout(applyLayout, 80));
-  window.addEventListener('orientationchange', ()=> setTimeout(applyLayout, 200));
   document.fonts?.ready.then(()=> setTimeout(applyLayout, 120));
 
-  // add to cart submit (keeps your original behavior)
+  // SAVE button: send composed dataURL to admin.design.order.store
+  if (saveBtn) {
+    saveBtn.addEventListener('click', async function(e){
+      e.preventDefault();
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving...';
+      try {
+        // simple validation
+        const size = get('np-size')?.value || '';
+        if (!size) { alert('Please select a size.'); saveBtn.disabled = false; saveBtn.textContent = 'Save Design'; return; }
+
+        const preview_src = await composePreviewDataURL({ width: 1200, height: 900 });
+        const payload = {
+          product_id: parseInt(get('np-product-id')?.value) || null,
+          shopify_product_id: get('np-shopify-product-id')?.value || null,
+          variant_id: get('np-variant-id')?.value || null,
+          name: get('np-name-hidden')?.value || get('np-name')?.value || '',
+          number: get('np-num-hidden')?.value || get('np-num')?.value || '',
+          font: get('np-font-hidden')?.value || get('np-font')?.value || '',
+          color: get('np-color-hidden')?.value || get('np-color')?.value || '',
+          size: size,
+          quantity: parseInt(get('np-qty')?.value || '1', 10) || 1,
+          preview_src: preview_src || null,
+          uploaded_logo_url: window.lastUploadedLogoUrl || null
+        };
+
+        const token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        const res = await fetch('{{ route("admin.design.order.store") }}', {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': token
+          },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json().catch(()=>null);
+        if (!res.ok) {
+          console.error('Save failed', data);
+          alert('Save failed: ' + (data?.message || res.status));
+          return;
+        }
+        alert('Saved! Order ID: ' + (data?.order_id || '—'));
+      } catch (err) {
+        console.error(err);
+        alert('Save failed, see console.');
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save Design';
+      }
+    });
+  }
+
+  // Add-to-cart: uses html2canvas to generate preview_data and posts to shopify add-to-cart URL (existing behavior)
   form?.addEventListener('submit', async function(evt){
     evt.preventDefault();
-    const size = $('np-size')?.value || '';
-    if (!size) { alert('Please select a size.'); return; }
-    if (!NAME_RE.test(nameEl.value||'') || !NUM_RE.test(numEl.value||'')) { alert('Please enter valid Name and Number'); return; }
     syncHidden();
-    const variantId = (document.getElementById('np-variant-id') || { value: '' }).value;
-    if (!variantId || !/^\d+$/.test(variantId)) { alert('Variant not selected or invalid. Please re-select size.'); return; }
-    if (btn) { btn.disabled = true; btn.textContent = 'Adding...'; }
+    const size = get('np-size')?.value || '';
+    if (!size) { alert('Please select a size.'); return; }
+    const variantId = get('np-variant-id')?.value || '';
+    if (!variantId) { alert('Please select a valid variant.'); return; }
+
     try {
-      try {
-        const canvas = await html2canvas(stage, { useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1 });
-        const dataUrl = canvas.toDataURL('image/png');
-        $('np-preview-hidden').value = dataUrl;
-      } catch(e) { console.warn('html2canvas failed, continuing without preview:', e); }
-      const properties = { 'Name': $('np-name-hidden')?.value || '', 'Number': $('np-num-hidden')?.value || '', 'Font': $('np-font-hidden')?.value || '', 'Color': $('np-color-hidden')?.value || '' };
-      const qty = Math.max(1, parseInt($('np-qty')?.value || '1', 10));
+      if (window.html2canvasAvailable !== false) {
+        try {
+          const canvas = await html2canvas(stage, { useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1 });
+          get('np-preview-hidden').value = canvas.toDataURL('image/png');
+        } catch(e) { console.warn('html2canvas failed:', e); }
+      }
+      const properties = { 'Name': get('np-name-hidden')?.value || '', 'Number': get('np-num-hidden')?.value || '', 'Font': get('np-font-hidden')?.value || '', 'Color': get('np-color-hidden')?.value || '' };
+      const qty = Math.max(1, parseInt(get('np-qty')?.value || '1', 10));
       const bodyArr = [];
       bodyArr.push('id=' + encodeURIComponent(variantId));
       bodyArr.push('quantity=' + encodeURIComponent(qty));
-      for (const k in properties) { bodyArr.push('properties[' + encodeURIComponent(k) + ']=' + encodeURIComponent(properties[k])); }
+      for (const k in properties) bodyArr.push('properties[' + encodeURIComponent(k) + ']=' + encodeURIComponent(properties[k]));
       const body = bodyArr.join('&');
       const resp = await fetch('/cart/add', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body, credentials: 'same-origin' });
       const shopfront = (window.shopfrontUrl || '').replace(/\/+$/,'');
@@ -749,16 +549,33 @@ altNumEls.forEach(el => {
     } catch (err) {
       console.error('Add to cart error', err);
       alert('Something went wrong adding to cart.');
-    } finally {
-      if (btn) { btn.disabled = false; btn.textContent = 'Add to Cart'; }
     }
+  });
+
+  // Add Team button: pass prefill params to team.create route
+  addTeam?.addEventListener('click', function(e){
+    e.preventDefault();
+    const params = new URLSearchParams();
+    const productId = get('np-product-id')?.value || null;
+    if (productId) params.set('product_id', productId);
+    if (get('np-name-hidden')?.value) params.set('prefill_name', get('np-name-hidden').value);
+    if (get('np-num-hidden')?.value) params.set('prefill_number', get('np-num-hidden').value);
+    if (get('np-font-hidden')?.value) params.set('prefill_font', get('np-font-hidden').value);
+    if (get('np-color-hidden')?.value) params.set('prefill_color', encodeURIComponent(get('np-color-hidden').value || ''));
+    const sizeVal = get('np-size')?.value || '';
+    if (sizeVal) params.set('prefill_size', sizeVal);
+    try { if (window.layoutSlots && Object.keys(window.layoutSlots||{}).length) params.set('layoutSlots', encodeURIComponent(JSON.stringify(window.layoutSlots))); } catch(e){}
+    if (window.lastUploadedLogoUrl) params.set('prefill_logo', encodeURIComponent(window.lastUploadedLogoUrl));
+    const base = "{{ route('team.create') }}";
+    window.location.href = base + (params.toString() ? ('?' + params.toString()) : '');
   });
 
 })();
 </script>
 
 <script>
-(function(){
+/* Upload handling: upload to /designer/upload-temp (returns public url) and display local preview */
+(async function(){
   const uploadEl = document.getElementById('np-upload-image');
   const stage = document.getElementById('np-stage');
   const baseImg = document.getElementById('np-base');
@@ -786,7 +603,6 @@ altNumEls.forEach(el => {
     if (!userImg) return;
     const s = computeStageSizeLocal();
     if (!s) return;
-
     if (!slot || !slot.width_pct) {
       const left = Math.round(s.stageW/2);
       const top  = Math.round(s.stageH/2);
@@ -800,20 +616,16 @@ altNumEls.forEach(el => {
       userImg.style.zIndex = 300;
       return;
     }
-
     const centerX = Math.round(s.offsetLeft + ((slot.left_pct||50)/100) * s.imgW + ((slot.width_pct||0)/200)*s.imgW);
     const centerY = Math.round(s.offsetTop + ((slot.top_pct||50)/100) * s.imgH + ((slot.height_pct||0)/200)*s.imgH);
     const areaWpx = Math.max(8, Math.round(((slot.width_pct||10)/100) * s.imgW));
     const areaHpx = Math.max(8, Math.round(((slot.height_pct||10)/100) * s.imgH));
-
     const scaledW = Math.round(areaWpx * (userImgScale));
     const scaledH = Math.round(areaHpx * (userImgScale));
-
     userImg.style.left = centerX + 'px';
     userImg.style.top  = centerY + 'px';
     userImg.style.width = scaledW + 'px';
     userImg.style.height = scaledH + 'px';
-
     let tx = 'translate(-50%,-50%)';
     if (slot.rotation) tx += ' rotate(' + slot.rotation + 'deg)';
     tx += ' scale(' + userImgScale + ')';
@@ -821,121 +633,105 @@ altNumEls.forEach(el => {
     userImg.style.zIndex = 300;
   }
 
-  // ---- upload helper: sends file to server, returns public URL ----
-async function uploadFileToServer(file) {
-  try {
-    const fd = new FormData();
-    fd.append('file', file);
-    const token = document.querySelector('meta[name="csrf-token"]').getAttribute('content') || '';
-    const resp = await fetch('{{ route("designer.upload_temp") }}', {
-      method: 'POST',
-      body: fd,
-      credentials: 'same-origin',
-      headers: { 'X-CSRF-TOKEN': token }
-    });
-    if (!resp.ok) throw new Error('upload failed: ' + resp.status);
-    const json = await resp.json();
-    return json.url || null;
-  } catch (err) {
-    console.warn('uploadFileToServer error', err);
-    return null;
-  }
-}
-
-// ---- main file handler: uploads + shows preview ----
-async function handleFile(file) {
-  if (!file) return;
-  if (!/^image\//.test(file.type)) { alert('Please upload an image file (PNG, JPG, SVG).'); return; }
-  const maxMB = 6;
-  if (file.size > maxMB * 1024 * 1024) { alert('Please use an image smaller than ' + maxMB + ' MB.'); return; }
-
-  // 1) Upload to server to get public URL
-  let publicUrl = null;
-  try {
-    const fd = new FormData();
-    fd.append('file', file);
-    // CSRF token if needed (Laravel blade provides it in the page)
-    const token = document.querySelector('input[name="_token"]')?.value;
-    const resp = await fetch('/designer/upload-temp', {
-      method: 'POST',
-      headers: (token ? { 'X-CSRF-TOKEN': token } : {}),
-      body: fd,
-      credentials: 'same-origin'
-    });
-    const json = await resp.json().catch(()=>null);
-    if (resp.ok && json && json.url) {
-      publicUrl = json.url;
-    } else {
-      console.warn('upload-temp failed or did not return url', json);
-    }
-  } catch (err) {
-    console.warn('upload-temp error', err);
-  }
-
-  // 2) If server didn't return public URL, fallback to local dataURL
-  const reader = new FileReader();
-  reader.onload = function(ev) {
-    const dataUrl = ev.target.result;
-
-    // create userImg on stage (same as before)
-    if (userImg && userImg.parentNode) userImg.parentNode.removeChild(userImg);
-    userImg = document.createElement('img');
-    userImg.className = 'np-user-image';
-    userImg.src = dataUrl; // display immediately from dataURL
-    userImg.alt = 'User artwork';
-    userImg.style.position = 'absolute';
-    userImg.style.left = '50%';
-    userImg.style.top = '50%';
-    userImg.style.width = '100px';
-    userImg.style.height = '100px';
-    userImg.style.transform = 'translate(-50%,-50%)';
-    userImg.style.objectFit = 'cover';
-    userImg.style.pointerEvents = 'none';
-    stage.appendChild(userImg);
-
-    if (removeBtn) removeBtn.style.display = 'inline-block';
-    if (scaleRange) { scaleRange.style.display = 'inline-block'; scaleLabel.style.display = 'inline-block'; scaleRange.value = 100; userImgScale = 1.0; }
-
-    const slot = findPreferredSlot();
-    placeUserImage(slot);
-    userImg.onload = function(){ placeUserImage(slot); };
-
-    // 3) If we have publicUrl, store it on window for add-team link
-    if (publicUrl) {
-      window.lastUploadedLogoUrl = publicUrl; // used by Add Team Players
-      // also set the hidden preview (optional)
-      try {
-        setTimeout(()=> {
-          html2canvas(stage, { useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1 })
-           .then(canvas => { previewHidden.value = canvas.toDataURL('image/png'); })
-           .catch(()=>{});
-        }, 180);
-      } catch(e){}
-    } else {
-      // no public URL; keep using dataURL locally but won't be accessible on team page
-      window.lastUploadedLogoUrl = null;
-    }
-  };
-  reader.readAsDataURL(file);
-}
-
-
-  if (uploadEl) uploadEl.addEventListener('change', function(e){ const f = e.target.files && e.target.files[0]; if (!f) return; handleFile(f); });
-  if (removeBtn) removeBtn.addEventListener('click', function(){ if (userImg && userImg.parentNode) userImg.parentNode.removeChild(userImg); userImg = null; removeBtn.style.display = 'none'; if (scaleRange) { scaleRange.style.display = 'none'; scaleLabel.style.display = 'none'; } if (previewHidden) previewHidden.value = ''; });
-  if (scaleRange) scaleRange.addEventListener('input', function(){ const v = parseInt(this.value || '100', 10); userImgScale = v / 100; const slot = findPreferredSlot(); placeUserImage(slot); });
-
-  window.addEventListener('resize', function(){ if (userImg) placeUserImage(findPreferredSlot()); if (document.getElementById('np-base').complete) setTimeout(()=>{ renderMasks(); },40); });
-  document.fonts?.ready.then(()=> { if (userImg) placeUserImage(findPreferredSlot()); setTimeout(()=>{ renderMasks(); },80); });
-
-  function renderMasks(){
+  async function uploadTempFile(file) {
     try {
-      // call the same renderMasks in the other script if loaded
-      if (typeof window.layoutSlots !== 'undefined') {
-        const evt = new Event('renderMasksCustom');
-        window.dispatchEvent(evt);
-      }
-    } catch(e){}
+      const fd = new FormData();
+      fd.append('file', file);
+      const token = document.querySelector('meta[name="csrf-token"]').getAttribute('content') || '';
+      const resp = await fetch('{{ route("designer.upload_temp") }}', {
+        method: 'POST',
+        body: fd,
+        credentials: 'same-origin',
+        headers: { 'X-CSRF-TOKEN': token }
+      });
+      if (!resp.ok) throw new Error('upload failed: ' + resp.status);
+      const json = await resp.json();
+      return json.url || null;
+    } catch (err) {
+      console.warn('uploadTempFile error', err);
+      return null;
+    }
   }
+
+  async function handleFile(file) {
+    if (!file) return;
+    if (!/^image\//.test(file.type)) { alert('Please upload an image file (PNG, JPG, SVG).'); return; }
+    const maxMB = 6;
+    if (file.size > maxMB * 1024 * 1024) { alert('Please use an image smaller than ' + maxMB + ' MB.'); return; }
+
+    let publicUrl = null;
+    try {
+      publicUrl = await uploadTempFile(file);
+    } catch(e){ console.warn(e); }
+
+    const reader = new FileReader();
+    reader.onload = function(ev) {
+      const dataUrl = ev.target.result;
+      if (userImg && userImg.parentNode) userImg.parentNode.removeChild(userImg);
+      userImg = document.createElement('img');
+      userImg.className = 'np-user-image';
+      userImg.src = dataUrl;
+      userImg.alt = 'User artwork';
+      userImg.style.position = 'absolute';
+      userImg.style.left = '50%';
+      userImg.style.top = '50%';
+      userImg.style.width = '100px';
+      userImg.style.height = '100px';
+      userImg.style.transform = 'translate(-50%,-50%)';
+      userImg.style.objectFit = 'cover';
+      userImg.style.pointerEvents = 'none';
+      stage.appendChild(userImg);
+
+      if (removeBtn) removeBtn.style.display = 'inline-block';
+      if (scaleRange) { scaleRange.style.display = 'inline-block'; scaleLabel.style.display = 'inline-block'; scaleRange.value = 100; userImgScale = 1.0; }
+
+      const slot = findPreferredSlot();
+      placeUserImage(slot);
+      userImg.onload = function(){ placeUserImage(slot); };
+
+      if (publicUrl) {
+        window.lastUploadedLogoUrl = publicUrl;
+        // optionally set preview hidden as dataURL of stage so Add Team can later reuse
+        setTimeout(()=> {
+          try {
+            html2canvas(stage, { useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1 })
+              .then(canvas => { previewHidden.value = canvas.toDataURL('image/png'); })
+              .catch(()=>{});
+          } catch(e){}
+        }, 180);
+      } else {
+        window.lastUploadedLogoUrl = null;
+      }
+    };
+    reader.readAsDataURL(file);
+  }
+
+  if (uploadEl) uploadEl.addEventListener('change', (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    handleFile(f);
+  });
+
+  if (removeBtn) removeBtn.addEventListener('click', function(){
+    if (userImg && userImg.parentNode) userImg.parentNode.removeChild(userImg);
+    userImg = null;
+    removeBtn.style.display = 'none';
+    if (scaleRange) { scaleRange.style.display = 'none'; scaleLabel.style.display = 'none'; }
+    if (previewHidden) previewHidden.value = '';
+    window.lastUploadedLogoUrl = null;
+  });
+
+  if (scaleRange) scaleRange.addEventListener('input', function(){
+    const v = parseInt(this.value || '100', 10);
+    userImgScale = v / 100;
+    placeUserImage(findPreferredSlot());
+  });
+
+  window.addEventListener('resize', function(){
+    if (userImg) placeUserImage(findPreferredSlot());
+    if (document.getElementById('np-base').complete) setTimeout(()=>{ /* re-render masks */ },40);
+  });
+
 })();
 </script>
 
