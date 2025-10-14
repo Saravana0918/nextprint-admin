@@ -168,7 +168,6 @@
         <input type="hidden" name="product_id" id="np-product-id" value="{{ $product->id ?? $product->local_id ?? '' }}">
         <input type="hidden" name="shopify_product_id" id="np-shopify-product-id" value="{{ $product->shopify_product_id ?? $product->shopify_id ?? '' }}">
         <input type="hidden" name="variant_id" id="np-variant-id" value="">
-        <input type="hidden" name="design_order_id" id="np-design-order-id" value="">
 
         @php
           $sizeOptions = [];
@@ -189,8 +188,8 @@
         <div class="mb-2">
           <input id="np-qty" name="quantity" type="number" min="1" value="1" class="form-control">
         </div>
-        <button id="np-save-btn" type="button" class="btn btn-warning">Save Customization</button>
-        <button id="np-atc-btn" type="submit" class="btn btn-primary" style="display:none;">Add to Cart</button>
+
+        <button id="np-atc-btn" type="submit" class="btn btn-primary">Add to Cart</button>
         <a href="#" class="btn btn-success" id="btn-add-team" style="margin-left:8px;">Add Team Players</a>
       </form>
     </div>
@@ -274,116 +273,6 @@ window.findPreferredSlot = function(){
     return null;
   }
 };
-</script>
-<script>
-(async function(){
-  const saveBtn = document.getElementById('np-save-btn');
-  const atcBtn = document.getElementById('np-atc-btn');
-  const designOrderIdInput = document.getElementById('np-design-order-id');
-  const previewHidden = document.getElementById('np-preview-hidden');
-  const stageEl = document.getElementById('np-stage');
-
-  async function capturePreview(){
-    try {
-      if (typeof html2canvas === 'undefined') return previewHidden?.value || null;
-      const canvas = await html2canvas(stageEl, { useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1 });
-      const dataUrl = canvas.toDataURL('image/png');
-      if (previewHidden) previewHidden.value = dataUrl;
-      return dataUrl;
-    } catch(e) {
-      console.warn('preview capture failed', e);
-      return previewHidden?.value || null;
-    }
-  }
-
-  async function doSaveCustomization(){
-    try { syncHidden(); } catch(e){} // keep your existing function
-
-    const name = document.getElementById('np-name-hidden')?.value || '';
-    const number = document.getElementById('np-num-hidden')?.value || '';
-    const variantId = document.getElementById('np-variant-id')?.value || '';
-
-    if (!name || !/^[A-Za-z ]{1,12}$/i.test(name)) { alert('Please enter a valid Name'); return null; }
-    if (!number || !/^\d{1,3}$/.test(number)) { alert('Please enter a valid Number'); return null; }
-    if (!variantId || !/^\d+$/.test(variantId)) { alert('Please select a size'); return null; }
-
-    saveBtn.disabled = true;
-    const origText = saveBtn.textContent;
-    saveBtn.textContent = 'Saving...';
-
-    const preview = await capturePreview();
-
-    const payload = {
-      product_id: document.getElementById('np-product-id')?.value || null,
-      shopify_product_id: document.getElementById('np-shopify-product-id')?.value || null,
-      variant_id: variantId,
-      name: name,
-      number: number,
-      font: document.getElementById('np-font-hidden')?.value || '',
-      color: document.getElementById('np-color-hidden')?.value || '',
-      size: document.getElementById('np-size')?.value || '',
-      quantity: parseInt(document.getElementById('np-qty')?.value || '1', 10),
-      preview_src: preview || '',
-      uploaded_logo_url: window.lastUploadedLogoUrl || null,
-      shopify_order_id: null
-    };
-
-    try {
-      const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-      const res = await fetch('/design-order', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': token },
-        body: JSON.stringify(payload)
-      });
-      const json = await res.json().catch(()=>null);
-      if (!res.ok || !json || !json.success) {
-        alert('Customization save failed. Try again.');
-        saveBtn.disabled = false;
-        saveBtn.textContent = origText;
-        return null;
-      }
-      // success
-      const orderId = json.order_id || null;
-      if (orderId && document.getElementById('np-design-order-id')) {
-        document.getElementById('np-design-order-id').value = orderId;
-      }
-      // show Add to Cart
-      if (atcBtn) atcBtn.style.display = '';
-      saveBtn.classList.remove('btn-warning');
-      saveBtn.classList.add('btn-success');
-      saveBtn.textContent = 'Saved ✓';
-      saveBtn.disabled = true;
-      alert('Saved successfully. You can now Add to Cart.');
-      return orderId;
-    } catch(err){
-      console.error('save error', err);
-      alert('Error saving customization.');
-      saveBtn.disabled = false;
-      saveBtn.textContent = origText;
-      return null;
-    }
-  }
-
-  if (saveBtn) saveBtn.addEventListener('click', function(e){ e.preventDefault(); doSaveCustomization(); });
-
-  // when user edits anything, re-enable Save and hide Add-to-Cart
-  const enableSave = () => {
-    if (!saveBtn) return;
-    saveBtn.disabled = false;
-    saveBtn.classList.remove('btn-success');
-    saveBtn.classList.add('btn-warning');
-    saveBtn.textContent = 'Save Customization';
-    if (atcBtn) atcBtn.style.display = 'none';
-    const did = document.getElementById('np-design-order-id'); if (did) did.value = '';
-  };
-  ['np-name','np-num','np-font','np-color','np-size','np-qty'].forEach(id=>{
-    const el = document.getElementById(id);
-    if (el) el.addEventListener('input', enableSave);
-  });
-  const up = document.getElementById('np-upload-image'); if (up) up.addEventListener('change', enableSave);
-
-})();
 </script>
 
 
@@ -662,10 +551,7 @@ altNumEls.forEach(el => {
   try { if (window.layoutSlots && Object.keys(window.layoutSlots || {}).length) params.set('layoutSlots', encodeURIComponent(JSON.stringify(window.layoutSlots))); } catch (err) {}
   // NEW: include public logo URL (if available)
   try {
-    // Always include the current base image shown on the stage as prefill_logo
-    const baseImgEl = document.getElementById('np-base');
-    const currentBaseSrc = (baseImgEl && baseImgEl.src) ? baseImgEl.src : (window.lastUploadedLogoUrl || '');
-    if (currentBaseSrc) params.set('prefill_logo', encodeURIComponent(currentBaseSrc));
+    if (window.lastUploadedLogoUrl) params.set('prefill_logo', encodeURIComponent(window.lastUploadedLogoUrl));
   } catch(e){}
 
   const base = "{{ route('team.create') }}";
@@ -685,55 +571,40 @@ altNumEls.forEach(el => {
   window.addEventListener('orientationchange', ()=> setTimeout(applyLayout, 200));
   document.fonts?.ready.then(()=> setTimeout(applyLayout, 120));
 
-document.getElementById('np-atc-form')?.addEventListener('submit', async function(evt){
-  evt.preventDefault();
-  // ensure saved
-  const designOrderId = document.getElementById('np-design-order-id')?.value || '';
-  if (!designOrderId) {
-    if (!confirm('Not saved yet. Save before adding to cart?')) return;
-    // trigger save (assumes doSaveCustomization() exists globally or in closure)
-    const saved = await (typeof doSaveCustomization === 'function' ? doSaveCustomization() : null);
-    if (!saved) return;
-  }
-
-  // then proceed with original add-to-cart (include DesignOrderId)
-  try {
+  // add to cart submit (keeps your original behavior)
+  form?.addEventListener('submit', async function(evt){
+    evt.preventDefault();
+    const size = $('np-size')?.value || '';
+    if (!size) { alert('Please select a size.'); return; }
+    if (!NAME_RE.test(nameEl.value||'') || !NUM_RE.test(numEl.value||'')) { alert('Please enter valid Name and Number'); return; }
+    syncHidden();
+    const variantId = (document.getElementById('np-variant-id') || { value: '' }).value;
+    if (!variantId || !/^\d+$/.test(variantId)) { alert('Variant not selected or invalid. Please re-select size.'); return; }
+    if (btn) { btn.disabled = true; btn.textContent = 'Adding...'; }
     try {
-      // ensure preview exists
-      if (typeof html2canvas !== 'undefined') {
-        const canvas = await html2canvas(document.getElementById('np-stage'), { useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1 });
-        document.getElementById('np-preview-hidden').value = canvas.toDataURL('image/png');
-      }
-    } catch(e){ /* ignore */ }
-
-    // properties
-    const props = {
-      'Name': document.getElementById('np-name-hidden')?.value || '',
-      'Number': document.getElementById('np-num-hidden')?.value || '',
-      'Font': document.getElementById('np-font-hidden')?.value || '',
-      'Color': document.getElementById('np-color-hidden')?.value || ''
-    };
-    const did = document.getElementById('np-design-order-id')?.value;
-    if (did) props['DesignOrderId'] = did;
-
-    const variantId = document.getElementById('np-variant-id')?.value || '';
-    const qty = Math.max(1, parseInt(document.getElementById('np-qty')?.value || '1', 10));
-    const bodyArr = [];
-    bodyArr.push('id=' + encodeURIComponent(variantId));
-    bodyArr.push('quantity=' + encodeURIComponent(qty));
-    for (const k in props) {
-      bodyArr.push('properties[' + encodeURIComponent(k) + ']=' + encodeURIComponent(props[k]));
+      try {
+        const canvas = await html2canvas(stage, { useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1 });
+        const dataUrl = canvas.toDataURL('image/png');
+        $('np-preview-hidden').value = dataUrl;
+      } catch(e) { console.warn('html2canvas failed, continuing without preview:', e); }
+      const properties = { 'Name': $('np-name-hidden')?.value || '', 'Number': $('np-num-hidden')?.value || '', 'Font': $('np-font-hidden')?.value || '', 'Color': $('np-color-hidden')?.value || '' };
+      const qty = Math.max(1, parseInt($('np-qty')?.value || '1', 10));
+      const bodyArr = [];
+      bodyArr.push('id=' + encodeURIComponent(variantId));
+      bodyArr.push('quantity=' + encodeURIComponent(qty));
+      for (const k in properties) { bodyArr.push('properties[' + encodeURIComponent(k) + ']=' + encodeURIComponent(properties[k])); }
+      const body = bodyArr.join('&');
+      const resp = await fetch('/cart/add', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body, credentials: 'same-origin' });
+      const shopfront = (window.shopfrontUrl || '').replace(/\/+$/,'');
+      const redirectUrl = shopfront + '/cart/' + variantId + ':' + qty;
+      window.location.href = redirectUrl;
+    } catch (err) {
+      console.error('Add to cart error', err);
+      alert('Something went wrong adding to cart.');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Add to Cart'; }
     }
-    const body = bodyArr.join('&');
-
-    await fetch('/cart/add', { method:'POST', headers:{ 'Content-Type':'application/x-www-form-urlencoded' }, body: body, credentials: 'same-origin' });
-    const shopfront = (window.shopfrontUrl || '').replace(/\/+$/,'');
-    window.location.href = shopfront + '/cart/' + variantId + ':' + qty;
-  } catch(e){
-    console.error('Add to cart error', e);
-    alert('Error adding to cart.');
-  }
-});
+  });
 
 })();
 </script>
