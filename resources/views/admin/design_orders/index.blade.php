@@ -6,7 +6,6 @@
     <h2 class="mb-0">Design Orders</h2>
     <div>
       <a href="{{ route('admin.design-orders.index') }}" class="btn btn-sm btn-outline-secondary">Refresh</a>
-      {{-- optionally add export button --}}
     </div>
   </div>
 
@@ -26,55 +25,58 @@
       </thead>
       <tbody>
         @forelse($rows as $row)
-        <tr>
-          <td>{{ $row->id }}</td>
-          <td>{{ $row->shopify_order_id ?: '—' }}</td>
+          <tr>
+            <td>{{ $row->id }}</td>
+            <td>{{ $row->shopify_order_id ?: '—' }}</td>
 
-          {{-- product name (controller should supply product_name) --}}
-          <td>
-            {{ $row->product_name ?? $row->product_id ?? '—' }}
-            @if(!empty($row->shopify_product_id))
-              <div class="text-muted small">shopify: {{ $row->shopify_product_id }}</div>
-            @endif
-          </td>
+            <td style="min-width:200px">
+              {{ $row->product_name ?? $row->product_id ?? '—' }}
+              @if(!empty($row->shopify_product_id))
+                <div class="text-muted small">shopify: {{ $row->shopify_product_id }}</div>
+              @endif
+            </td>
 
-          {{-- name/number — view expects 'name' and 'number' keys (controller will alias these) --}}
-          <td>{{ $row->name ?? $row->name_text ?? '—' }}</td>
-          <td>{{ $row->number ?? $row->number_text ?? '—' }}</td>
+            <td>{{ $row->name ?? $row->customer_name ?? '—' }}</td>
+            <td>{{ $row->number ?? $row->customer_number ?? '—' }}</td>
 
-          {{-- preview image handling: support full URL or storage path --}}
-          <td>
-            @if(!empty($row->preview_image))
-              @php
-                $preview = $row->preview_image;
-                // if stored as /storage/..., use asset(); otherwise assume full URL
-                if (str_starts_with($preview, '/storage') || str_starts_with($preview, 'storage')) {
-                  $previewUrl = asset($preview);
-                } else {
+            <td style="width:80px">
+              @if(!empty($row->preview_image) || !empty($row->preview_src))
+                @php
+                  // support both alias names: preview_image (alias) or preview_src (original)
+                  $preview = $row->preview_image ?? $row->preview_src ?? null;
                   $previewUrl = $preview;
-                }
-              @endphp
-              <a href="{{ $previewUrl }}" target="_blank" title="Open preview">
-                <img src="{{ $previewUrl }}" width="56" height="56" style="object-fit:cover; border-radius:4px;" alt="preview">
-              </a>
-            @else
-              <span class="text-muted small">—</span>
-            @endif
-          </td>
+                  if ($preview && (Str::startsWith($preview, '/storage') || Str::startsWith($preview, 'storage'))) {
+                    $previewUrl = asset($preview);
+                  }
+                @endphp
 
-          <td>{{ \Carbon\Carbon::parse($row->created_at)->format('d M Y, H:i') }}</td>
-          <td>
-            <a href="{{ route('admin.design-orders.show', $row->id) }}" class="btn btn-sm btn-primary">View</a>
-          </td>
-        </tr>
+                @if($previewUrl)
+                  <a href="{{ $previewUrl }}" target="_blank" title="Open preview">
+                    <img src="{{ $previewUrl }}" width="56" height="56" style="object-fit:cover; border-radius:4px;" alt="preview">
+                  </a>
+                @else
+                  <span class="text-muted small">—</span>
+                @endif
+              @else
+                <span class="text-muted small">—</span>
+              @endif
+            </td>
+
+            <td>{{ \Carbon\Carbon::parse($row->created_at)->format('d M Y, H:i') }}</td>
+
+            <td>
+              <a href="{{ route('admin.design-orders.show', $row->id) }}" class="btn btn-sm btn-primary">View</a>
+            </td>
+          </tr>
         @empty
-        <tr><td colspan="8" class="text-center text-muted">No design orders found.</td></tr>
+          <tr>
+            <td colspan="8" class="text-center text-muted">No design orders found.</td>
+          </tr>
         @endforelse
       </tbody>
     </table>
   </div>
 
-  {{-- pagination (works if $rows is a Paginator) --}}
   @if(method_exists($rows, 'links'))
     <div class="d-flex justify-content-center">
       {{ $rows->links() }}

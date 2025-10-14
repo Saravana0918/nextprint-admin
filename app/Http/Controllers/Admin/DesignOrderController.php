@@ -11,7 +11,7 @@ class DesignOrderController extends Controller
     /**
      * Show all design orders (team player entries)
      */
-    public function index()
+public function index()
 {
     $rows = DB::table('design_orders as d')
         ->leftJoin('products as p', 'p.id', '=', 'd.product_id')
@@ -19,10 +19,10 @@ class DesignOrderController extends Controller
             'd.id',
             'd.shopify_order_id',
             'd.product_id',
-            DB::raw("p.name as product_name"),     // <- use p.name (exists in your table)
-            DB::raw("d.name_text as name"),
-            DB::raw("d.number_text as number"),
-            'd.preview_image',
+            DB::raw("p.name as product_name"),        // product table 'name' exists
+            DB::raw("d.customer_name as name"),       // alias to view expected 'name'
+            DB::raw("d.customer_number as number"),   // alias to view expected 'number'
+            DB::raw("d.preview_src as preview_image"),// alias preview_src -> preview_image
             'd.created_at'
         ])
         ->orderBy('d.created_at', 'desc')
@@ -34,7 +34,7 @@ class DesignOrderController extends Controller
     /**
      * Show details for a specific order (all players under same shopify_order_id)
      */
-    public function show($id)
+public function show($id)
 {
     $order = DB::table('design_orders as d')
         ->leftJoin('products as p', 'p.id', '=', 'd.product_id')
@@ -49,14 +49,13 @@ class DesignOrderController extends Controller
         abort(404, 'Design order not found');
     }
 
-    // load players linked by product_id or shopify_order_id (adjust as per your linking)
+    // If you have team players linked by product_id or shopify_order_id, adapt accordingly.
+    // Example: fetch team_players using shopify_order_id if present:
     $players = DB::table('team_players')
-        ->where('product_id', $order->product_id)
-        ->where(function($q) use ($order) {
-            if (!empty($order->shopify_order_id)) {
-                $q->orWhere('shopify_order_id', $order->shopify_order_id);
-            }
-            $q->orWhere('created_at', '>=', now()->subDays(30)); // fallback - optional
+        ->when(!empty($order->shopify_order_id), function($q) use ($order) {
+            return $q->where('shopify_order_id', $order->shopify_order_id);
+        }, function($q) use ($order) {
+            return $q->where('product_id', $order->product_id);
         })
         ->orderBy('id')
         ->get();
