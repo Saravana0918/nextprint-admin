@@ -551,7 +551,10 @@ altNumEls.forEach(el => {
   try { if (window.layoutSlots && Object.keys(window.layoutSlots || {}).length) params.set('layoutSlots', encodeURIComponent(JSON.stringify(window.layoutSlots))); } catch (err) {}
   // NEW: include public logo URL (if available)
   try {
-    if (window.lastUploadedLogoUrl) params.set('prefill_logo', encodeURIComponent(window.lastUploadedLogoUrl));
+    // Always include the current base image shown on the stage as prefill_logo
+    const baseImgEl = document.getElementById('np-base');
+    const currentBaseSrc = (baseImgEl && baseImgEl.src) ? baseImgEl.src : (window.lastUploadedLogoUrl || '');
+    if (currentBaseSrc) params.set('prefill_logo', encodeURIComponent(currentBaseSrc));
   } catch(e){}
 
   const base = "{{ route('team.create') }}";

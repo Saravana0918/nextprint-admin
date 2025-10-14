@@ -4,10 +4,10 @@
 
 @section('content')
 @php
-  $img = $product->image_url ?? ($product->preview_src ?? asset('images/placeholder.png'));
+  $img = $product->preview_src ?? ($product->image_url ?? asset('images/placeholder.png'));
 
   // Start with any server-side $prefill passed by controller (if any)
-  $prefill = $prefill ?? [];
+   $prefill = $prefill ?? [];
 
   // Merge query params passed from designer (URL encoded).
   try {
