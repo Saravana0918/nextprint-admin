@@ -69,6 +69,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
     // delete preview (DELETE)
     Route::delete('products/{product}/preview', [ProductPreviewController::class, 'destroy'])
          ->name('products.preview.delete');
+    Route::get('/admin/design-orders', [\App\Http\Controllers\Admin\DesignOrderController::class,'index'])->name('admin.design-orders.index');
+    Route::get('/admin/design-orders/{id}', [\App\Http\Controllers\Admin\DesignOrderController::class,'show'])->name('admin.design-orders.show');
 }); // end admin
 
 Route::get('/admin/login', [AdminAuthController::class, 'showLoginForm'])->name('admin.login');

@@ -15,6 +15,9 @@
   <div class="d-flex gap-2">
     <a href="{{ route('admin.decoration.index') }}" class="btn btn-outline-primary">Manage Decoration Areas</a>
     <a href="{{ route('admin.print-methods.index') }}" class="btn btn-outline-secondary">Print Methods</a>
+    <a href="{{ route('admin.design-orders.index') }}" class="btn btn-outline-info">
+    Orders
+  </a>
   </div>
 </div>
 
