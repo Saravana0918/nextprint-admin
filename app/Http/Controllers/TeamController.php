@@ -53,7 +53,7 @@ class TeamController extends Controller
             'players.*.font'   => 'nullable|string|max:50',
             'players.*.color'  => 'nullable|string|max:20',
             'team_logo_url'     => 'nullable|string',
-            'preview_data'      => 'nullable|string', // data URL (base64)
+            'preview_data'      => 'nullable|string', // data URL
         ]);
 
         // normalize players array
@@ -81,7 +81,7 @@ class TeamController extends Controller
                 $previewUrl = Storage::disk('public')->url($fileName);
             } catch (\Throwable $e) {
                 Log::error('Failed saving preview image: ' . $e->getMessage());
-                $previewUrl = null; // continue without failing whole request
+                $previewUrl = null; // continue
             }
         }
 
@@ -99,23 +99,21 @@ class TeamController extends Controller
             return response()->json(['success' => false, 'message' => 'Could not save design.'], 500);
         }
 
-        // Ensure admin list shows this design: insert row into design_orders
+        // Ensure admin list shows this design: insert row into design_orders using columns that exist
         try {
             $first = $playersProcessed[0] ?? null;
             $firstName = $first['name'] ?? null;
             $firstNumber = $first['number'] ?? null;
 
-            // Build metadata to store in 'meta' or 'raw_payload'
-            $meta = [
+            // Build raw_payload that includes team_id so future lookups can find it
+            $rawPayload = [
                 'team_id' => $team->id,
                 'players' => $playersProcessed,
                 'team_logo_url' => $payload['team_logo_url'] ?? null,
             ];
 
-            // Prepare insert array - match your DB column names (adjust if your schema differs)
             $insert = [
                 'product_id'         => $payload['product_id'],
-                'product_name'       => null, // optional; we don't necessarily have it here
                 'shopify_product_id' => null,
                 'variant_id'         => $first['variant_id'] ?? null,
                 'size'               => $first['size'] ?? null,
@@ -127,28 +125,29 @@ class TeamController extends Controller
                 'uploaded_logo_url'  => $payload['team_logo_url'] ?? null,
                 'preview_src'        => $previewUrl ?? null,
                 'preview_path'       => $previewUrl ?? null,
-                'raw_payload'        => json_encode($payload),
+                // store the raw payload as JSON string (so we can search text later)
+                'raw_payload'        => json_encode($rawPayload),
+                // also store in payload (some schemas expect longtext)
                 'payload'            => json_encode(['players' => $playersProcessed]),
-                'meta'               => json_encode($meta),
                 'status'             => 'new',
                 'created_at'         => Carbon::now(),
                 'updated_at'         => Carbon::now(),
             ];
 
-            // Try to update existing design_orders record for this team if present
-            // (use JSON_EXTRACT(meta,'$.team_id') = ? if meta is JSON)
-            $existing = DB::table('design_orders')
-                ->whereRaw("JSON_EXTRACT(meta, '$.team_id') = ?", [$team->id])
-                ->first();
+            // Find existing by searching raw_payload text for team_id (works even if column is TEXT)
+            $found = DB::table('design_orders')->where(function($q) use ($team) {
+                $q->where('raw_payload', 'like', '%"team_id":' . $team->id . '%')
+                  ->orWhere('raw_payload', 'like', '%"team_id":"' . $team->id . '"%');
+            })->first();
 
-            if ($existing) {
-                DB::table('design_orders')->where('id', $existing->id)->update($insert);
+            if ($found) {
+                DB::table('design_orders')->where('id', $found->id)->update($insert);
             } else {
                 DB::table('design_orders')->insert($insert);
             }
         } catch (\Throwable $e) {
-            // Log error but don't block user (team already saved)
             Log::warning('Insert into design_orders failed: ' . $e->getMessage(), ['team_id' => $team->id ?? null]);
+            // do not fail user flow
         }
 
         return response()->json([
@@ -160,7 +159,6 @@ class TeamController extends Controller
 
     /**
      * Classic form submit endpoint (Add To Cart / Team store)
-     * Creates or updates Team and redirects to shopfront cart.
      */
     public function store(Request $request)
     {
@@ -185,7 +183,6 @@ class TeamController extends Controller
             return back()->with('error', 'Product not found.');
         }
 
-        // build variantMap size -> variant id (shopify)
         $variantMap = [];
         if ($product->relationLoaded('variants') && $product->variants) {
             foreach ($product->variants as $v) {
@@ -195,7 +192,6 @@ class TeamController extends Controller
             }
         }
 
-        // resolve players and variant ids
         $playersProcessed = [];
         foreach ($data['players'] as $p) {
             $variantId = isset($p['variant_id']) && $p['variant_id'] ? (string)$p['variant_id'] : null;
@@ -225,7 +221,6 @@ class TeamController extends Controller
             ];
         }
 
-        // ensure every player has resolved variant id
         $missingVariants = array_filter($playersProcessed, function($pl) {
             return empty($pl['variant_id']) || !preg_match('/^\d+$/', (string)$pl['variant_id']);
         });
@@ -238,7 +233,6 @@ class TeamController extends Controller
             return back()->withInput()->with('error', $msg);
         }
 
-        // create or update Team
         try {
             if (!empty($data['team_id'])) {
                 $team = Team::find($data['team_id']);
@@ -267,7 +261,7 @@ class TeamController extends Controller
             return back()->with('error', 'Could not save team. Please try again.');
         }
 
-        // ensure design_orders entry exists (insert or update)
+        // ensure design_orders entry exists (insert or update) using raw_payload search
         try {
             $firstPlayer = $playersProcessed[0] ?? null;
             $orderData = [
@@ -280,16 +274,18 @@ class TeamController extends Controller
                 'number_text' => $firstPlayer['number'] ?? null,
                 'preview_src' => $data['preview_url'] ?? $team->preview_url ?? null,
                 'preview_path' => $data['preview_url'] ?? $team->preview_url ?? null,
-                'meta' => json_encode(['team_id' => $team->id, 'players' => $playersProcessed]),
-                'raw_payload' => json_encode(['players' => $playersProcessed]),
+                'raw_payload' => json_encode(['team_id' => $team->id, 'players' => $playersProcessed]),
                 'payload' => json_encode(['players' => $playersProcessed]),
                 'status' => 'new',
                 'created_at' => now(),
                 'updated_at' => now(),
             ];
 
-            // if an existing design_orders row exists for this team, update it; else insert
-            $existing = DB::table('design_orders')->whereRaw("JSON_EXTRACT(meta, '$.team_id') = ?", [$team->id])->first();
+            $existing = DB::table('design_orders')->where(function($q) use ($team) {
+                $q->where('raw_payload', 'like', '%"team_id":' . $team->id . '%')
+                  ->orWhere('raw_payload', 'like', '%"team_id":"' . $team->id . '"%');
+            })->first();
+
             if ($existing) {
                 DB::table('design_orders')->where('id', $existing->id)->update($orderData);
             } else {
