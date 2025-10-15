@@ -189,18 +189,22 @@
           <input id="np-qty" name="quantity" type="number" min="1" value="1" class="form-control">
         </div>
         <div class="d-flex justify-content-between align-items-center mb-3">
-          <div class="d-flex align-items-center">
-            <button id="save-design-btn" type="button" class="btn btn-outline-primary me-2">
-              Save Design (Save)
-            </button>
-            <button id="np-atc-btn" type="submit" class="btn btn-primary d-none" disabled>
-              Add to Cart
-            </button>
-          </div>
-          <div>
-            <a href="#" class="btn btn-success" id="btn-add-team">Add Team Players</a>
-          </div>
-        </div>
+    <!-- LEFT group -->
+    <div class="d-flex align-items-center">
+      <button id="save-design-btn" type="button" class="btn btn-outline-primary me-2" style="    padding: .25rem .5rem;font-size: .96rem;">
+        Save Design (Save)
+      </button>
+
+      <button id="np-atc-btn" type="submit" class="btn btn-primary d-none" disabled>
+        Add to Cart
+      </button>
+    </div>
+
+    <!-- RIGHT group -->
+    <div>
+      <a href="#" class="btn btn-success" id="btn-add-team">Add Team Players</a>
+    </div>
+  </div>
       </form>
     </div>
   </div>
