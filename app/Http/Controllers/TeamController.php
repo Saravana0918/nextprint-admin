@@ -99,74 +99,70 @@ class TeamController extends Controller
             'updated_at' => now(),
         ]);
 
-        // 4) Ensure design_orders row exists / update it
-        // Prepare order data (fields we want to save)
-        $first = $players[0] ?? null;
+        // ---------- REPLACE START (order upsert block) ----------
+$first = $players[0] ?? null;
 
-        // try to gather product info (if Product model available)
-        $productName = null;
-        $shopifyProductId = null;
+// Build orderData using ONLY existing design_orders columns
+$orderData = [
+    'team_id'       => $teamId,
+    'product_id'    => $data['product_id'] ?? null,
+    'shopify_product_id' => $shopifyProductId ?? null,
+    'variant_id'    => $first['variant_id'] ?? null,
+    'size'          => $first['size'] ?? null,
+    'name_text'     => $first['name'] ?? ($data['name_text'] ?? null),
+    'number_text'   => $first['number'] ?? ($data['number_text'] ?? null),
+    'preview_src'   => $previewPath ?? null,
+    'preview_path'  => $previewPath ?? null,
+    'raw_payload'   => json_encode(['team_id' => $teamId, 'players' => $players], JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE),
+    'payload'       => json_encode(['players' => $players], JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE),
+    'status'        => 'new',
+    'created_at'    => now(),
+    'updated_at'    => now(),
+];
+
+$linkedOrderId = null;
+
+// 1) If frontend provided explicit order_id -> update that
+if (!empty($data['order_id'])) {
+    DB::table('design_orders')->where('id', $data['order_id'])->update($orderData);
+    $linkedOrderId = $data['order_id'];
+} else {
+    // 2) Try find existing design_order that already references this team in raw_payload
+    $existing = DB::table('design_orders')->where(function($q) use ($teamId) {
+        $q->where('raw_payload', 'like', '%"team_id":' . $teamId . '%')
+          ->orWhere('raw_payload', 'like', '%"team_id":"' . $teamId . '"%');
+    })->orderBy('created_at', 'desc')->first();
+
+    if ($existing) {
+        DB::table('design_orders')->where('id', $existing->id)->update($orderData);
+        $linkedOrderId = $existing->id;
+    } else {
+        // 3) If not found, try best-effort match by product_id + name/number
+        $candidateQuery = DB::table('design_orders')->orderBy('created_at', 'desc');
         if (!empty($data['product_id'])) {
-            try {
-                $prod = Product::find($data['product_id']);
-                if ($prod) {
-                    $productName = $prod->name ?? null;
-                    $shopifyProductId = $prod->shopify_product_id ?? null;
-                }
-            } catch (\Throwable $e) {
-                // ignore product lookup failure
-            }
+            $candidateQuery->where('product_id', $data['product_id']);
         }
+        $candidateQuery->where(function($q) use ($first) {
+            if (!empty($first['number'])) {
+                $q->orWhere('number_text', $first['number']);
+            }
+            if (!empty($first['name'])) {
+                $q->orWhere('name_text', 'like', '%' . substr($first['name'], 0, 50) . '%');
+            }
+        });
+        $candidate = $candidateQuery->first();
 
-        $orderData = [
-            'team_id' => $teamId,
-            'product_id' => $data['product_id'] ?? null,
-            'product_name' => $productName,
-            'shopify_product_id' => $shopifyProductId,
-            'variant_id' => $first['variant_id'] ?? null,
-            'size' => $first['size'] ?? null,
-            'name_text' => $first['name'] ?? ($data['name_text'] ?? null),
-            'number_text' => $first['number'] ?? ($data['number_text'] ?? null),
-            'preview_src' => $previewPath ?? null,
-            'preview_path' => $previewPath ?? null,
-            'raw_payload' => json_encode(['team_id' => $teamId, 'players' => $players]),
-            'payload' => json_encode(['players' => $players]),
-            'status' => 'new',
-            'created_at' => now(),
-            'updated_at' => now(),
-        ];
-
-        $linkedOrderId = null;
-
-        // If frontend explicitly provided an order_id -> update that row
-        if (!empty($data['order_id'])) {
-            DB::table('design_orders')->where('id', $data['order_id'])->update($orderData);
-            $linkedOrderId = $data['order_id'];
+        if ($candidate) {
+            DB::table('design_orders')->where('id', $candidate->id)->update($orderData);
+            $linkedOrderId = $candidate->id;
         } else {
-            // Try find an existing order by product + name/number (best-effort)
-            $query = DB::table('design_orders');
-            if (!empty($data['product_id'])) {
-                $query->where('product_id', $data['product_id']);
-            }
-            // match by name_text or number_text if available
-            $query = $query->where(function($q) use ($first) {
-                if (!empty($first['name'])) {
-                    $q->orWhere('name_text', 'like', '%' . substr($first['name'], 0, 50) . '%');
-                }
-                if (!empty($first['number'])) {
-                    $q->orWhere('number_text', $first['number']);
-                }
-            });
-            $existing = $query->orderBy('created_at', 'desc')->first();
-
-            if ($existing) {
-                DB::table('design_orders')->where('id', $existing->id)->update($orderData);
-                $linkedOrderId = $existing->id;
-            } else {
-                // No existing order -> create minimal new design_orders row
-                $linkedOrderId = DB::table('design_orders')->insertGetId($orderData);
-            }
+            // 4) Nothing found -> create a minimal design_orders row (safe columns only)
+            $linkedOrderId = DB::table('design_orders')->insertGetId($orderData);
         }
+    }
+}
+// ---------- REPLACE END ----------
+
 
         DB::commit();
 
