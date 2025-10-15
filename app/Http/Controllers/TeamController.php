@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Support\Carbon;
 use App\Models\Team;
 use App\Models\Product;
 
@@ -19,7 +20,10 @@ class TeamController extends Controller
     public function create(Request $request)
     {
         $product = Product::with('variants')->find($request->query('product_id'));
-        $prefill = $request->only(['prefill_name','prefill_number','prefill_font','prefill_color','prefill_size','prefill_logo']);
+        $prefill = $request->only([
+            'prefill_name','prefill_number','prefill_font',
+            'prefill_color','prefill_size','prefill_logo'
+        ]);
 
         $layoutSlots = [];
         if ($product && !empty($product->layout_slots)) {
@@ -41,19 +45,18 @@ class TeamController extends Controller
     public function saveDesign(Request $request): JsonResponse
     {
         $payload = $request->validate([
-            'product_id'          => 'required|integer|exists:products,id',
-            'players'             => 'required|array|min:1',
-            'players.*.name'      => 'required|string|max:60',
-            'players.*.number'    => ['required','regex:/^\d{1,3}$/'],
-            'players.*.size'      => 'nullable|string|max:10',
-            'players.*.font'      => 'nullable|string|max:50',
-            'players.*.color'     => 'nullable|string|max:20',
-            'players.*.variant_id' => 'nullable',
-            'team_logo_url'       => 'nullable|string',
-            'preview_data'        => 'nullable|string',
+            'product_id'   => 'required|integer|exists:products,id',
+            'players'      => 'required|array|min:1',
+            'players.*.name'   => 'required|string|max:60',
+            'players.*.number' => ['required','regex:/^\d{1,3}$/'],
+            'players.*.size'   => 'nullable|string|max:10',
+            'players.*.font'   => 'nullable|string|max:50',
+            'players.*.color'  => 'nullable|string|max:20',
+            'team_logo_url'     => 'nullable|string',
+            'preview_data'      => 'nullable|string', // data URL (base64)
         ]);
 
-        // normalize players
+        // normalize players array
         $playersProcessed = [];
         foreach ($payload['players'] as $p) {
             $playersProcessed[] = [
@@ -66,7 +69,7 @@ class TeamController extends Controller
             ];
         }
 
-        // Save preview image (dataURL) to public storage if present
+        // Save preview image if provided (data:image/...;base64,...)
         $previewUrl = null;
         if (!empty($payload['preview_data']) && preg_match('#^data:image\/(png|jpeg|jpg);base64,#i', $payload['preview_data'])) {
             try {
@@ -78,11 +81,11 @@ class TeamController extends Controller
                 $previewUrl = Storage::disk('public')->url($fileName);
             } catch (\Throwable $e) {
                 Log::error('Failed saving preview image: ' . $e->getMessage());
-                $previewUrl = null;
+                $previewUrl = null; // continue without failing whole request
             }
         }
 
-        // create team record
+        // Create Team model
         try {
             $team = Team::create([
                 'product_id' => $payload['product_id'],
@@ -96,25 +99,56 @@ class TeamController extends Controller
             return response()->json(['success' => false, 'message' => 'Could not save design.'], 500);
         }
 
-        // create a design_orders row so admin lists show the saved design
+        // Ensure admin list shows this design: insert row into design_orders
         try {
-            $product = Product::find($payload['product_id']);
-            $firstPlayer = $playersProcessed[0] ?? null;
-            $orderData = [
-                'product_id' => $payload['product_id'],
-                'product_name' => $product->name ?? null,
-                'shopify_product_id' => $product->shopify_product_id ?? null,
-                'name_text' => $firstPlayer['name'] ?? null,
-                'number_text' => $firstPlayer['number'] ?? null,
-                'preview_src' => $previewUrl,
-                'meta' => json_encode(['team_id' => $team->id, 'players' => $playersProcessed]),
-                'created_at' => now(),
-                'updated_at' => now(),
+            $first = $playersProcessed[0] ?? null;
+            $firstName = $first['name'] ?? null;
+            $firstNumber = $first['number'] ?? null;
+
+            // Build metadata to store in 'meta' or 'raw_payload'
+            $meta = [
+                'team_id' => $team->id,
+                'players' => $playersProcessed,
+                'team_logo_url' => $payload['team_logo_url'] ?? null,
             ];
-            DB::table('design_orders')->insert($orderData);
+
+            // Prepare insert array - match your DB column names (adjust if your schema differs)
+            $insert = [
+                'product_id'         => $payload['product_id'],
+                'product_name'       => null, // optional; we don't necessarily have it here
+                'shopify_product_id' => null,
+                'variant_id'         => $first['variant_id'] ?? null,
+                'size'               => $first['size'] ?? null,
+                'quantity'           => 1,
+                'name_text'          => $firstName ? mb_strtoupper($firstName) : null,
+                'number_text'        => $firstNumber ?: null,
+                'font'               => $first['font'] ?? null,
+                'color'              => $first['color'] ?? null,
+                'uploaded_logo_url'  => $payload['team_logo_url'] ?? null,
+                'preview_src'        => $previewUrl ?? null,
+                'preview_path'       => $previewUrl ?? null,
+                'raw_payload'        => json_encode($payload),
+                'payload'            => json_encode(['players' => $playersProcessed]),
+                'meta'               => json_encode($meta),
+                'status'             => 'new',
+                'created_at'         => Carbon::now(),
+                'updated_at'         => Carbon::now(),
+            ];
+
+            // Try to update existing design_orders record for this team if present
+            // (use JSON_EXTRACT(meta,'$.team_id') = ? if meta is JSON)
+            $existing = DB::table('design_orders')
+                ->whereRaw("JSON_EXTRACT(meta, '$.team_id') = ?", [$team->id])
+                ->first();
+
+            if ($existing) {
+                DB::table('design_orders')->where('id', $existing->id)->update($insert);
+            } else {
+                DB::table('design_orders')->insert($insert);
+            }
         } catch (\Throwable $e) {
-            Log::warning('Could not create design_orders row after saveDesign: ' . $e->getMessage());
-            // non-fatal: team is saved; admin list may not show it until manual fix
+            // Log error but don't block user (team already saved)
+            Log::warning('Insert into design_orders failed: ' . $e->getMessage(), ['team_id' => $team->id ?? null]);
         }
 
         return response()->json([
@@ -151,6 +185,7 @@ class TeamController extends Controller
             return back()->with('error', 'Product not found.');
         }
 
+        // build variantMap size -> variant id (shopify)
         $variantMap = [];
         if ($product->relationLoaded('variants') && $product->variants) {
             foreach ($product->variants as $v) {
@@ -160,6 +195,7 @@ class TeamController extends Controller
             }
         }
 
+        // resolve players and variant ids
         $playersProcessed = [];
         foreach ($data['players'] as $p) {
             $variantId = isset($p['variant_id']) && $p['variant_id'] ? (string)$p['variant_id'] : null;
@@ -189,6 +225,7 @@ class TeamController extends Controller
             ];
         }
 
+        // ensure every player has resolved variant id
         $missingVariants = array_filter($playersProcessed, function($pl) {
             return empty($pl['variant_id']) || !preg_match('/^\d+$/', (string)$pl['variant_id']);
         });
@@ -201,6 +238,7 @@ class TeamController extends Controller
             return back()->withInput()->with('error', $msg);
         }
 
+        // create or update Team
         try {
             if (!empty($data['team_id'])) {
                 $team = Team::find($data['team_id']);
@@ -229,22 +267,28 @@ class TeamController extends Controller
             return back()->with('error', 'Could not save team. Please try again.');
         }
 
-        // ensure there's a design_orders entry for admin listing
+        // ensure design_orders entry exists (insert or update)
         try {
             $firstPlayer = $playersProcessed[0] ?? null;
             $orderData = [
                 'product_id' => $data['product_id'],
                 'product_name' => $product->name ?? null,
                 'shopify_product_id' => $product->shopify_product_id ?? null,
+                'variant_id' => $firstPlayer['variant_id'] ?? null,
+                'size' => $firstPlayer['size'] ?? null,
                 'name_text' => $firstPlayer['name'] ?? null,
                 'number_text' => $firstPlayer['number'] ?? null,
                 'preview_src' => $data['preview_url'] ?? $team->preview_url ?? null,
+                'preview_path' => $data['preview_url'] ?? $team->preview_url ?? null,
                 'meta' => json_encode(['team_id' => $team->id, 'players' => $playersProcessed]),
+                'raw_payload' => json_encode(['players' => $playersProcessed]),
+                'payload' => json_encode(['players' => $playersProcessed]),
+                'status' => 'new',
                 'created_at' => now(),
                 'updated_at' => now(),
             ];
 
-            // If there's an existing design_orders row for this team, update it; otherwise insert
+            // if an existing design_orders row exists for this team, update it; else insert
             $existing = DB::table('design_orders')->whereRaw("JSON_EXTRACT(meta, '$.team_id') = ?", [$team->id])->first();
             if ($existing) {
                 DB::table('design_orders')->where('id', $existing->id)->update($orderData);
@@ -252,10 +296,10 @@ class TeamController extends Controller
                 DB::table('design_orders')->insert($orderData);
             }
         } catch (\Throwable $e) {
-            Log::warning('Could not ensure design_orders row exists: ' . $e->getMessage());
+            Log::warning('Could not ensure design_orders row exists: ' . $e->getMessage(), ['team_id' => $team->id ?? null]);
         }
 
-        // Build shopfront cart pairs and redirect
+        // Build shopfront cart pairs
         $pairs = [];
         foreach ($playersProcessed as $pl) {
             $vid = (string)$pl['variant_id'];
