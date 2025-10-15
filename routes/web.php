@@ -102,6 +102,8 @@ Route::get('/team/create', [TeamController::class,'create'])->name('team.create'
 Route::post('/team/store', [TeamController::class,'store'])->name('team.store');
 // <-- ADD THIS: team.show so redirect after store doesn't 404
 Route::get('/team/{team}', [TeamController::class,'show'])->name('team.show');
+Route::post('/team/save', [\App\Http\Controllers\TeamController::class,'saveDesign'])->name('team.save');
+
 
 Route::post('/save-preview', [App\Http\Controllers\PreviewController::class, 'store'])->name('preview.store');
 

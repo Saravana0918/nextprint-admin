@@ -6,8 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class Team extends Model
 {
-   protected $fillable = ['product_id','players','created_by'];
+    protected $fillable = ['product_id','players','created_by','preview_url','team_logo_url'];
     protected $casts = [
-  'players' => 'array',
-];
+        'players' => 'array',
+    ];
 }
