@@ -188,7 +188,7 @@
         <div class="mb-2">
           <input id="np-qty" name="quantity" type="number" min="1" value="1" class="form-control">
         </div>
-        <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="d-flex align-items-center mb-3">
     <!-- LEFT group -->
     <div class="d-flex align-items-center">
       <button id="save-design-btn" type="button" class="btn btn-outline-primary me-2" style="    padding: .25rem .5rem;font-size: .96rem;">
