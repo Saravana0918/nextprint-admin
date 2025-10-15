@@ -19,7 +19,7 @@
         <div class="card-body">
           <h5 class="card-title mb-2">
             {{ $order->product_name ?? ('Product #' . ($order->product_id ?? '—')) }}
-          </h5>]
+          </h5>
 
           <p class="mb-1">
             <strong>Customer Name / Number:</strong>
