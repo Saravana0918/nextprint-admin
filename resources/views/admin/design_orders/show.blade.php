@@ -43,7 +43,12 @@
 
           <p class="mb-1"><strong>Saved Payload:</strong></p>
           <pre style="white-space:pre-wrap; max-height:220px; overflow:auto; background:#f8f9fa; padding:8px; border-radius:6px;">
-{{ json_encode(json_decode($order->raw_payload ?? '{}'), JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES) }}
+{{ 
+    // safe decode raw_payload - if not JSON show raw string
+    ($order->raw_payload ?? '') ? 
+      (json_encode(json_decode($order->raw_payload, true) ?: json_decode($order->raw_payload), JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES) ?? ($order->raw_payload)) 
+      : '—' 
+}}
           </pre>
         </div>
       </div>
@@ -56,10 +61,15 @@
             $preview = $order->preview_src ?? null;
             $previewUrl = null;
             if (!empty($preview)) {
+              // normalize storage paths and absolute urls
               if (Str::startsWith($preview, '/storage') || Str::startsWith($preview, 'storage')) {
-                $previewUrl = asset($preview);
-              } else {
+                // if it's '/storage/...' make it asset()
+                $previewUrl = asset(ltrim($preview, '/'));
+              } elseif (Str::startsWith($preview, 'http://') || Str::startsWith($preview, 'https://')) {
                 $previewUrl = $preview;
+              } else {
+                // maybe it's stored path relative to storage/app/public
+                $previewUrl = Storage::disk('public')->exists($preview) ? asset('storage/'.$preview) : $preview;
               }
             }
           @endphp
@@ -81,6 +91,7 @@
       <div class="card mb-3">
         <div class="card-body">
           <h6>Team Players ({{ $players->count() }})</h6>
+
           @if($players->isEmpty())
             <div class="text-muted">No players saved for this order.</div>
           @else
@@ -98,24 +109,35 @@
                   </tr>
                 </thead>
                 <tbody>
-                  @foreach($players as $p)
+                  @foreach($players as $index => $p)
                     @php
-                      $pPreview = $p->preview_image ?? $p->preview_src ?? null;
+                      // support both object and array shapes
+                      $pId = is_object($p) ? ($p->id ?? $index+1) : ($p['id'] ?? $index+1);
+                      $pName = is_object($p) ? ($p->name ?? '') : ($p['name'] ?? '');
+                      $pNumber = is_object($p) ? ($p->number ?? '') : ($p['number'] ?? '');
+                      $pSize = is_object($p) ? ($p->size ?? '') : ($p['size'] ?? '');
+                      $pFont = is_object($p) ? ($p->font ?? $order->font ?? '—') : ($p['font'] ?? $order->font ?? '—');
+                      $pPreview = is_object($p) ? ($p->preview_src ?? $p->preview_image ?? null) : ($p['preview_src'] ?? $p['preview_image'] ?? null);
+                      $pCreated = is_object($p) ? ($p->created_at ?? null) : ($p['created_at'] ?? null);
+
                       $pUrl = null;
                       if (!empty($pPreview)) {
                         if (Str::startsWith($pPreview, '/storage') || Str::startsWith($pPreview, 'storage')) {
-                          $pUrl = asset($pPreview);
-                        } else {
+                          $pUrl = asset(ltrim($pPreview, '/'));
+                        } elseif (Str::startsWith($pPreview, 'http://') || Str::startsWith($pPreview, 'https://')) {
                           $pUrl = $pPreview;
+                        } else {
+                          $pUrl = Storage::disk('public')->exists($pPreview) ? asset('storage/'.$pPreview) : $pPreview;
                         }
                       }
                     @endphp
+
                     <tr>
-                      <td>{{ $p->id }}</td>
-                      <td>{{ $p->name }}</td>
-                      <td>{{ $p->number }}</td>
-                      <td>{{ $p->size }}</td>
-                      <td>{{ $p->font ?? ($order->font ?? '—') }}</td>
+                      <td>{{ $pId }}</td>
+                      <td>{{ $pName }}</td>
+                      <td>{{ $pNumber }}</td>
+                      <td>{{ $pSize }}</td>
+                      <td>{{ $pFont }}</td>
                       <td style="width:90px;">
                         @if($pUrl)
                           <img src="{{ $pUrl }}" width="56" height="56" style="object-fit:cover; border-radius:4px;">
@@ -123,7 +145,13 @@
                           <span class="text-muted small">—</span>
                         @endif
                       </td>
-                      <td class="text-muted small">{{ \Carbon\Carbon::parse($p->created_at ?? now())->format('d M Y') }}</td>
+                      <td class="text-muted small">
+                        @if($pCreated)
+                          {{ \Carbon\Carbon::parse($pCreated)->format('d M Y') }}
+                        @else
+                          {{ \Carbon\Carbon::parse($order->created_at)->format('d M Y') }}
+                        @endif
+                      </td>
                     </tr>
                   @endforeach
                 </tbody>
