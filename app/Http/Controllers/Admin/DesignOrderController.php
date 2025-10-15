@@ -55,5 +55,33 @@ public function show($id)
 
     return view('admin.design_orders.show', compact('order', 'players'));
 }
+public function destroy(Request $request, $id)
+    {
+        try {
+            // Optional: check permission manually if not using can:admin in route
+            // $this->authorize('delete', DesignOrder::class);
 
+            // If you have a model:
+            // $row = DesignOrder::find($id);
+            // if (!$row) abort(404);
+
+            // if you want to delete associated preview file from disk (optional)
+            // if ($row->preview_src && Str::startsWith($row->preview_src, '/storage')) {
+            //     $path = str_replace('/storage/', '', $row->preview_src);
+            //     Storage::disk('public')->delete($path);
+            // }
+
+            // delete using query builder to avoid model issues
+            $deleted = DB::table('design_orders')->where('id', $id)->delete();
+
+            if (!$deleted) {
+                return redirect()->back()->with('error', 'Design order not found or could not be deleted.');
+            }
+
+            return redirect()->route('admin.design-orders.index')->with('success', 'Design order deleted.');
+        } catch (\Throwable $e) {
+            Log::error('Design order delete failed: '.$e->getMessage(), ['id'=>$id, 'trace'=>$e->getTraceAsString()]);
+            return redirect()->back()->with('error', 'Could not delete design order. Check logs.');
+        }
+    }
 }

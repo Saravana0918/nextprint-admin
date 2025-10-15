@@ -77,6 +77,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
     Route::post('/design-order', [ApiDesignOrderController::class, 'store'])->name('design.order.store');
     Route::get('/design-orders/{id}', [\App\Http\Controllers\Admin\DesignOrderController::class, 'show'])
         ->name('design-orders.show');
+    Route::delete('/design-orders/{id}', [\App\Http\Controllers\Admin\DesignOrderController::class, 'destroy'])
+        ->name('design-orders.destroy');
 
 }); // end admin
 

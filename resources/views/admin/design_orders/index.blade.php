@@ -11,6 +11,13 @@
     </div>
   </div>
 
+  @if(session('success'))
+    <div class="alert alert-success">{{ session('success') }}</div>
+  @endif
+  @if(session('error'))
+    <div class="alert alert-danger">{{ session('error') }}</div>
+  @endif
+
   <div class="table-responsive">
     <table class="table table-striped align-middle">
       <thead>
@@ -42,7 +49,6 @@
               {{ $row->product_name ?? $row->product_id ?? '—' }}
             </td>
 
-            {{-- Use name_text / number_text (DB columns) --}}
             <td>{{ $row->name_text ?? '—' }}</td>
             <td>{{ $row->number_text ?? '—' }}</td>
 
@@ -54,7 +60,6 @@
                   if (Str::startsWith($preview, '/storage') || Str::startsWith($preview, 'storage')) {
                     $previewUrl = asset($preview);
                   } else {
-                    // allow absolute http(s) or data:image
                     $previewUrl = $preview;
                   }
                 }
@@ -71,8 +76,17 @@
 
             <td>{{ \Carbon\Carbon::parse($row->created_at)->format('d M Y, H:i') }}</td>
 
-            <td>
-              <a href="{{ route('admin.design-orders.show', $row->id) }}" class="btn btn-sm btn-primary">View</a>
+            <td class="text-end">
+              <div style="display:flex; gap:6px; justify-content:flex-end;">
+                <a href="{{ route('admin.design-orders.show', $row->id) }}" class="btn btn-sm btn-primary">View</a>
+
+                <form action="{{ route('admin.design-orders.destroy', $row->id) }}" method="POST"
+                      onsubmit="return confirm('Delete this design order? This action cannot be undone.');" style="display:inline;">
+                  @csrf
+                  @method('DELETE')
+                  <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                </form>
+              </div>
             </td>
           </tr>
         @empty
