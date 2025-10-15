@@ -189,7 +189,7 @@
           <input id="np-qty" name="quantity" type="number" min="1" value="1" class="form-control">
         </div>
         <button id="save-design-btn" type="button" class="btn btn-outline-primary" style="margin-right:8px;">Save Design (Save)</button>
-        <button id="np-atc-btn" type="submit" class="btn btn-primary d-none"> Add to Cart </button>
+        <button id="np-atc-btn" type="submit" class="btn btn-primary d-none" disabled>Add to Cart</button>
         <a href="#" class="btn btn-success" id="btn-add-team" style="margin-left:8px;">Add Team Players</a>
       </form>
     </div>
@@ -794,36 +794,40 @@ async function handleFile(file) {
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script>
 (async function(){
-  const saveBtn = document.getElementById('save-design-btn'); // your Save button
-  const stage = document.getElementById('np-stage');
+  const saveBtn = document.getElementById('save-design-btn');
+  const atcBtn  = document.getElementById('np-atc-btn');
   const previewHidden = document.getElementById('np-preview-hidden');
-  const atcBtn = document.getElementById('np-atc-btn');
-  const csrf = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+  const stage = document.getElementById('np-stage');
+  const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+  // Ensure ATC button is hidden/disabled initially (so users must Save first)
+  if (atcBtn) {
+    atcBtn.disabled = true;
+    // hide visually if you prefer: atcBtn.classList.add('d-none');
+  }
 
   async function makePreviewDataURL(){
     try {
-      // ensure html2canvas script is loaded (you already include it)
-      const canvas = await html2canvas(stage, { useCORS:true, backgroundColor: null, scale: window.devicePixelRatio || 1 });
+      const canvas = await html2canvas(stage, { useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1 });
       return canvas.toDataURL('image/png');
     } catch (err) {
-      console.warn('html2canvas failed:', err);
+      console.warn('html2canvas failed', err);
       return null;
     }
   }
 
-  saveBtn?.addEventListener('click', async function(e){
-    e.preventDefault();
+  async function doSave() {
+    if (!saveBtn) return;
     saveBtn.disabled = true;
     saveBtn.textContent = 'Saving...';
 
-    // sync hidden values (name/number/font/color/variant are kept in sync by your other code)
-    // const name = document.getElementById('np-name-hidden').value etc - but hidden inputs already exist
-    // Generate preview (prefer dataURL)
+    // optional: ensure hidden fields are in sync before sending (your other JS should do this too)
+    // document.getElementById('np-name-hidden').value = document.getElementById('np-name').value.toUpperCase();
+
     const previewDataUrl = await makePreviewDataURL();
 
-    // gather payload
     const payload = {
-      product_id: parseInt(new URL(location.href).searchParams.get('product_id')) || document.getElementById('np-product-id')?.value || null,
+      product_id: document.getElementById('np-product-id')?.value || null,
       shopify_product_id: document.getElementById('np-shopify-product-id')?.value || null,
       variant_id: document.getElementById('np-variant-id')?.value || null,
       name: document.getElementById('np-name-hidden')?.value || null,
@@ -832,7 +836,7 @@ async function handleFile(file) {
       color: document.getElementById('np-color-hidden')?.value || null,
       size: document.getElementById('np-size')?.value || null,
       quantity: parseInt(document.getElementById('np-qty')?.value || '1', 10),
-      preview_src: previewDataUrl // send dataURL (server will save it)
+      preview_src: previewDataUrl // send dataURL, server should save and return public URL
     };
 
     try {
@@ -843,43 +847,60 @@ async function handleFile(file) {
           'Content-Type': 'application/json',
           'X-CSRF-TOKEN': csrf
         },
-        body: JSON.stringify(payload),
-        credentials: 'same-origin'
+        credentials: 'same-origin',
+        body: JSON.stringify(payload)
       });
 
       const data = await res.json().catch(()=>({}));
 
-      if (!res.ok) {
+      if (!res.ok || !data || data.success !== true) {
         console.error('Save failed', data);
-        alert('Save failed: ' + (data.message || res.status));
+        alert('Save failed: ' + (data.message || res.status || 'Unknown'));
         saveBtn.disabled = false;
         saveBtn.textContent = 'Save Design (Save)';
         return;
       }
 
-      // Success: server returned preview_url (public URL) ideally
+      // success
       const previewUrl = data.preview_url || data.preview_src || previewDataUrl || null;
-      if (previewUrl && previewHidden) {
-        previewHidden.value = previewUrl;
-      }
+      if (previewUrl && previewHidden) previewHidden.value = previewUrl;
 
-      // enable / unhide Add to Cart button
+      // enable and show Add-to-cart
       if (atcBtn) {
         atcBtn.disabled = false;
-        atcBtn.classList.remove('d-none'); // if you hide it with d-none initially
+        atcBtn.classList.remove('d-none'); // if you hid it with d-none earlier
+        // optionally change text
         atcBtn.textContent = 'Add to Cart';
       }
 
-      alert('Design saved — ID ' + (data.order_id || '—'));
+      // Remove the Save button from UI (or hide it)
+      // Option A (remove completely):
+      saveBtn.remove();
+
+      // Option B (if you prefer hide): use this instead of remove()
+      // saveBtn.style.display = 'none';
+      // or saveBtn.classList.add('d-none');
+
+      // Inform user
+      alert('Design saved ✔ — you can now Add to Cart.');
+
     } catch (err) {
       console.error('Save error', err);
-      alert('Save failed, see console.');
-    } finally {
+      alert('Save failed — check console.');
       saveBtn.disabled = false;
       saveBtn.textContent = 'Save Design (Save)';
     }
-  });
+  }
+
+  // Attach listener
+  if (saveBtn) {
+    saveBtn.addEventListener('click', function(e){
+      e.preventDefault();
+      doSave();
+    }, { passive: false });
+  }
 })();
 </script>
+
 </body>
 </html>
