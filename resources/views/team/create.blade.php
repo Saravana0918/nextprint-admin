@@ -804,19 +804,19 @@ document.addEventListener('DOMContentLoaded', function(){
   const saveBtn = document.getElementById('save-team-btn');
   const atcBtn  = document.getElementById('team-addtocart-btn');
   const previewInput = document.getElementById('team-preview-url');
-  const stage = document.getElementById('player-stage'); // your preview stage
+  const stage = document.getElementById('player-stage'); // your preview stage element
   const form = document.getElementById('team-form');
 
-  // route to save (adjust if different)
-  const saveUrl = "{{ route('team.save') }}";
-  const csrf = document.querySelector('input[name=\"_token\"]')?.value || '';
+  // route to save — make sure this name/URL matches your routes/web.php
+  // Example: Route::post('/admin/team/save-design', [TeamController::class,'saveDesign'])->name('team.save');
+  const saveUrl = "{{ route('team.save') }}"; // if blade renders route
+  const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ||
+               document.querySelector('input[name=\"_token\"]')?.value || '';
 
   if (!saveBtn) return;
 
-  // helper: generate preview dataURL using html2canvas
   async function makePreviewDataURL() {
     try {
-      // ensure stage is visible and fonts loaded
       await (document.fonts?.ready || Promise.resolve());
       const canvas = await html2canvas(stage, {useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1});
       return canvas.toDataURL('image/png');
@@ -830,18 +830,19 @@ document.addEventListener('DOMContentLoaded', function(){
     saveBtn.disabled = true;
     saveBtn.textContent = 'Saving...';
 
-    // collect players array from rows (same shape your server expects)
-    const players = Array.from(document.querySelectorAll('#players-list .player-row')).map(r => {
+    // collect players array from DOM rows (ensure classes match your HTML)
+    const players = Array.from(document.querySelectorAll('#players-list .player-row')).map((r, idx) => {
       return {
-        name: r.querySelector('.player-name')?.value?.toString().toUpperCase().slice(0,12) || '',
-        number: r.querySelector('.player-number')?.value?.toString().replace(/\D/g,'').slice(0,3) || '',
+        id: r.dataset.playerId ?? null,
+        name: (r.querySelector('.player-name')?.value || '').toString().toUpperCase().slice(0, 64),
+        number: (r.querySelector('.player-number')?.value || '').toString().replace(/\D/g,'').slice(0,3),
         size: r.querySelector('.player-size')?.value || '',
         font: r.querySelector('.player-font')?.value || '',
-        color: r.querySelector('.player-color')?.value || ''
+        color: r.querySelector('.player-color')?.value || '',
+        preview_src: r.querySelector('.player-preview')?.value || null
       };
-    }).filter(p => p.name || p.number);
+    }).filter(p => (p.name && p.name.trim() !== '') || (p.number && p.number.trim() !== ''));
 
-    // require at least one player to save? optional
     if (players.length === 0) {
       alert('Please add at least one player before saving.');
       saveBtn.disabled = false;
@@ -849,15 +850,16 @@ document.addEventListener('DOMContentLoaded', function(){
       return;
     }
 
-    // create preview image
+    // create preview image (dataURL)
     const dataUrl = await makePreviewDataURL();
 
-    // prepare payload – include product id + players + optional team logo
+    // Build payload: include order_id (VERY IMPORTANT) so backend updates design_orders.team_id immediately
     const payload = {
-      product_id: form.querySelector('input[name=\"product_id\"]')?.value || null,
+      product_id: form.querySelector('input[name="product_id"]')?.value || null,
+      order_id: form.querySelector('input[name="order_id"]')?.value || null, // ensure this input exists in the form
       players: players,
-      team_logo_url: document.getElementById('team-prefill-logo')?.value || '', // persisted logo
-      preview_data: dataUrl
+      preview_src: dataUrl,      // backend accepts dataURL and will save it
+      team_logo_url: document.getElementById('team-prefill-logo')?.value || ''
     };
 
     try {
@@ -875,31 +877,32 @@ document.addEventListener('DOMContentLoaded', function(){
       const json = await resp.json().catch(()=>null);
       if (!resp.ok || !json || json.success !== true) {
         console.error('Save failed', json);
-        alert('Save failed: ' + ((json && (json.message || json.error)) || resp.status) );
+        alert('Save failed: ' + ((json && (json.message || json.error)) || ('HTTP ' + resp.status)) );
         saveBtn.disabled = false;
         saveBtn.textContent = 'Save Design';
         return;
       }
 
-      // success -> server should return preview_url and maybe team_id
+      // success -> server returns preview_url and team_id (if implemented)
       const previewUrl = json.preview_url || json.preview || null;
       const teamId = json.team_id || null;
 
       if (previewUrl && previewInput) previewInput.value = previewUrl;
 
-      // enable Add To Cart and remove Save button
+      // enable Add To Cart (if present)
       if (atcBtn) {
         atcBtn.disabled = false;
-        // optionally show visually
         atcBtn.classList.remove('d-none');
       }
-      // remove/hide save button so user cannot re-save (as you requested)
+
+      // remove Save button to prevent duplicate saves (as per your UX)
       saveBtn.remove();
 
-      // notify user
-      alert('Design saved ✔ You can now click Add To Cart.');
-      // optional: redirect to team view
-      // if (teamId) window.location.href = '/team/' + teamId;
+      // show toast / alert
+      alert(json.message || 'Design saved ✔ You can now click Add To Cart.');
+
+      // OPTIONAL: redirect to order show or admin view
+      // if (teamId) window.location.href = '/admin/design-orders/' + (payload.order_id || '');
 
     } catch (err) {
       console.error('Save error', err);
@@ -913,8 +916,8 @@ document.addEventListener('DOMContentLoaded', function(){
     e.preventDefault();
     saveDesign();
   });
-
 });
 </script>
+
 
 @endsection
