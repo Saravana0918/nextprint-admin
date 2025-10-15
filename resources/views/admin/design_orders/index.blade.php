@@ -23,7 +23,6 @@
       <thead>
         <tr>
           <th>ID</th>
-          <th>Shopify Product</th>
           <th>Product</th>
           <th>Name</th>
           <th>Number</th>
@@ -36,14 +35,6 @@
         @forelse($rows as $row)
           <tr>
             <td>{{ $row->id }}</td>
-
-            <td style="min-width:140px">
-              @if(!empty($row->shopify_product_id))
-                <div>#{{ $row->shopify_product_id }}</div>
-              @else
-                <div class="text-muted">—</div>
-              @endif
-            </td>
 
             <td style="min-width:200px">
               {{ $row->product_name ?? $row->product_id ?? '—' }}

@@ -19,10 +19,7 @@
         <div class="card-body">
           <h5 class="card-title mb-2">
             {{ $order->product_name ?? ('Product #' . ($order->product_id ?? '—')) }}
-          </h5>
-
-          <p class="mb-1"><strong>Shopify Product:</strong> {{ $order->shopify_product_id ?? '—' }}</p>
-          <p class="mb-1"><strong>Shopify Line Item:</strong> {{ $order->shopify_line_item_id ?? '—' }}</p>
+          </h5>]
 
           <p class="mb-1">
             <strong>Customer Name / Number:</strong>
@@ -30,7 +27,6 @@
           </p>
 
           <p class="mb-1"><strong>Font / Color:</strong> {{ $order->font ?? '—' }} / {{ $order->color ?? '—' }}</p>
-          <p class="mb-1"><strong>Variant ID:</strong> {{ $order->variant_id ?? '—' }}</p>
           <p class="mb-1"><strong>Quantity:</strong> {{ $order->quantity ?? '1' }}</p>
 
           <p class="mb-1"><strong>Uploaded Logo URL:</strong>
@@ -40,16 +36,6 @@
               <span class="text-muted">—</span>
             @endif
           </p>
-
-          <p class="mb-1"><strong>Saved Payload:</strong></p>
-          <pre style="white-space:pre-wrap; max-height:220px; overflow:auto; background:#f8f9fa; padding:8px; border-radius:6px;">
-{{ 
-    // safe decode raw_payload - if not JSON show raw string
-    ($order->raw_payload ?? '') ? 
-      (json_encode(json_decode($order->raw_payload, true) ?: json_decode($order->raw_payload), JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES) ?? ($order->raw_payload)) 
-      : '—' 
-}}
-          </pre>
         </div>
       </div>
 
