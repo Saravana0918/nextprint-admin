@@ -189,7 +189,7 @@
           <input id="np-qty" name="quantity" type="number" min="1" value="1" class="form-control">
         </div>
         <button id="save-design-btn" type="button" class="btn btn-outline-primary" style="margin-right:8px;">Save Design (Save)</button>
-        <button id="np-atc-btn" type="submit" class="btn btn-primary">Add to Cart</button>
+        <button id="np-atc-btn" type="submit" class="btn btn-primary d-none"> Add to Cart </button>
         <a href="#" class="btn btn-success" id="btn-add-team" style="margin-left:8px;">Add Team Players</a>
       </form>
     </div>
@@ -794,109 +794,92 @@ async function handleFile(file) {
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script>
 (async function(){
-  // ensure html2canvas is loaded (you included it already).
-  const saveBtn = document.getElementById('save-design-btn');
-  if (!saveBtn) return;
-
+  const saveBtn = document.getElementById('save-design-btn'); // your Save button
   const stage = document.getElementById('np-stage');
-  const nameInput = document.querySelector('#np-name') || document.querySelector('#np-name-hidden');
-  const numInput  = document.querySelector('#np-num')  || document.querySelector('#np-num-hidden');
-  const fontInput = document.querySelector('#np-font') || document.querySelector('#np-font-hidden');
-  const colorInput= document.querySelector('#np-color') || document.querySelector('#np-color-hidden');
-  const sizeInput = document.querySelector('#np-size');
-  const qtyInput  = document.querySelector('#np-qty');
-  const prodIdEl  = document.querySelector('#np-product-id');
-  const shopifyProdEl = document.querySelector('#np-shopify-product-id');
-  const variantEl = document.querySelector('#np-variant-id');
-  const hiddenPreviewEl = document.querySelector('#np-preview-hidden');
+  const previewHidden = document.getElementById('np-preview-hidden');
+  const atcBtn = document.getElementById('np-atc-btn');
+  const csrf = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
 
-  // route provided by blade
-  const saveUrl = "{{ route('admin.design.order.store') }}";
-  const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+  async function makePreviewDataURL(){
+    try {
+      // ensure html2canvas script is loaded (you already include it)
+      const canvas = await html2canvas(stage, { useCORS:true, backgroundColor: null, scale: window.devicePixelRatio || 1 });
+      return canvas.toDataURL('image/png');
+    } catch (err) {
+      console.warn('html2canvas failed:', err);
+      return null;
+    }
+  }
 
-  saveBtn.addEventListener('click', async function(e){
+  saveBtn?.addEventListener('click', async function(e){
     e.preventDefault();
     saveBtn.disabled = true;
-    const origText = saveBtn.textContent;
     saveBtn.textContent = 'Saving...';
 
-    // Validate minimal fields
-    const sizeVal = sizeInput ? sizeInput.value : '';
-    if (!sizeVal) {
-      alert('Please select a size before saving.');
-      saveBtn.disabled = false;
-      saveBtn.textContent = origText;
-      return;
-    }
+    // sync hidden values (name/number/font/color/variant are kept in sync by your other code)
+    // const name = document.getElementById('np-name-hidden').value etc - but hidden inputs already exist
+    // Generate preview (prefer dataURL)
+    const previewDataUrl = await makePreviewDataURL();
 
-    // attempt to render stage -> dataURL
-    let previewData = null;
-    try {
-      // prefer existing hidden preview (if Add-to-Cart path already created it)
-      if (hiddenPreviewEl && hiddenPreviewEl.value && hiddenPreviewEl.value.startsWith('data:image')) {
-        previewData = hiddenPreviewEl.value;
-      } else if (stage) {
-        const canvas = await html2canvas(stage, { useCORS:true, backgroundColor: null, scale: window.devicePixelRatio || 1 });
-        previewData = canvas.toDataURL('image/png');
-      }
-    } catch (err) {
-      console.warn('html2canvas error, continuing without preview:', err);
-      previewData = null;
-    }
-
+    // gather payload
     const payload = {
-      product_id: prodIdEl ? (prodIdEl.value || null) : null,
-      shopify_product_id: shopifyProdEl ? (shopifyProdEl.value || null) : null,
-      variant_id: variantEl ? (variantEl.value || null) : null,
-      name: nameInput ? (nameInput.value || '') : '',
-      number: numInput ? (numInput.value || '') : '',
-      font: fontInput ? (fontInput.value || '') : '',
-      color: colorInput ? (colorInput.value || '') : '',
-      size: sizeVal,
-      quantity: qtyInput ? (parseInt(qtyInput.value||'1',10) || 1) : 1,
-      preview_src: previewData // either data:image/png;base64,... or null
+      product_id: parseInt(new URL(location.href).searchParams.get('product_id')) || document.getElementById('np-product-id')?.value || null,
+      shopify_product_id: document.getElementById('np-shopify-product-id')?.value || null,
+      variant_id: document.getElementById('np-variant-id')?.value || null,
+      name: document.getElementById('np-name-hidden')?.value || null,
+      number: document.getElementById('np-num-hidden')?.value || null,
+      font: document.getElementById('np-font-hidden')?.value || null,
+      color: document.getElementById('np-color-hidden')?.value || null,
+      size: document.getElementById('np-size')?.value || null,
+      quantity: parseInt(document.getElementById('np-qty')?.value || '1', 10),
+      preview_src: previewDataUrl // send dataURL (server will save it)
     };
 
     try {
-      const resp = await fetch(saveUrl, {
+      const res = await fetch('{{ route("admin.design.order.store") }}', {
         method: 'POST',
-        credentials: 'same-origin',
         headers: {
-          'Content-Type': 'application/json',
           'Accept': 'application/json',
+          'Content-Type': 'application/json',
           'X-CSRF-TOKEN': csrf
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        credentials: 'same-origin'
       });
 
-      const json = await resp.json().catch(()=>({}));
+      const data = await res.json().catch(()=>({}));
 
-      if (!resp.ok) {
-        console.error('Save failed', json);
-        alert('Save failed: ' + (json.message || resp.status));
+      if (!res.ok) {
+        console.error('Save failed', data);
+        alert('Save failed: ' + (data.message || res.status));
         saveBtn.disabled = false;
-        saveBtn.textContent = origText;
+        saveBtn.textContent = 'Save Design (Save)';
         return;
       }
 
-      // success
-      const orderId = json.order_id || json.orderId || '—';
-      alert('Design saved! Order ID: ' + orderId);
+      // Success: server returned preview_url (public URL) ideally
+      const previewUrl = data.preview_url || data.preview_src || previewDataUrl || null;
+      if (previewUrl && previewHidden) {
+        previewHidden.value = previewUrl;
+      }
 
-      // optional: open admin orders page to view
-      // window.location.href = '/admin/design-orders';
+      // enable / unhide Add to Cart button
+      if (atcBtn) {
+        atcBtn.disabled = false;
+        atcBtn.classList.remove('d-none'); // if you hide it with d-none initially
+        atcBtn.textContent = 'Add to Cart';
+      }
 
+      alert('Design saved — ID ' + (data.order_id || '—'));
     } catch (err) {
-      console.error('Save request error', err);
-      alert('Save failed — see console.');
+      console.error('Save error', err);
+      alert('Save failed, see console.');
     } finally {
       saveBtn.disabled = false;
-      saveBtn.textContent = origText;
+      saveBtn.textContent = 'Save Design (Save)';
     }
   });
-
 })();
 </script>
-
 </body>
 </html>
