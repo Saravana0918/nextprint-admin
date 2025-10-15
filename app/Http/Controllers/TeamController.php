@@ -94,12 +94,12 @@ class TeamController extends Controller
 
             // insert into teams table
             $teamId = DB::table('teams')->insertGetId([
-                'product_id' => $data['product_id'] ?? null,
-                'players' => json_encode($players, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE),
-                'preview_src' => $previewPath,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
+            'product_id' => $data['product_id'] ?? null,
+            'players' => json_encode($players, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE),
+            'preview_url' => $previewPath, // ✅ use this instead of preview_src
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
 
             // If frontend passed an order_id, link it immediately
             if (!empty($data['order_id'])) {
