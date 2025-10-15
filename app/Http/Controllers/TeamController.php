@@ -43,90 +43,152 @@ class TeamController extends Controller
      * Returns team_id and preview_url on success.
      */
     public function saveDesign(Request $request)
-    {
-        // basic validation - adjust rules to your needs
-        $data = $request->validate([
-            'product_id' => 'nullable|integer',
-            'order_id' => 'nullable|integer',
-            'players' => 'required|array|min:1',
-            'players.*.name' => 'nullable|string|max:255',
-            'players.*.number' => 'nullable|string|max:20',
-            'players.*.size' => 'nullable|string|max:20',
-            'players.*.font' => 'nullable|string|max:100',
-            'preview_src' => 'nullable|string', // can be path or dataURL
-        ]);
+{
+    // validation (same as before)
+    $data = $request->validate([
+        'product_id' => 'nullable|integer',
+        'order_id' => 'nullable|integer',
+        'players' => 'required|array|min:1',
+        'players.*.name' => 'nullable|string|max:255',
+        'players.*.number' => 'nullable|string|max:20',
+        'players.*.size' => 'nullable|string|max:20',
+        'players.*.font' => 'nullable|string|max:100',
+        'preview_src' => 'nullable|string', // can be path or dataURL
+    ]);
 
-        DB::beginTransaction();
-        try {
-            // handle preview_src if it's a dataURL (base64) and needs to be stored
-            $previewPath = null;
-            if (!empty($data['preview_src']) && Str::startsWith($data['preview_src'], 'data:')) {
-                // data:image/png;base64,....
-                $matches = [];
-                if (preg_match('/^data:(image\/[a-zA-Z]+);base64,(.+)$/', $data['preview_src'], $matches)) {
-                    $mime = $matches[1];
-                    $base64 = $matches[2];
-                    $ext = explode('/', $mime)[1] ?? 'png';
-                    $binary = base64_decode($base64);
-                    $filename = 'team_preview_' . time() . '_' . Str::random(6) . '.' . $ext;
-                    $storagePath = 'team_previews/' . $filename;
-                    Storage::disk('public')->put($storagePath, $binary);
-                    $previewPath = 'storage/' . $storagePath; // asset path
-                }
-            } elseif (!empty($data['preview_src'])) {
-                // assume it's already a public URL or storage path
-                $previewPath = $data['preview_src'];
+    DB::beginTransaction();
+    try {
+        // 1) Save preview image if dataURL
+        $previewPath = null;
+        if (!empty($data['preview_src']) && Str::startsWith($data['preview_src'], 'data:')) {
+            $matches = [];
+            if (preg_match('/^data:(image\/[a-zA-Z]+);base64,(.+)$/', $data['preview_src'], $matches)) {
+                $mime = $matches[1];
+                $base64 = $matches[2];
+                $ext = explode('/', $mime)[1] ?? 'png';
+                $binary = base64_decode($base64);
+                $filename = 'team_preview_' . time() . '_' . Str::random(6) . '.' . $ext;
+                $storagePath = 'team_previews/' . $filename;
+                Storage::disk('public')->put($storagePath, $binary);
+                $previewPath = 'storage/' . $storagePath; // asset path
             }
+        } elseif (!empty($data['preview_src'])) {
+            $previewPath = $data['preview_src'];
+        }
 
-            // normalize players: ensure preview_src per player left intact
-            $players = array_map(function($p) {
-                // cast to array and only keep expected keys
-                $p = (array)$p;
-                return [
-                    'id' => $p['id'] ?? null,
-                    'name' => $p['name'] ?? null,
-                    'number' => $p['number'] ?? null,
-                    'size' => $p['size'] ?? null,
-                    'font' => $p['font'] ?? null,
-                    'preview_src' => $p['preview_src'] ?? null,
-                ];
-            }, $data['players']);
+        // 2) Normalize players array
+        $players = array_map(function($p) {
+            $p = (array)$p;
+            return [
+                'id' => $p['id'] ?? null,
+                'name' => $p['name'] ?? null,
+                'number' => $p['number'] ?? null,
+                'size' => $p['size'] ?? null,
+                'font' => $p['font'] ?? null,
+                'preview_src' => $p['preview_src'] ?? null,
+                'variant_id' => $p['variant_id'] ?? null,
+            ];
+        }, $data['players']);
 
-            // insert into teams table
-            $teamId = DB::table('teams')->insertGetId([
+        // 3) Insert team row
+        $teamId = DB::table('teams')->insertGetId([
             'product_id' => $data['product_id'] ?? null,
             'players' => json_encode($players, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE),
-            'preview_url' => $previewPath, // ✅ use this instead of preview_src
+            'preview_url' => $previewPath,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
 
-            // If frontend passed an order_id, link it immediately
-            if (!empty($data['order_id'])) {
-                DB::table('design_orders')->where('id', $data['order_id'])->update([
-                    'team_id' => $teamId
-                ]);
+        // 4) Ensure design_orders row exists / update it
+        // Prepare order data (fields we want to save)
+        $first = $players[0] ?? null;
+
+        // try to gather product info (if Product model available)
+        $productName = null;
+        $shopifyProductId = null;
+        if (!empty($data['product_id'])) {
+            try {
+                $prod = Product::find($data['product_id']);
+                if ($prod) {
+                    $productName = $prod->name ?? null;
+                    $shopifyProductId = $prod->shopify_product_id ?? null;
+                }
+            } catch (\Throwable $e) {
+                // ignore product lookup failure
             }
-
-            DB::commit();
-
-            // return success response for frontend
-            return response()->json([
-                'success' => true,
-                'team_id' => $teamId,
-                'preview_url' => $previewPath ? asset($previewPath) : null,
-                'message' => 'Design saved ✅ You can now click Add To Cart.',
-            ]);
-        } catch (\Throwable $e) {
-            DB::rollBack();
-            Log::error('TeamController::saveDesign failed: '.$e->getMessage(), ['trace'=>$e->getTraceAsString()]);
-            return response()->json([
-                'success' => false,
-                'error' => 'Could not save team. Check logs.',
-                'details' => $e->getMessage()
-            ], 500);
         }
+
+        $orderData = [
+            'team_id' => $teamId,
+            'product_id' => $data['product_id'] ?? null,
+            'product_name' => $productName,
+            'shopify_product_id' => $shopifyProductId,
+            'variant_id' => $first['variant_id'] ?? null,
+            'size' => $first['size'] ?? null,
+            'name_text' => $first['name'] ?? ($data['name_text'] ?? null),
+            'number_text' => $first['number'] ?? ($data['number_text'] ?? null),
+            'preview_src' => $previewPath ?? null,
+            'preview_path' => $previewPath ?? null,
+            'raw_payload' => json_encode(['team_id' => $teamId, 'players' => $players]),
+            'payload' => json_encode(['players' => $players]),
+            'status' => 'new',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ];
+
+        $linkedOrderId = null;
+
+        // If frontend explicitly provided an order_id -> update that row
+        if (!empty($data['order_id'])) {
+            DB::table('design_orders')->where('id', $data['order_id'])->update($orderData);
+            $linkedOrderId = $data['order_id'];
+        } else {
+            // Try find an existing order by product + name/number (best-effort)
+            $query = DB::table('design_orders');
+            if (!empty($data['product_id'])) {
+                $query->where('product_id', $data['product_id']);
+            }
+            // match by name_text or number_text if available
+            $query = $query->where(function($q) use ($first) {
+                if (!empty($first['name'])) {
+                    $q->orWhere('name_text', 'like', '%' . substr($first['name'], 0, 50) . '%');
+                }
+                if (!empty($first['number'])) {
+                    $q->orWhere('number_text', $first['number']);
+                }
+            });
+            $existing = $query->orderBy('created_at', 'desc')->first();
+
+            if ($existing) {
+                DB::table('design_orders')->where('id', $existing->id)->update($orderData);
+                $linkedOrderId = $existing->id;
+            } else {
+                // No existing order -> create minimal new design_orders row
+                $linkedOrderId = DB::table('design_orders')->insertGetId($orderData);
+            }
+        }
+
+        DB::commit();
+
+        // Return success with team_id and linked order id
+        return response()->json([
+            'success' => true,
+            'team_id' => $teamId,
+            'order_id' => $linkedOrderId,
+            'preview_url' => $previewPath ? asset($previewPath) : null,
+            'message' => 'Design saved ✅ and linked to order #' . ($linkedOrderId ?? 'N/A'),
+        ]);
+    } catch (\Throwable $e) {
+        DB::rollBack();
+        Log::error('TeamController::saveDesign failed: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
+        return response()->json([
+            'success' => false,
+            'error' => 'Could not save team. Check logs.',
+            'details' => $e->getMessage()
+        ], 500);
     }
+}
+
 
     /**
      * Classic form submit endpoint (Add To Cart / Team store)
