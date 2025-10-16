@@ -380,7 +380,7 @@ document.addEventListener('DOMContentLoaded', function() {
       logo.style.top = '30%';
       logo.style.width = '70px';
       logo.style.height = '70px';
-      logo.style.transform = 'translate(-50%,-50%)';
+      logo.style.transform = 'translate(37%,-30%)';
     }
   }
 
