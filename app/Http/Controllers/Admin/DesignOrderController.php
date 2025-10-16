@@ -130,105 +130,109 @@ class DesignOrderController extends Controller
         return view('admin.design_orders.show', compact('order', 'players'));
     }
 
-    public function download($id)
+  public function download($id)
 {
-    // fetch order
-    $order = DB::table('design_orders')->where('id', $id)->first();
-    if (! $order) {
-        abort(404, 'Design order not found');
-    }
+    \Log::info("DOWNLOAD START: order_id={$id}");
 
-    // prepare temp folder
-    $tmpDir = storage_path('app/temp');
-    if (! file_exists($tmpDir)) {
-        mkdir($tmpDir, 0755, true);
-    }
-
-    // prepare zip filename
-    $safeName = 'design_order_' . $id . '_' . time() . '.zip';
-    $zipPath = $tmpDir . DIRECTORY_SEPARATOR . $safeName;
-
-    $zip = new ZipArchive();
-    if ($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
-        abort(500, 'Could not create zip archive');
-    }
-
-    // 1) add an info text file (customer name + number + created_at)
-    $infoLines = [];
-    $infoLines[] = 'Design Order ID: ' . $order->id;
-    $infoLines[] = 'Product ID: ' . ($order->product_id ?? '—');
-    $infoLines[] = 'Customer Name: ' . ($order->name_text ?? '—');
-    $infoLines[] = 'Customer Number: ' . ($order->number_text ?? '—');
-    $infoLines[] = 'Created At: ' . ($order->created_at ?? now());
-    $infoLines[] = '';
-    $infoLines[] = 'Preview Src: ' . ($order->preview_src ?? ($order->preview_path ?? '—'));
-    $infoContent = implode(PHP_EOL, $infoLines);
-
-    $zip->addFromString('info.txt', $infoContent);
-
-    // 2) add raw_payload (pretty-printed) if present
-    $raw = $order->raw_payload ?? $order->payload ?? null;
-    if ($raw) {
-        // ensure json pretty print if JSON
-        $rawStr = is_string($raw) ? $raw : json_encode($raw);
-        $decoded = json_decode($rawStr, true);
-        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
-            $rawPretty = json_encode($decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
-        } else {
-            $rawPretty = $rawStr;
+    try {
+        $order = DB::table('design_orders')->where('id', $id)->first();
+        if (! $order) {
+            \Log::warning("DOWNLOAD: order not found {$id}");
+            abort(404, 'Design order not found');
         }
-        $zip->addFromString('raw_payload.json', $rawPretty);
-    }
+        \Log::info("DOWNLOAD: order row found, preview_src=" . ($order->preview_src ?? $order->preview_path ?? $order->preview_url ?? 'NULL'));
 
-    // 3) add preview image (if available)
-    $previewSrc = $order->preview_src ?? $order->preview_path ?? $order->preview_url ?? null;
+        // ensure zip available
+        if (! class_exists('\ZipArchive')) {
+            \Log::error('DOWNLOAD: ZipArchive missing');
+            abort(500, 'Server missing php-zip extension');
+        }
 
-    if ($previewSrc) {
-        try {
-            $localTempPreview = null;
-            // Case A: absolute http(s) url
-            if (Str::startsWith($previewSrc, ['http://','https://'])) {
-                $resp = Http::get($previewSrc);
+        $tmpDir = storage_path('app/temp');
+        if (! file_exists($tmpDir)) {
+            mkdir($tmpDir, 0755, true);
+            \Log::info("DOWNLOAD: created tmpDir {$tmpDir}");
+        }
+        \Log::info("DOWNLOAD: tmpDir exists, writable? " . (is_writable($tmpDir) ? 'yes' : 'no'));
+
+        $zipName = 'design_order_' . $id . '_' . time() . '.zip';
+        $zipPath = $tmpDir . DIRECTORY_SEPARATOR . $zipName;
+
+        $zip = new \ZipArchive();
+        if ($zip->open($zipPath, \ZipArchive::CREATE|\ZipArchive::OVERWRITE) !== true) {
+            \Log::error("DOWNLOAD: cannot open zip $zipPath");
+            abort(500, 'Could not create zip');
+        }
+        \Log::info("DOWNLOAD: zip opened $zipPath");
+
+        // info.txt
+        $info = "Order ID: {$order->id}\nName: " . ($order->name_text ?? '—') . "\nNumber: " . ($order->number_text ?? '—') . "\n";
+        $zip->addFromString('info.txt', $info);
+        \Log::info("DOWNLOAD: added info.txt");
+
+        // raw payload
+        $raw = $order->raw_payload ?? $order->payload ?? null;
+        if ($raw) {
+            $rawStr = is_string($raw) ? $raw : json_encode($raw);
+            $dec = json_decode($rawStr, true);
+            $pretty = (json_last_error()===JSON_ERROR_NONE && is_array($dec)) ? json_encode($dec, JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES) : $rawStr;
+            $zip->addFromString('raw_payload.json', $pretty);
+            \Log::info("DOWNLOAD: added raw_payload.json");
+        }
+
+        // include preview if present
+        $previewSrc = $order->preview_src ?? $order->preview_path ?? $order->preview_url ?? null;
+        \Log::info("DOWNLOAD: previewSrc={$previewSrc}");
+        if ($previewSrc) {
+            $localTemp = null;
+            if (\Illuminate\Support\Str::startsWith($previewSrc, ['http://','https://'])) {
+                \Log::info("DOWNLOAD: fetching remote preview via HTTP");
+                $resp = \Illuminate\Support\Facades\Http::timeout(10)->get($previewSrc);
                 if ($resp->ok()) {
                     $ext = 'png';
-                    // try get extension from content-type
                     $ct = $resp->header('Content-Type');
                     if ($ct && preg_match('#image/(.+)#', $ct, $m)) $ext = $m[1];
-                    $localTempPreview = $tmpDir . DIRECTORY_SEPARATOR . 'preview.' . $ext;
-                    file_put_contents($localTempPreview, $resp->body());
+                    $localTemp = $tmpDir . DIRECTORY_SEPARATOR . 'preview.' . $ext;
+                    file_put_contents($localTemp, $resp->body());
+                    \Log::info("DOWNLOAD: fetched remote preview to {$localTemp}");
+                } else {
+                    \Log::warning("DOWNLOAD: remote preview fetch failed, status=" . $resp->status());
                 }
             } else {
-                // Case B: storage path like '/storage/team_previews/xxx.png' or 'storage/team_previews/xxx.png'
-                $rel = $previewSrc;
-                $rel = preg_replace('#^/storage/#', '', $rel);
+                $rel = preg_replace('#^/storage/#', '', $previewSrc);
                 $rel = preg_replace('#^storage/#', '', $rel);
                 $storageFull = storage_path('app/public/' . $rel);
                 if (file_exists($storageFull)) {
-                    $localTempPreview = $storageFull;
+                    $localTemp = $storageFull;
+                    \Log::info("DOWNLOAD: found preview in storage {$storageFull}");
+                } elseif (file_exists($previewSrc)) {
+                    $localTemp = $previewSrc;
+                    \Log::info("DOWNLOAD: preview path exists {$previewSrc}");
                 } else {
-                    // maybe saved as full path in preview_src already
-                    if (file_exists($previewSrc)) {
-                        $localTempPreview = $previewSrc;
-                    }
+                    \Log::warning("DOWNLOAD: preview file not found at {$storageFull} or {$previewSrc}");
                 }
             }
 
-            if ($localTempPreview && file_exists($localTempPreview)) {
-                // add original filename in zip
-                $basename = basename($localTempPreview);
-                $zip->addFile($localTempPreview, 'preview/' . $basename);
+            if ($localTemp && file_exists($localTemp)) {
+                $zip->addFile($localTemp, 'preview/' . basename($localTemp));
+                \Log::info("DOWNLOAD: added preview file to zip");
             }
-        } catch (\Throwable $e) {
-            // do not fail the whole download — continue with other files
-            Log::warning('Could not include preview image in download: ' . $e->getMessage());
         }
+
+        $zip->close();
+        \Log::info("DOWNLOAD: zip closed at {$zipPath}");
+
+        // show files in tmp dir for debug
+        $tmpList = array_slice(scandir($tmpDir), -20);
+        \Log::info('DOWNLOAD: tmpDir listing: ' . implode(',', $tmpList));
+
+        // send and delete
+        return response()->download($zipPath, 'design_order_' . $order->id . '.zip')->deleteFileAfterSend(true);
+
+    } catch (\Throwable $e) {
+        \Log::error('DOWNLOAD ERROR: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
+        abort(500, 'Download failed. Check logs.');
     }
-
-    // 4) close zip
-    $zip->close();
-
-    // 5) return download response and delete file after send
-    return response()->download($zipPath, 'design_order_' . $order->id . '.zip')->deleteFileAfterSend(true);
 }
 
     /**
