@@ -142,32 +142,10 @@
     .np-modal-dialog { width: calc(100% - 28px); }
   }
   @media (max-width: 767px) {
-  .mobile-action-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;               /* spacing between buttons */
-    padding: 6px 0;
-    flex-wrap: nowrap;
-    width: 100%;
-  }
-
-  .mobile-action-row .btn {
-    padding: .28rem .5rem;  /* smaller buttons */
-    font-size: .85rem;
-    white-space: nowrap;
-    line-height: 1;
-  }
-
-  /* make back button push to the far right */
-  .mobile-action-row .back-btn {
-    margin-left: auto;
-  }
-
-  /* if you want the first buttons to shrink on very narrow screens */
-  .mobile-action-row .btn {
-    min-width: 0;
-  }
-}
+  .mobile-action-row { display: flex; align-items: center; gap: 6px; padding: 6px 0; flex-wrap: nowrap; width: 100%; }
+ .mobile-action-row .btn { padding: .45rem .55rem;    font-size: .85rem; white-space: nowrap; line-height: 1; }
+ .mobile-action-row .back-btn { margin-left: auto; }
+ .mobile-action-row .btn { min-width: 0; } }
 
 </style>
 
