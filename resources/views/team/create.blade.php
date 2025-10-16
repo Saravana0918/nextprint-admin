@@ -141,6 +141,33 @@
   @media (max-width:767px) {
     .np-modal-dialog { width: calc(100% - 28px); }
   }
+  @media (max-width: 767px) {
+  .mobile-action-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;               /* spacing between buttons */
+    padding: 6px 0;
+    flex-wrap: nowrap;
+    width: 100%;
+  }
+
+  .mobile-action-row .btn {
+    padding: .28rem .5rem;  /* smaller buttons */
+    font-size: .85rem;
+    white-space: nowrap;
+    line-height: 1;
+  }
+
+  /* make back button push to the far right */
+  .mobile-action-row .back-btn {
+    margin-left: auto;
+  }
+
+  /* if you want the first buttons to shrink on very narrow screens */
+  .mobile-action-row .btn {
+    min-width: 0;
+  }
+}
 
 </style>
 
@@ -197,25 +224,18 @@
         <input type="hidden" id="team-prefill-logo" name="team_logo_url" value="{{ $prefill['prefill_logo'] ?? '' }}">
         <input type="hidden" id="team-preview-url" name="team_preview_url" value="">
 
-        <div class="mb-3 d-flex flex-wrap flex-md-nowrap align-items-center justify-content-between">
-        <!-- left group: buttons together -->
-        <div class="d-flex align-items-center flex-wrap">
-          <div class="btn-group me-2" role="group" aria-label="team actions">
-            <button type="button" id="btn-add-row" class="btn btn-primary btn-sm">ADD NEW</button>
+        <div class="mb-3 mobile-action-row">
+          <button type="button" id="btn-add-row" class="btn btn-primary">ADD NEW</button>
 
-            <!-- Save as outline, small -->
-            <button type="button" id="save-team-btn" class="btn btn-outline-primary btn-sm">Save Design</button>
+          <!-- Save as outline -->
+          <button type="button" id="save-team-btn" class="btn btn-outline-primary">Save Design</button>
 
-            <!-- Add To Cart (submit) -->
-            <button type="submit" id="team-addtocart-btn" class="btn btn-success btn-sm" disabled>Add To Cart</button>
-          </div>
+          <!-- Add To Cart (submit) -> initially disabled -->
+          <button type="submit" id="team-addtocart-btn" class="btn btn-success" disabled>Add To Cart</button>
+
+          <!-- Back button placed at the end; on mobile this will be pushed to right -->
+          <a href="{{ url()->previous() }}" class="btn btn-secondary back-btn">Back</a>
         </div>
-
-        <!-- right: back button, aligned to right -->
-        <div class="ms-2">
-          <a href="{{ url()->previous() }}" class="btn btn-secondary btn-sm">Back</a>
-        </div>
-      </div>
 
         <div id="players-list" class="mb-4"></div>
 
