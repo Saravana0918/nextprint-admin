@@ -191,8 +191,8 @@
         <div class="d-flex align-items-center mb-3">
     <!-- LEFT group -->
     <div class="d-flex align-items-center">
-      <button id="save-design-btn" type="button" class="btn btn-outline-primary me-2" style="    padding: .25rem .5rem;font-size: .96rem;">
-        Save Design (Save)
+      <button id="save-design-btn" type="button" class="btn btn-primary me-2" style="padding: .25rem .5rem;font-size: .96rem;">
+        Save Design
       </button>
 
       <button id="np-atc-btn" type="submit" class="btn btn-primary d-none" disabled>
