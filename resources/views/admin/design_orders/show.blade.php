@@ -155,8 +155,10 @@
             <li><strong>Stored at:</strong> {{ \Carbon\Carbon::parse($order->created_at)->format('d M Y, H:i') }}</li>
             <li><strong>Status:</strong> {{ $order->status ?? '—' }}</li>
             <li><strong>Download URL:</strong>
-              @if(!empty($order->download_url))
-                <a href="{{ $order->download_url }}" target="_blank">Download</a>
+              @if(!empty($order->preview_src) || !empty($order->preview_path) || !empty($order->preview_url))
+                <a href="{{ route('admin.design-orders.download', $order->id) }}" class="btn btn-sm btn-outline-secondary" target="_blank">
+                  Download package
+                </a>
               @else
                 <span class="text-muted">—</span>
               @endif
