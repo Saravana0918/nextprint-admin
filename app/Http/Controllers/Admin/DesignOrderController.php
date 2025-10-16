@@ -9,8 +9,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use ZipArchive;
-use Illuminate\Support\Facades\File;
-use Dompdf\Dompdf;
+ 
 
 class DesignOrderController extends Controller
 {
@@ -136,241 +135,270 @@ class DesignOrderController extends Controller
 
 public function download($id)
 {
-    try {
-        $order = DB::table('design_orders as d')
+    // check Zip extension
+    if (!class_exists('ZipArchive')) {
+        abort(500, "Zip extension (php-zip) not installed on server. Install php-zip and restart PHP-FPM.");
+    }
+
+    // fetch order + product name
+    $order = DB::table('design_orders as d')
         ->leftJoin('products as p', 'p.id', '=', 'd.product_id')
         ->select('d.*', DB::raw('p.name as product_name'))
         ->where('d.id', $id)
         ->first();
-        if (!$order) {
-            abort(404, 'Design order not found');
-        }
 
-        // prepare temp dir
-        $tmpBase = storage_path('app/temp/design_order_' . $order->id . '_' . time());
-        if (!File::exists($tmpBase)) File::makeDirectory($tmpBase, 0755, true);
+    if (! $order) {
+        abort(404, 'Design order not found');
+    }
 
-        // 1) Save raw_payload (if exists) as raw_payload.json
-        $rawPayload = $order->raw_payload ?? $order->payload ?? null;
-        $rawPath = $tmpBase . '/raw_payload.json';
-        if ($rawPayload) {
-            // if the column already JSON string, pretty print
-            $pretty = null;
-            try {
-                $decoded = json_decode($rawPayload, true);
-                $pretty = json_encode($decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE);
-            } catch (\Throwable $e) {
-                $pretty = $rawPayload;
-            }
-            file_put_contents($rawPath, $pretty);
-        } else {
-            file_put_contents($rawPath, json_encode(['note'=>'no raw payload present'], JSON_PRETTY_PRINT));
-        }
+    // prepare temp directory (inside storage/app/temp)
+    $baseTmp = storage_path('app/temp');
+    if (!is_dir($baseTmp)) {
+        mkdir($baseTmp, 0775, true);
+    }
 
-        // 2) Create players.csv (try to get players list)
-        $players = [];
-        // Prefer raw_payload players, then payload, then team record
+    $uniq = 'design_order_' . $order->id . '_' . time();
+    $tmpDir = $baseTmp . '/' . $uniq;
+    mkdir($tmpDir, 0775, true);
+
+    $previewDir = $tmpDir . '/preview';
+    mkdir($previewDir, 0775, true);
+
+    try {
+        // --- info.txt ---
+        $infoLines = [];
+        $infoLines[] = "Order ID: " . ($order->id ?? '');
+        $infoLines[] = "Product ID: " . ($order->product_id ?? '');
+        $infoLines[] = "Product name: " . ($order->product_name ?? '');
+        $infoLines[] = "Customer name / number: " . ($order->name_text ?? '') . ' / ' . ($order->number_text ?? '');
+        $infoLines[] = "Status: " . ($order->status ?? '');
+        $infoLines[] = "Created at: " . ($order->created_at ?? '');
+        $infoText = implode(PHP_EOL, $infoLines);
+        file_put_contents($tmpDir . '/info.txt', $infoText);
+
+        // --- raw_payload.json (if any) ---
         if (!empty($order->raw_payload)) {
-            $rp = json_decode($order->raw_payload, true);
-            if (is_array($rp) && !empty($rp['players'])) $players = $rp['players'];
-        }
-        if (empty($players) && !empty($order->payload)) {
-            $p = json_decode($order->payload, true);
-            if (is_array($p) && !empty($p['players'])) $players = $p['players'];
-        }
-        // fallback: if there's team_id and teams.players json
-        if (empty($players) && !empty($order->team_id)) {
-            $t = DB::table('teams')->where('id', $order->team_id)->first();
-            if ($t && !empty($t->players)) {
-                $dec = json_decode($t->players, true);
-                if (is_array($dec)) $players = $dec;
+            $raw = $order->raw_payload;
+            // ensure pretty json
+            if (is_string($raw)) {
+                $decoded = json_decode($raw, true);
+                if ($decoded !== null) {
+                    file_put_contents($tmpDir . '/raw_payload.json', json_encode($decoded, JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES));
+                } else {
+                    // save as-is
+                    file_put_contents($tmpDir . '/raw_payload.txt', $raw);
+                }
+            } else {
+                file_put_contents($tmpDir . '/raw_payload.json', json_encode($raw, JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES));
             }
         }
 
-        // write CSV
-        $csvPath = $tmpBase . '/players.csv';
+        // --- players CSV: try get players via team -> teams table or from payload/payload field ---
+        $playersArray = [];
+
+        // priority: team_id on design_orders -> teams table
+        if (!empty($order->team_id)) {
+            $team = DB::table('teams')->where('id', (int)$order->team_id)->first();
+            if ($team && !empty($team->players)) {
+                $decoded = is_string($team->players) ? json_decode($team->players, true) : (array)$team->players;
+                if (is_array($decoded)) $playersArray = $decoded;
+            }
+        }
+
+        // fallback: design_orders.payload or raw_payload players
+        if (empty($playersArray)) {
+            if (!empty($order->payload)) {
+                $decoded = is_string($order->payload) ? json_decode($order->payload, true) : (array)$order->payload;
+                if (!empty($decoded['players']) && is_array($decoded['players'])) $playersArray = $decoded['players'];
+            }
+        }
+        if (empty($playersArray) && !empty($order->raw_payload)) {
+            $decoded = is_string($order->raw_payload) ? json_decode($order->raw_payload, true) : (array)$order->raw_payload;
+            if (!empty($decoded['players']) && is_array($decoded['players'])) $playersArray = $decoded['players'];
+        }
+
+        // if still empty -> maybe team_players rows (legacy)
+        if (empty($playersArray)) {
+            $tp = DB::table('team_players')->where('team_id', $order->team_id ?? 0)->orderBy('id')->get();
+            if ($tp->count()) {
+                $playersArray = $tp->map(function($r){ return (array)$r; })->toArray();
+            }
+        }
+
+        // write players.csv
+        $csvPath = $tmpDir . '/players.csv';
         $fh = fopen($csvPath, 'w');
-        // header
-        fputcsv($fh, ['id','name','number','size','font','variant_id','preview_src']);
-        $i = 1;
-        foreach ($players as $pl) {
-            $plArr = is_array($pl) ? $pl : (array)$pl;
-            fputcsv($fh, [
-                $plArr['id'] ?? $i,
-                $plArr['name'] ?? '',
-                $plArr['number'] ?? '',
-                $plArr['size'] ?? '',
-                $plArr['font'] ?? '',
-                $plArr['variant_id'] ?? '',
-                $plArr['preview_src'] ?? ''
-            ]);
-            $i++;
-        }
-        fclose($fh);
-
-        // 3) Save preview image(s) into preview/ folder
-        $previewDir = $tmpBase . '/preview';
-        if (!File::exists($previewDir)) File::makeDirectory($previewDir, 0755, true);
-
-        // order->preview_src or preview_url or preview_path
-       $previewCandidates = [];
-        if (!empty($order->preview_src)) $previewCandidates[] = $order->preview_src;
-        if (!empty($order->preview_url)) $previewCandidates[] = $order->preview_url;
-        if (!empty($order->preview_path)) $previewCandidates[] = $order->preview_path;
-
-        // also collect any player preview_srcs
-        foreach ($players as $pl) {
-            $plArr = is_array($pl) ? $pl : (array)$pl;
-            if (!empty($plArr['preview_src'])) $previewCandidates[] = $plArr['preview_src'];
+        if ($fh) {
+            // headers
+            fputcsv($fh, ['id','name','number','size','font','variant_id','preview_src']);
+            foreach ($playersArray as $i => $praw) {
+                $p = is_array($praw) ? $praw : (array)$praw;
+                fputcsv($fh, [
+                    $p['id'] ?? ($i+1),
+                    $p['name'] ?? '',
+                    $p['number'] ?? '',
+                    $p['size'] ?? '',
+                    $p['font'] ?? '',
+                    $p['variant_id'] ?? '',
+                    $p['preview_src'] ?? '',
+                ]);
+            }
+            fclose($fh);
         }
 
-        $downloadedPreviews = [];
-        $idx = 1;
-        foreach ($previewCandidates as $pc) {
-            if (empty($pc)) continue;
-            $pcTrim = trim($pc);
+        // --- handle preview(s): collect candidate URLs/paths from order ---
+        $previewCandidates = [];
+        foreach (['preview_src','preview_url','preview_path','uploaded_logo_url'] as $key) {
+            if (!empty($order->{$key})) $previewCandidates[] = $order->{$key};
+        }
+
+        // also if team preview exists
+        if (!empty($order->team_id)) {
+            $team = DB::table('teams')->where('id', $order->team_id)->first();
+            if ($team) {
+                if (!empty($team->preview_url)) $previewCandidates[] = $team->preview_url;
+                if (!empty($team->preview_path)) $previewCandidates[] = $team->preview_path;
+            }
+        }
+
+        // normalize & fetch remote ones to previewDir
+        $addedPreviewFiles = [];
+        foreach ($previewCandidates as $cand) {
+            if (!$cand) continue;
+            $cand = (string)$cand;
+
+            // candidate might be a storage path like "/storage/team_previews/xxx.png" or "storage/team_previews/xxx.png"
             $localPath = null;
-            // if starts with /storage or storage/ => map to storage/app/public/...
-            if (Str::startsWith($pcTrim, '/storage') || Str::startsWith($pcTrim, 'storage/')) {
-                $relative = preg_replace('#^/storage#', '', $pcTrim);
-                $relative = ltrim($relative, '/');
-                $candidate = storage_path('app/public/' . $relative);
-                if (File::exists($candidate)) $localPath = $candidate;
-            } elseif (filter_var($pcTrim, FILTER_VALIDATE_URL)) {
-                // remote url -> download
+            $filename = basename(parse_url($cand, PHP_URL_PATH) ?? 'preview.png');
+
+            if (Str::startsWith($cand, '/storage')) {
+                // remove leading /storage/ and map to storage/app/public/...
+                $rel = ltrim(substr($cand, strlen('/storage')), '/');
+                $possible = storage_path('app/public/' . $rel);
+                if (is_file($possible)) $localPath = $possible;
+            } elseif (Str::startsWith($cand, 'storage/')) {
+                $rel = ltrim($cand, '/');
+                $possible = storage_path('app/public/' . $rel);
+                if (is_file($possible)) $localPath = $possible;
+            } elseif (Str::startsWith($cand, 'http://') || Str::startsWith($cand, 'https://')) {
+                // download remote image into previewDir
                 try {
-                    $contents = @file_get_contents($pcTrim);
+                    $contents = @file_get_contents($cand);
                     if ($contents !== false) {
-                        $ext = pathinfo(parse_url($pcTrim, PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'png';
-                        $fname = 'preview_' . $idx . '.' . $ext;
-                        file_put_contents($previewDir . '/' . $fname, $contents);
-                        $downloadedPreviews[] = $previewDir . '/' . $fname;
-                        $idx++;
-                        continue;
+                        $saveTo = $previewDir . '/' . $filename;
+                        file_put_contents($saveTo, $contents);
+                        $localPath = $saveTo;
                     }
                 } catch (\Throwable $e) {
-                    // skip
+                    // ignore
+                }
+            } else {
+                // maybe it's already a local absolute path in storage/app/...
+                if (is_file($cand)) {
+                    $localPath = $cand;
+                } else {
+                    // maybe relative to storage/app/public
+                    $possible = storage_path('app/public/' . ltrim($cand, '/'));
+                    if (is_file($possible)) $localPath = $possible;
+                    else {
+                        // maybe relative to public path
+                        $possible2 = public_path(ltrim($cand, '/'));
+                        if (is_file($possible2)) $localPath = $possible2;
+                    }
                 }
             }
-            if ($localPath && File::exists($localPath)) {
-                $ext = pathinfo($localPath, PATHINFO_EXTENSION) ?: 'png';
-                $fname = 'preview_' . $idx . '.' . $ext;
-                copy($localPath, $previewDir . '/' . $fname);
-                $downloadedPreviews[] = $previewDir . '/' . $fname;
-                $idx++;
+
+            if ($localPath && is_file($localPath)) {
+                // copy into previewDir with unique name
+                $dest = $previewDir . '/' . uniqid('preview_') . '_' . $filename;
+                copy($localPath, $dest);
+                $addedPreviewFiles[] = $dest;
             }
         }
 
-        // if no preview images downloaded, create one from dataURL if preview_src is data:
-        if (empty($downloadedPreviews) && !empty($order->preview_src) && Str::startsWith($order->preview_src, 'data:')) {
-            preg_match('/^data:(image\/[a-zA-Z]+);base64,(.+)$/', $order->preview_src, $m);
-            if (!empty($m[2])) {
-                $bin = base64_decode($m[2]);
-                $fname = 'preview_1.png';
-                file_put_contents($previewDir . '/' . $fname, $bin);
-                $downloadedPreviews[] = $previewDir . '/' . $fname;
+        // Also add per-player preview_srcs if any
+        foreach ($playersArray as $i => $p) {
+            $p = (array)$p;
+            if (!empty($p['preview_src'])) {
+                $cand = $p['preview_src'];
+                $filename = basename(parse_url($cand, PHP_URL_PATH) ?? 'player_'.$i.'.png');
+                $localPath = null;
+                if (Str::startsWith($cand, '/storage')) {
+                    $rel = ltrim(substr($cand, strlen('/storage')), '/');
+                    $possible = storage_path('app/public/' . $rel);
+                    if (is_file($possible)) $localPath = $possible;
+                } elseif (Str::startsWith($cand, 'storage/')) {
+                    $rel = ltrim($cand, '/');
+                    $possible = storage_path('app/public/' . $rel);
+                    if (is_file($possible)) $localPath = $possible;
+                } elseif (Str::startsWith($cand, 'http://') || Str::startsWith($cand, 'https://')) {
+                    $contents = @file_get_contents($cand);
+                    if ($contents !== false) {
+                        $saveTo = $previewDir . '/' . $filename;
+                        file_put_contents($saveTo, $contents);
+                        $localPath = $saveTo;
+                    }
+                } else {
+                    if (is_file($cand)) $localPath = $cand;
+                    else {
+                        $possible = storage_path('app/public/' . ltrim($cand, '/'));
+                        if (is_file($possible)) $localPath = $possible;
+                    }
+                }
+
+                if ($localPath && is_file($localPath)) {
+                    $dest = $previewDir . '/' . uniqid('player_') . '_' . $filename;
+                    copy($localPath, $dest);
+                    $addedPreviewFiles[] = $dest;
+                }
             }
         }
 
-        // 4) Create a simple info.txt
-        $info = "Order ID: " . ($order->id ?? '') . PHP_EOL
-        . "Product ID: " . ($order->product_id ?? '') . PHP_EOL
-        . "Product name: " . ($order->product_name ?? ($order->product_name ?? '')) . PHP_EOL
-        . "Customer name / number: " . ($order->name_text ?? '') . " / " . ($order->number_text ?? '') . PHP_EOL
-        . "Status: " . ($order->status ?? '') . PHP_EOL
-        . "Created: " . ($order->created_at ?? '') . PHP_EOL;
-
-        // 5) Create a PDF with name/number + preview image (use Dompdf)
-        $pdfPath = $tmpBase . '/design_order_' . $order->id . '.pdf';
-
-        // Build a small HTML document
-        $previewForPdf = $downloadedPreviews[0] ?? null;
-        $imageTag = '';
-        if ($previewForPdf && File::exists($previewForPdf)) {
-            // embed as data URI (helps with Dompdf local file issues)
-            $bin = file_get_contents($previewForPdf);
-            $base64 = base64_encode($bin);
-            $mime = mime_content_type($previewForPdf) ?: 'image/png';
-            $imageTag = "<img src=\"data:{$mime};base64,{$base64}\" style=\"max-width:100%;height:auto;display:block;margin:0 auto;border:1px solid #ddd;padding:8px;border-radius:6px;\" />";
-        }
-
-        $html = '<html><body style="font-family:Arial, sans-serif;">';
-        $html .= "<h2>Design Order #{$order->id}</h2>";
-        $html .= '<p><strong>Customer:</strong> ' . htmlspecialchars($order->name_text ?? '') . ' </p>';
-        $html .= '<p><strong>Number:</strong> ' . htmlspecialchars($order->number_text ?? '') . ' </p>';
-        $html .= $imageTag;
-        $html .= '<hr/>';
-        $html .= '<h4>Players</h4>';
-        $html .= '<table style="width:100%;border-collapse:collapse;">';
-        $html .= '<thead><tr><th style="border:1px solid #ddd;padding:6px">#</th><th style="border:1px solid #ddd;padding:6px">Name</th><th style="border:1px solid #ddd;padding:6px">Number</th><th style="border:1px solid #ddd;padding:6px">Size</th></tr></thead><tbody>';
-        $ci = 1;
-        foreach ($players as $pl) {
-            $plArr = is_array($pl) ? $pl : (array)$pl;
-            $html .= '<tr>';
-            $html .= '<td style="border:1px solid #ddd;padding:6px">' . $ci . '</td>';
-            $html .= '<td style="border:1px solid #ddd;padding:6px">' . htmlspecialchars($plArr['name'] ?? '') . '</td>';
-            $html .= '<td style="border:1px solid #ddd;padding:6px">' . htmlspecialchars($plArr['number'] ?? '') . '</td>';
-            $html .= '<td style="border:1px solid #ddd;padding:6px">' . htmlspecialchars($plArr['size'] ?? '') . '</td>';
-            $html .= '</tr>';
-            $ci++;
-        }
-        $html .= '</tbody></table>';
-        $html .= '</body></html>';
-
-        // generate pdf
-        if (!class_exists('\Dompdf\Dompdf')) {
-            // if dompdf not available, write HTML fallback file
-            file_put_contents($pdfPath . '.html', $html);
-        } else {
-            $dompdf = new Dompdf(['isRemoteEnabled' => true]);
-            $dompdf->loadHtml($html);
-            $dompdf->setPaper('A4', 'portrait');
-            $dompdf->render();
-            file_put_contents($pdfPath, $dompdf->output());
-        }
-
-        // 6) Create ZIP
-        $zipName = 'design_order_' . $order->id . '.zip';
-        $zipPath = $tmpBase . '/' . $zipName;
-
-        if (!class_exists('ZipArchive')) {
-            throw new \Exception('ZipArchive not available on server. Install php-zip extension.');
-        }
-
+        // --- Create ZIP ---
+        $zipFile = $baseTmp . '/' . $uniq . '.zip';
         $zip = new ZipArchive();
-        if ($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
-            throw new \Exception('Could not create zip file');
+        if ($zip->open($zipFile, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+            throw new \Exception("Could not create zip at: $zipFile");
         }
 
-        // add info + raw + csv + pdf + previews
-        $zip->addFile($tmpBase . '/info.txt', 'info.txt');
-        $zip->addFile($rawPath, 'raw_payload.json');
-        $zip->addFile($csvPath, 'players.csv');
-        if (File::exists($pdfPath)) {
-            $zip->addFile($pdfPath, basename($pdfPath));
-        } elseif (File::exists($pdfPath . '.html')) {
-            $zip->addFile($pdfPath . '.html', basename($pdfPath) . '.html');
-        }
+        // add info and raw & players
+        if (is_file($tmpDir . '/info.txt')) $zip->addFile($tmpDir . '/info.txt', 'info.txt');
+        if (is_file($csvPath)) $zip->addFile($csvPath, 'players.csv');
 
-        // add all preview images
-        if (File::exists($previewDir)) {
-            $files = File::files($previewDir);
-            foreach ($files as $f) {
-                $zip->addFile($f->getPathname(), 'preview/' . $f->getFilename());
+        if (is_file($tmpDir . '/raw_payload.json')) $zip->addFile($tmpDir . '/raw_payload.json', 'raw_payload.json');
+        if (is_file($tmpDir . '/raw_payload.txt')) $zip->addFile($tmpDir . '/raw_payload.txt', 'raw_payload.txt');
+
+        // add preview files into preview/ folder inside zip
+        foreach ($addedPreviewFiles as $pfile) {
+            if (is_file($pfile)) {
+                $zip->addFile($pfile, 'preview/' . basename($pfile));
             }
         }
 
+        // finalize
         $zip->close();
 
-        // Return download response and cleanup after sending
-        return response()->download($zipPath, $zipName)->deleteFileAfterSend(true);
+        // stream download and delete file after send
+        return response()->download($zipFile, 'design_order_' . $order->id . '.zip', [
+            'Content-Type' => 'application/zip'
+        ])->deleteFileAfterSend(true);
 
     } catch (\Throwable $e) {
-        Log::error('DesignOrderController::download failed: ' . $e->getMessage(), ['trace'=>$e->getTraceAsString(), 'id'=>$id]);
-        return back()->with('error', 'Could not prepare download package. Check logs.');
+        // cleanup temp dir if created
+        // (do best-effort)
+        try { 
+            if (is_dir($tmpDir)) {
+                $files = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($tmpDir, \FilesystemIterator::SKIP_DOTS), \RecursiveIteratorIterator::CHILD_FIRST);
+                foreach ($files as $fileinfo) {
+                    if ($fileinfo->isDir()) rmdir($fileinfo->getRealPath()); else unlink($fileinfo->getRealPath());
+                }
+                @rmdir($tmpDir);
+            }
+        } catch (\Throwable $_) {}
+        \Log::error('DesignOrderController::download failed: ' . $e->getMessage(), ['exception' => $e]);
+        abort(500, 'Could not create download package. Check logs.');
     }
 }
-
     /**
      * Delete order (and preview file)
      */
