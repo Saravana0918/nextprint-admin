@@ -137,7 +137,11 @@ class DesignOrderController extends Controller
 public function download($id)
 {
     try {
-        $order = DB::table('design_orders')->where('id', $id)->first();
+        $order = DB::table('design_orders as d')
+        ->leftJoin('products as p', 'p.id', '=', 'd.product_id')
+        ->select('d.*', DB::raw('p.name as product_name'))
+        ->where('d.id', $id)
+        ->first();
         if (!$order) {
             abort(404, 'Design order not found');
         }
@@ -209,7 +213,7 @@ public function download($id)
         if (!File::exists($previewDir)) File::makeDirectory($previewDir, 0755, true);
 
         // order->preview_src or preview_url or preview_path
-        $previewCandidates = [];
+       $previewCandidates = [];
         if (!empty($order->preview_src)) $previewCandidates[] = $order->preview_src;
         if (!empty($order->preview_url)) $previewCandidates[] = $order->preview_url;
         if (!empty($order->preview_path)) $previewCandidates[] = $order->preview_path;
@@ -269,8 +273,12 @@ public function download($id)
         }
 
         // 4) Create a simple info.txt
-        $info = "Order ID: {$order->id}\nProduct ID: {$order->product_id}\nProduct name: {$order->product_name}\nCustomer name / number: {$order->name_text} / {$order->number_text}\nStatus: {$order->status}\nCreated: {$order->created_at}\n";
-        file_put_contents($tmpBase . '/info.txt', $info);
+        $info = "Order ID: " . ($order->id ?? '') . PHP_EOL
+        . "Product ID: " . ($order->product_id ?? '') . PHP_EOL
+        . "Product name: " . ($order->product_name ?? ($order->product_name ?? '')) . PHP_EOL
+        . "Customer name / number: " . ($order->name_text ?? '') . " / " . ($order->number_text ?? '') . PHP_EOL
+        . "Status: " . ($order->status ?? '') . PHP_EOL
+        . "Created: " . ($order->created_at ?? '') . PHP_EOL;
 
         // 5) Create a PDF with name/number + preview image (use Dompdf)
         $pdfPath = $tmpBase . '/design_order_' . $order->id . '.pdf';
