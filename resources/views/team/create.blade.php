@@ -197,16 +197,24 @@
         <input type="hidden" id="team-prefill-logo" name="team_logo_url" value="{{ $prefill['prefill_logo'] ?? '' }}">
         <input type="hidden" id="team-preview-url" name="team_preview_url" value="">
 
-        <div class="mb-3">
-        <button type="button" id="btn-add-row" class="btn btn-primary">ADD NEW</button>
+        <div class="mb-3 d-flex flex-wrap flex-md-nowrap align-items-center justify-content-between">
+        <!-- left group: buttons together -->
+        <div class="d-flex align-items-center flex-wrap">
+          <div class="btn-group me-2" role="group" aria-label="team actions">
+            <button type="button" id="btn-add-row" class="btn btn-primary btn-sm">ADD NEW</button>
 
-        <!-- NEW: Save design button (shown before saving) -->
-        <button type="button" id="save-team-btn" class="btn btn-outline-primary">Save Design</button>
+            <!-- Save as outline, small -->
+            <button type="button" id="save-team-btn" class="btn btn-outline-primary btn-sm">Save Design</button>
 
-        <!-- existing Add To Cart (submit) -> disable initially -->
-        <button type="submit" id="team-addtocart-btn" class="btn btn-success" disabled>Add To Cart</button>
+            <!-- Add To Cart (submit) -->
+            <button type="submit" id="team-addtocart-btn" class="btn btn-success btn-sm" disabled>Add To Cart</button>
+          </div>
+        </div>
 
-        <a href="{{ url()->previous() }}" class="btn btn-secondary">Back</a>
+        <!-- right: back button, aligned to right -->
+        <div class="ms-2">
+          <a href="{{ url()->previous() }}" class="btn btn-secondary btn-sm">Back</a>
+        </div>
       </div>
 
         <div id="players-list" class="mb-4"></div>
