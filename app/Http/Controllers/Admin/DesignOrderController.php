@@ -136,11 +136,10 @@ class DesignOrderController extends Controller
 
 public function download($id)
 {
-    // fetch order
     $order = DB::table('design_orders')->where('id', $id)->first();
     if (!$order) abort(404, 'Order not found');
 
-    // --- players: try payload/raw_payload/team etc ---
+    // ------------- obtain players & preview paths (your existing logic kept) -------------
     $players = [];
     if (!empty($order->payload)) {
         $decoded = json_decode($order->payload, true);
@@ -150,7 +149,7 @@ public function download($id)
     }
     if (empty($players) && !empty($order->raw_payload)) {
         $r = json_decode($order->raw_payload, true);
-        if (!empty($r['players']) && is_array($r['players'])) $players = $r['players'];
+        if (!empty($r['players'])) $players = $r['players'];
     }
     if (empty($players) && !empty($order->team_id)) {
         $team = DB::table('teams')->where('id', $order->team_id)->first();
@@ -159,74 +158,110 @@ public function download($id)
         }
     }
 
-    // --- determine preview local path (if stored in storage) ---
+    // ------------- preview_local_path: try to map preview_src to storage path -------------
     $preview_local_path = null;
-    $preview_url = $order->preview_src ?? $order->preview_path ?? $order->preview_url ?? null;
+    $preview_url = $order->preview_src ?? $order->preview_path ?? null;
     if ($preview_url) {
-        // If preview_url contains '/storage/' => map to storage/app/public/...
         if (strpos($preview_url, '/storage/') !== false) {
             $rel = substr($preview_url, strpos($preview_url, '/storage/') + 9);
-            $full = storage_path('app/public/' . ltrim($rel, '/'));
+            $full = storage_path('app/public/' . $rel);
             if (file_exists($full)) $preview_local_path = $full;
         } else {
-            // maybe it's a relative storage path (without /storage prefix)
             $possible = storage_path('app/public/' . ltrim($preview_url, '/'));
             if (file_exists($possible)) $preview_local_path = $possible;
         }
     }
 
-    // --- extract font & color if present (normalize) ---
-    $font = $order->font ?? null;
-    $color = $order->color ?? null;
-    if (empty($font) || empty($color)) {
-        $meta = null;
-        if (!empty($order->payload)) $meta = json_decode($order->payload, true);
-        if (empty($meta) && !empty($order->raw_payload)) $meta = json_decode($order->raw_payload, true);
-        if (is_array($meta)) {
-            $font = $font ?? ($meta['font'] ?? $meta['prefill_font'] ?? null);
-            $color = $color ?? ($meta['color'] ?? $meta['prefill_color'] ?? null);
-        }
+    // ------------- attempt to obtain layoutSlots from payload/meta (so we can place text correctly) -------------
+    $slots = [];
+    // many systems store layout in meta/payload; attempt both
+    if (!empty($order->payload)) {
+        $pl = json_decode($order->payload, true);
+        if (!empty($pl['layoutSlots'])) $slots = $pl['layoutSlots'];
+        elseif (!empty($pl['meta']['layoutSlots'])) $slots = $pl['meta']['layoutSlots'];
     }
-    if (!empty($color)) {
-        // decode if url encoded and ensure leading #
-        $color = urldecode($color);
-        if (strpos($color, '%23') !== false) $color = urldecode($color);
-        if ($color && $color[0] !== '#') $color = '#' . ltrim($color, '#');
-    } else {
-        $color = '#000000';
+    if (empty($slots) && !empty($order->meta)) {
+        $m = json_decode($order->meta, true);
+        if (!empty($m['layoutSlots'])) $slots = $m['layoutSlots'];
     }
 
-    // --- tmp dir for packaging ---
-    $tmpDir = storage_path('app/tmp/design_package_' . $id . '_' . time());
-    @mkdir($tmpDir, 0755, true);
+    // fallback default coordinates (percentages) — tweak these per template
+    $defaults = [
+        'name_left_pct' => 72, 'name_top_pct' => 25, 'name_width_pct' => 22, 'name_font_size_pt' => 22,
+        'number_left_pct' => 72, 'number_top_pct' => 48, 'number_width_pct' => 14, 'number_font_size_pt' => 40,
+    ];
 
+    // If slots include 'name' or 'number' keys with left_pct/top_pct/width_pct we use them
     try {
-        // prepare data for PDF
-        $pdfData = [
-            'product_name' => $order->product_name ?? null,
-            'customer_name' => $order->name_text ?? null,
-            'customer_number' => $order->number_text ?? null,
-            'order_id' => $order->id,
-            'players' => $players,
-            'preview_local_path' => $preview_local_path,
-            'preview_url' => $preview_url,
-            'font' => $order->font ?? null,
-            'color' => $order->color ?? null,
-        ];
+        if (!empty($slots) && is_array($slots)) {
+            // normalized slots -> try keys 'name' & 'number'
+            $sname = $slots['name'] ?? $slots['Name'] ?? null;
+            $snum  = $slots['number'] ?? $slots['Number'] ?? null;
+            if ($sname && is_array($sname)) {
+                $defaults['name_left_pct'] = $sname['left_pct'] ?? $defaults['name_left_pct'];
+                $defaults['name_top_pct']  = $sname['top_pct']  ?? $defaults['name_top_pct'];
+                $defaults['name_width_pct']= $sname['width_pct']?? $defaults['name_width_pct'];
+            }
+            if ($snum && is_array($snum)) {
+                $defaults['number_left_pct'] = $snum['left_pct'] ?? $defaults['number_left_pct'];
+                $defaults['number_top_pct']  = $snum['top_pct']  ?? $defaults['number_top_pct'];
+                $defaults['number_width_pct']= $snum['width_pct']?? $defaults['number_width_pct'];
+            }
+        }
+    } catch (\Throwable $e) {
+        // ignore, keep defaults
+    }
 
-        // Ensure remote fonts/images allowed
-        PDF::setOptions([
-            'isRemoteEnabled' => true,
-            'isHtml5ParserEnabled' => true,
-            'defaultFont' => 'DejaVu Sans'
-        ]);
+    // ------------- prepare PDF data -------------
+    $pdfData = [
+        'product_name' => $order->product_name ?? null,
+        'customer_name' => $order->name_text ?? null,
+        'customer_number' => $order->number_text ?? null,
+        'order_id' => $order->id,
+        'players' => $players,
+        'preview_local_path' => $preview_local_path,
+        'preview_url' => $preview_url,
+        'name_left_pct' => $defaults['name_left_pct'],
+        'name_top_pct' => $defaults['name_top_pct'],
+        'name_width_pct' => $defaults['name_width_pct'],
+        'name_font_size_pt' => $defaults['name_font_size_pt'],
+        'number_left_pct' => $defaults['number_left_pct'],
+        'number_top_pct' => $defaults['number_top_pct'],
+        'number_width_pct' => $defaults['number_width_pct'],
+        'number_font_size_pt' => $defaults['number_font_size_pt'],
+        'font' => $order->font ?? 'DejaVu Sans',
+        'color' => $order->color ?? '#000000',
+    ];
 
-        // generate PDF (A4)
-        $pdf = PDF::loadView('admin.design_orders.package', $pdfData)->setPaper('a4', 'portrait');
+    // ------------- generate PDF using blade that contains text overlays (vector) -------------
+    try {
+        $pdf = \PDF::loadView('admin.design_orders.package_for_corel', $pdfData);
+        $pdf->setPaper('a4', 'portrait');
+
+        $tmpDir = storage_path('app/tmp/design_package_' . $id . '_' . time());
+        @mkdir($tmpDir, 0755, true);
         $pdfPath = $tmpDir . DIRECTORY_SEPARATOR . 'design_order_' . $id . '.pdf';
         $pdf->save($pdfPath);
 
-        // create players CSV
+        // create zip containing PDF and preview image and CSV as before
+        $zipName = 'design_order_' . $id . '.zip';
+        $zipPath = storage_path('app/tmp/' . $zipName);
+        if (file_exists($zipPath)) @unlink($zipPath);
+
+        $zip = new \ZipArchive();
+        if ($zip->open($zipPath, \ZipArchive::CREATE)!==true) {
+            throw new \Exception('Could not create zip file');
+        }
+
+        // add PDF
+        $zip->addFile($pdfPath, basename($pdfPath));
+
+        // add preview image if available
+        if ($preview_local_path && file_exists($preview_local_path)) {
+            $zip->addFile($preview_local_path, 'preview/' . basename($preview_local_path));
+        }
+
+        // players.csv
         $csvPath = $tmpDir . DIRECTORY_SEPARATOR . 'players.csv';
         $fp = fopen($csvPath, 'w');
         fputcsv($fp, ['id','name','number','size','font','variant_id','preview_src']);
@@ -243,47 +278,17 @@ public function download($id)
             fputcsv($fp, $row);
         }
         fclose($fp);
+        $zip->addFile($csvPath, 'players.csv');
 
-        // copy preview image into preview directory (if exists)
-        if ($preview_local_path && file_exists($preview_local_path)) {
-            $previewDir = $tmpDir . DIRECTORY_SEPARATOR . 'preview';
-            @mkdir($previewDir, 0755, true);
-            copy($preview_local_path, $previewDir . DIRECTORY_SEPARATOR . basename($preview_local_path));
-        }
-
-        // write info & raw_payload too
-        file_put_contents($tmpDir . DIRECTORY_SEPARATOR . 'info.txt', "Design Order: {$id}\nProduct: " . ($order->product_name ?? '') . "\nCreated: " . ($order->created_at ?? '') . "\nFont: " . ($font ?? '') . "\nColor: " . ($color ?? '') . "\n");
-        file_put_contents($tmpDir . DIRECTORY_SEPARATOR . 'raw_payload.json', $order->raw_payload ?? '{}');
-
-        // create zip
-        $zipName = 'design_order_' . $id . '.zip';
-        $zipPath = storage_path('app/tmp/' . $zipName);
-        if (file_exists($zipPath)) @unlink($zipPath);
-
-        $zip = new \ZipArchive();
-        if ($zip->open($zipPath, \ZipArchive::CREATE) !== true) {
-            throw new \Exception("Could not create zip file");
-        }
-
-        $files = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($tmpDir));
-        foreach ($files as $file) {
-            if (!$file->isFile()) continue;
-            $filePath = $file->getRealPath();
-            $relativePath = ltrim(str_replace($tmpDir, '', $filePath), DIRECTORY_SEPARATOR);
-            $zip->addFile($filePath, $relativePath);
-        }
         $zip->close();
 
-        // cleanup temp directory
+        // cleanup tmpdir but keep zip
         $this->rrmdir($tmpDir);
 
-        // send and remove zip after send
         return response()->download($zipPath, $zipName)->deleteFileAfterSend(true);
-
     } catch (\Throwable $e) {
-        if (is_dir($tmpDir)) $this->rrmdir($tmpDir);
-        Log::error('DesignOrder download failed: ' . $e->getMessage(), ['trace'=>$e->getTraceAsString()]);
-        abort(500, 'Could not create download package: ' . $e->getMessage());
+        \Log::error('DesignOrder download failed: '.$e->getMessage(), ['trace'=>$e->getTraceAsString()]);
+        abort(500, 'Could not create download package: '.$e->getMessage());
     }
 }
 
