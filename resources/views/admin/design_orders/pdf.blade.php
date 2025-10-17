@@ -19,6 +19,8 @@
     <div class="meta">
       <strong>Customer:</strong> {{ $order->name_text ?? '—' }} &nbsp; | &nbsp;
       <strong>Number:</strong> {{ $order->number_text ?? '—' }} <br>
+      <strong>Font:</strong> {{ $order->font ?? '—' }} <br>
+      <strong>Color:</strong> {{ $order->color ?? '—' }} <br>
       <span class="small">Order ID: {{ $order->id }}</span>
     </div>
   </div>
