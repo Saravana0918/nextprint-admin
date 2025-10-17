@@ -18,6 +18,8 @@
     <div class="meta">
       <strong>Customer:</strong> {{ $customer_name ?? '—' }}  &nbsp; | &nbsp;
       <strong>Number:</strong> {{ $customer_number ?? '—' }} <br />
+      <strong>Font:</strong> {{ $order->font ?? '—' }} <br>
+      <strong>Color:</strong> {{ $order->color ?? '—' }} <br>
       <small>Order ID: {{ $order_id }}</small>
     </div>
   </div>
