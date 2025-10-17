@@ -220,8 +220,10 @@ public function download($id)
     $pdfFullPath = $tmpDirFull . '/' . $pdfFileName;
 
     // Use absolute file path for images in the view (dompdf needs file:// or absolute)
-    $pdf = PDF::loadView('admin.design_orders.pdf', $pdfViewData)
-              ->setPaper('A4', 'portrait');
+    $pdf = PDF::loadView('admin.design_orders.pdf', $data)
+          ->setPaper('A4', 'portrait');
+    // enable remote images if needed
+    $pdf->getDomPDF()->set_option('isRemoteEnabled', true);
     $pdf->save($pdfFullPath);
 
     // 4) write raw_payload / info text
