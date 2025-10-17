@@ -18,32 +18,24 @@
       background: #f5f5f5;
       border: 1px solid #eee;
     }
-    /* Force image to fill the box while keeping aspect ratio */
-    .preview-box img { 
-      width:100%; 
-      height:100%; 
-      display:block; 
+    .preview-box img {
+      width:100%;
+      height:100%;
+      display:block;
       object-fit: contain;
       vertical-align: middle;
     }
-
     .overlay {
       position:absolute;
       white-space:nowrap;
       text-align:center;
       color: {{ $color }};
-      z-index: 10; /* above image */
+      z-index: 10;
       line-height: 1;
-      /* no transform: anchor top-left to simplify */
       transform: none;
     }
     .name-text { font-weight:700; text-transform:uppercase; letter-spacing:1px; font-family: "{{ $font }}", DejaVu Sans, Arial, sans-serif; }
     .number-text { font-weight:900; font-family: "{{ $font }}", DejaVu Sans, Arial, sans-serif; }
-
-    /* small responsive-ish fallback: if displayWidthMm small, scale font slightly */
-    @media print {
-      /* no changes — keep mm units */
-    }
   </style>
 </head>
 <body>
@@ -64,8 +56,9 @@
       <div class="preview-box" id="preview-box">
         @php
           $imgSrc = null;
-          if (!empty($preview_local_path) && file_exists($preview_local_path)) {
-              // dompdf accepts file:// path for local images if isRemoteEnabled = true
+          if (!empty($preview_data_uri)) {
+              $imgSrc = $preview_data_uri;
+          } elseif (!empty($preview_local_path) && file_exists($preview_local_path)) {
               $imgSrc = 'file://'.$preview_local_path;
           } elseif (!empty($preview_url)) {
               $imgSrc = $preview_url;
@@ -78,7 +71,6 @@
           <div style="padding:20px; color:#666; font-size:10pt;">Base artwork not found</div>
         @endif
 
-        {{-- overlays: placed on top of image using mm coords --}}
         <div class="overlay name-text"
              style="left: {{ $name_left_mm }}mm; top: {{ $name_top_mm }}mm; font-size: {{ $name_font_size_pt }}pt;">
           {{ strtoupper($customer_name ?? 'NAME') }}

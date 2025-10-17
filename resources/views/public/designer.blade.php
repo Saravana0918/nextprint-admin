@@ -832,49 +832,52 @@ async function handleFile(file) {
 
 // uploadBaseArtwork: hide overlays, capture base, upload, restore overlays
 async function uploadBaseArtwork() {
-  // hide overlays
   const nameEl = document.getElementById('np-prev-name');
   const numEl = document.getElementById('np-prev-num');
   const overlays = [nameEl, numEl];
   const originalDisplay = overlays.map(el => el ? el.style.display : null);
   overlays.forEach(el => { if (el) el.style.display = 'none'; });
 
-  // small delay to allow repaint
   await new Promise(r => setTimeout(r, 80));
 
-  // capture base using html2canvas (options tuned)
   const previewNode = document.getElementById('design-canvas') || document.getElementById('np-preview-root');
   const canvas = await html2canvas(previewNode, {useCORS: true, scale: 2, backgroundColor: null});
   const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png', 0.92));
 
-  // restore overlays
   overlays.forEach((el, idx) => { if (el && originalDisplay[idx] !== null) el.style.display = originalDisplay[idx]; });
 
-  // prepare upload
   const form = new FormData();
   form.append('file', blob, 'preview_base_' + Date.now() + '.png');
 
-  // post to your temp upload endpoint
-  const res = await fetch('/designer/upload-temp', { method: 'POST', body: form });
+  const res = await fetch('/designer/upload-temp', { method: 'POST', body: form, headers: { 'X-CSRF-TOKEN': window.Laravel ? window.Laravel.csrfToken : '' } });
   if (!res.ok) {
     const txt = await res.text();
     throw new Error('Base upload failed: ' + txt);
   }
   const data = await res.json();
-
-  // expected: { ok: true, url: '/storage/designer_temp/xxx.png' }
   if (!data.url) throw new Error('upload-temp did not return url');
-
   return data.url;
 }
 
-// updated doSave that ensures preview_base included
+async function generateFullPreview() {
+  // Use your existing html2canvas or mechanism that produces preview_src and uploads it.
+  // Example placeholder: capture with overlays visible and upload to /designer/upload-temp (or your actual endpoint).
+  const previewNode = document.getElementById('design-canvas') || document.getElementById('np-preview-root');
+  const canvas = await html2canvas(previewNode, {useCORS: true, scale: 2, backgroundColor: null});
+  const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png', 0.92));
+  const form = new FormData();
+  form.append('file', blob, 'preview_full_' + Date.now() + '.png');
+
+  const res = await fetch('/designer/upload-temp', { method: 'POST', body: form, headers: { 'X-CSRF-TOKEN': window.Laravel ? window.Laravel.csrfToken : '' } });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message || 'Full preview upload failed');
+  return data.url;
+}
+
 async function doSave() {
   try {
-    // generate full preview (with text) - existing flow
-    const fullPreviewUrl = await generateFullPreview(); // your existing function that returns preview_src URL
+    const fullPreviewUrl = await generateFullPreview();
 
-    // generate and upload base artwork (no overlays)
     let previewBaseUrl = null;
     try {
       previewBaseUrl = await uploadBaseArtwork();
@@ -883,21 +886,19 @@ async function doSave() {
       previewBaseUrl = null;
     }
 
-    // collect payload
     const payload = {
       preview_src: fullPreviewUrl,
       preview_base: previewBaseUrl,
-      // ... other fields your server expects
-      name: document.getElementById('input-name').value || '',
-      number: document.getElementById('input-number').value || '',
-      font: selectedFontName,
-      color: selectedColor,
-      // etc
+      name_text: document.getElementById('input-name') ? document.getElementById('input-name').value : '',
+      number_text: document.getElementById('input-number') ? document.getElementById('input-number').value : '',
+      font: window.selectedFontName || 'Bebas Neue',
+      color: window.selectedColor || '#000000',
+      // add other fields your backend needs
     };
 
     const res = await fetch('/designer/save', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': window.Laravel.csrfToken || '' },
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': window.Laravel ? window.Laravel.csrfToken : '' },
       body: JSON.stringify(payload)
     });
 

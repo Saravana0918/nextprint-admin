@@ -44,7 +44,6 @@ class DesignOrderController extends Controller
             abort(404, 'Design order not found');
         }
 
-        // players resolution (reuse same logic you already had in controller->show)
         $players = collect();
 
         try {
@@ -127,7 +126,7 @@ class DesignOrderController extends Controller
         $order = DB::table('design_orders')->where('id', $id)->first();
         if (!$order) abort(404, 'Order not found');
 
-        // players from payload/raw_payload/team fallback (keeps old behavior)
+        // players
         $players = [];
         if (!empty($order->payload)) {
             $decoded = json_decode($order->payload, true) ?: [];
@@ -182,7 +181,7 @@ class DesignOrderController extends Controller
             Log::warning("DesignOrder #{$id}: no preview_base/preview_src/preview_path set for order");
         }
 
-        // defaults for layout if not provided
+        // layout defaults
         $defaults = [
             'name_left_pct' => 72, 'name_top_pct' => 25, 'name_width_pct' => 22, 'name_font_pt' => 22,
             'number_left_pct' => 72, 'number_top_pct' => 48, 'number_width_pct' => 14, 'number_font_pt' => 40,
@@ -214,9 +213,7 @@ class DesignOrderController extends Controller
                 if (!empty($sname['font_size_pt'])) $defaults['name_font_pt'] = $sname['font_size_pt'];
                 if (!empty($snum['font_size_pt'])) $defaults['number_font_pt'] = $snum['font_size_pt'];
             }
-        } catch (\Throwable $e) {
-            // ignore
-        }
+        } catch (\Throwable $e) {}
 
         $maxImageWidthMm = 150.0;
         $displayWidthMm = $maxImageWidthMm;
@@ -247,6 +244,24 @@ class DesignOrderController extends Controller
         $color = $order->color ?? '#000000';
         $fontName = $order->font ?? 'DejaVu Sans';
 
+        // --- embed preview as data URI (preferred) ---
+        $preview_data_uri = null;
+        if ($preview_local_path && file_exists($preview_local_path)) {
+            try {
+                $contents = file_get_contents($preview_local_path);
+                if ($contents !== false) {
+                    $mime = @mime_content_type($preview_local_path) ?: 'image/png';
+                    $preview_data_uri = 'data:' . $mime . ';base64,' . base64_encode($contents);
+                    Log::info("DesignOrder #{$id}: embedded preview as data URI (bytes: " . strlen($contents) . ")");
+                }
+            } catch (\Throwable $e) {
+                Log::warning("DesignOrder #{$id}: reading preview file failed: " . $e->getMessage());
+                $preview_data_uri = null;
+            }
+        } else {
+            Log::info("DesignOrder #{$id}: preview_local_path not available for embedding (will fallback to URL if present)");
+        }
+
         $pdfData = [
             'product_name' => $order->product_name ?? null,
             'customer_name' => $order->name_text ?? null,
@@ -255,6 +270,7 @@ class DesignOrderController extends Controller
             'players' => $players,
             'preview_local_path' => $preview_local_path,
             'preview_url' => $preview_url,
+            'preview_data_uri' => $preview_data_uri,
             'displayWidthMm' => round($displayWidthMm,2),
             'displayHeightMm' => round($displayHeightMm,2),
             'name_left_mm' => round($name_left_mm,2),
@@ -271,7 +287,6 @@ class DesignOrderController extends Controller
         @mkdir($tmpDir, 0755, true);
 
         try {
-            // set dompdf options to allow remote/file fetch and html5 parsing
             $pdf = \Barryvdh\DomPDF\Facade\Pdf::setOptions([
                 'isRemoteEnabled' => true,
                 'isHtml5ParserEnabled' => true,
