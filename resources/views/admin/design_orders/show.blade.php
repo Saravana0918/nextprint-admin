@@ -156,7 +156,7 @@
             <li><strong>Status:</strong> {{ $order->status ?? '—' }}</li>
             <li><strong>Download URL:</strong>
               @if(!empty($order->preview_src) || !empty($order->preview_path) || !empty($order->preview_url))
-                <a href="{{ route('admin.design-orders.download', ['id'=>$order->id]) }}" class="btn btn-sm btn-outline-secondary">Download package</a>
+                <a href="{{ route('admin.design-orders.download', ['id' => $order->id]) }}" class="btn btn-sm btn-outline-primary">Download package</a>
               @else
                 <span class="text-muted">—</span>
               @endif
