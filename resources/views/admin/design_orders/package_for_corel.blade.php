@@ -17,7 +17,6 @@
       overflow:visible;
     }
     .preview-box img { width:100%; height:100%; display:block; border-radius:4px; }
-    /* overlays placed in absolute mm coordinates relative to preview-box */
     .overlay {
       position:absolute;
       transform: translate(-50%,-50%);
@@ -25,8 +24,8 @@
       text-align:center;
       color: {{ $color }};
     }
-    .name-text { font-weight:700; text-transform:uppercase; letter-spacing:1px; }
-    .number-text { font-weight:900; }
+    .name-text { font-weight:700; text-transform:uppercase; letter-spacing:1px; font-family: "{{ $font }}", DejaVu Sans, Arial, sans-serif; }
+    .number-text { font-weight:900; font-family: "{{ $font }}", DejaVu Sans, Arial, sans-serif; }
   </style>
 </head>
 <body>
@@ -60,13 +59,11 @@
           <div style="padding:40px; border:1px dashed #ccc; display:inline-block;">No base image found</div>
         @endif
 
-        {{-- name overlay in mm coordinates --}}
         <div class="overlay name-text"
              style="left: {{ $name_left_mm }}mm; top: {{ $name_top_mm }}mm; font-size: {{ $name_font_size_pt }}pt;">
           {{ strtoupper($customer_name ?? 'NAME') }}
         </div>
 
-        {{-- number overlay in mm coordinates --}}
         <div class="overlay number-text"
              style="left: {{ $number_left_mm }}mm; top: {{ $number_top_mm }}mm; font-size: {{ $number_font_size_pt }}pt;">
           {{ $customer_number ?? '09' }}

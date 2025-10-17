@@ -832,6 +832,64 @@ document.addEventListener('DOMContentLoaded', function(){
     }
   }
 
+  async function uploadBaseArtwork() {
+  // temporarily hide overlays
+  const nameOverlay = document.getElementById('np-prev-name');
+  const numOverlay = document.getElementById('np-prev-num');
+  const userImgs = document.querySelectorAll('.np-user-image');
+
+  const prevNameDisplay = nameOverlay ? nameOverlay.style.display : null;
+  const prevNumDisplay  = numOverlay  ? numOverlay.style.display : null;
+
+  if (nameOverlay) nameOverlay.style.display = 'none';
+  if (numOverlay) numOverlay.style.display = 'none';
+  userImgs.forEach(u => u.style.display = 'none');
+
+  // small delay then capture
+  await new Promise(r => setTimeout(r, 120));
+  let baseDataUrl = null;
+  try {
+    const canvas = await html2canvas(document.getElementById('np-stage'), { useCORS:true, backgroundColor: null, scale: window.devicePixelRatio || 1 });
+    baseDataUrl = canvas.toDataURL('image/png');
+  } catch(e) {
+    console.warn('base artwork capture failed', e);
+  }
+
+  // restore overlays
+  if (nameOverlay) nameOverlay.style.display = prevNameDisplay;
+  if (numOverlay) numOverlay.style.display = prevNumDisplay;
+  userImgs.forEach(u => u.style.display = '');
+
+  if (!baseDataUrl) return null;
+
+  // convert to blob and upload via existing route
+  const blob = await (await fetch(baseDataUrl)).blob();
+  const fd = new FormData();
+  fd.append('file', blob, 'base_preview.png');
+  const token = document.querySelector('meta[name="csrf-token"]').getAttribute('content') || '';
+  try {
+    const res = await fetch('{{ route("designer.upload_temp") }}', {
+      method:'POST',
+      body: fd,
+      credentials: 'same-origin',
+      headers: { 'X-CSRF-TOKEN': token }
+    });
+    const json = await res.json().catch(()=>null);
+    if (res.ok && json && json.url) {
+      // json.url should be like '/storage/tmp/....png'
+      window.lastBasePreviewUrl = json.url;
+      return json.url;
+    } else {
+      console.warn('upload_temp returned no url', json);
+      return null;
+    }
+  } catch(e) {
+    console.warn('upload_temp error', e);
+    return null;
+  }
+}
+
+
   async function saveDesign() {
     saveBtn.disabled = true;
     saveBtn.textContent = 'Saving...';

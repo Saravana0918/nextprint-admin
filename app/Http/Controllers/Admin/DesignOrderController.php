@@ -136,19 +136,20 @@ class DesignOrderController extends Controller
 
 public function download($id)
 {
+    // fetch order row
     $order = DB::table('design_orders')->where('id', $id)->first();
     if (!$order) abort(404, 'Order not found');
 
-    // ------------- obtain players & preview paths (your existing logic kept) -------------
+    // players (same as before)
     $players = [];
     if (!empty($order->payload)) {
-        $decoded = json_decode($order->payload, true);
+        $decoded = json_decode($order->payload, true) ?: [];
         if (!empty($decoded['players']) && is_array($decoded['players'])) {
             $players = $decoded['players'];
         }
     }
     if (empty($players) && !empty($order->raw_payload)) {
-        $r = json_decode($order->raw_payload, true);
+        $r = json_decode($order->raw_payload, true) ?: [];
         if (!empty($r['players'])) $players = $r['players'];
     }
     if (empty($players) && !empty($order->team_id)) {
@@ -158,141 +159,127 @@ public function download($id)
         }
     }
 
-    // ------------- preview_local_path: try to map preview_src to storage path -------------
-          
-        $preview_local_path = null;
-        $preview_url = $order->preview_src ?? $order->preview_path ?? null;
-        if ($preview_url) {
-            if (strpos($preview_url, '/storage/') !== false) {
-                $rel = substr($preview_url, strpos($preview_url, '/storage/') + 9);
-                $full = storage_path('app/public/' . $rel);
-                if (file_exists($full)) $preview_local_path = $full;
-            } else {
-                $possible = storage_path('app/public/' . ltrim($preview_url, '/'));
-                if (file_exists($possible)) $preview_local_path = $possible;
-            }
-        }
+    // --- find base preview local path (the base artwork WITHOUT overlays) ---
+    // You must save this path when saving from the designer (see JS below).
+    $preview_local_path = null;
+    $preview_url = $order->preview_base ?? $order->preview_src ?? $order->preview_path ?? null;
 
-        // ---------- defaults (percent) if you don't have layoutSlots saved ----------
-        $defaults = [
-            'name_left_pct' => 72, 'name_top_pct' => 25, 'name_width_pct' => 22, 'name_font_size_pt' => 22,
-            'number_left_pct' => 72, 'number_top_pct' => 48, 'number_width_pct' => 14, 'number_font_size_pt' => 40,
-        ];
-
-        // try to extract layoutSlots positions if stored in payload/meta (keeps existing logic)
-        $slots = [];
-        if (!empty($order->payload)) {
-            $pl = json_decode($order->payload, true);
-            if (!empty($pl['layoutSlots'])) $slots = $pl['layoutSlots'];
-            elseif (!empty($pl['meta']['layoutSlots'])) $slots = $pl['meta']['layoutSlots'];
-        }
-        if (empty($slots) && !empty($order->meta)) {
-            $m = json_decode($order->meta, true);
-            if (!empty($m['layoutSlots'])) $slots = $m['layoutSlots'];
-        }
-        try {
-            if (!empty($slots) && is_array($slots)) {
-                $sname = $slots['name'] ?? $slots['Name'] ?? null;
-                $snum  = $slots['number'] ?? $slots['Number'] ?? null;
-                if ($sname && is_array($sname)) {
-                    $defaults['name_left_pct'] = $sname['left_pct'] ?? $defaults['name_left_pct'];
-                    $defaults['name_top_pct']  = $sname['top_pct']  ?? $defaults['name_top_pct'];
-                    $defaults['name_width_pct']= $sname['width_pct']?? $defaults['name_width_pct'];
-                }
-                if ($snum && is_array($snum)) {
-                    $defaults['number_left_pct'] = $snum['left_pct'] ?? $defaults['number_left_pct'];
-                    $defaults['number_top_pct']  = $snum['top_pct']  ?? $defaults['number_top_pct'];
-                    $defaults['number_width_pct']= $snum['width_pct']?? $defaults['number_width_pct'];
-                }
-            }
-        } catch (\Throwable $e) {
-            // ignore, keep defaults
-        }
-
-        // ---------- decide how large to print the image in the PDF (mm) ----------
-        $maxImageWidthMm = 150.0; // choose safe width so it fits A4 (adjust if needed)
-        $displayWidthMm = $maxImageWidthMm;
-        $displayHeightMm = null;
-
-        if ($preview_local_path && file_exists($preview_local_path)) {
-            try {
-                [$imgWpx, $imgHpx] = getimagesize($preview_local_path); // pixels
-                // convert px -> mm using 96 DPI reference (Dompdf default): 1px = 25.4/96 mm
-                $pxToMm = 25.4 / 96.0;
-                $imageWidthMm = $imgWpx * $pxToMm;
-                $imageHeightMm = $imgHpx * $pxToMm;
-
-                // scale so final printed width is maxImageWidthMm (preserve aspect)
-                $scale = ($imageWidthMm > 0) ? ($maxImageWidthMm / $imageWidthMm) : 1;
-                $displayWidthMm = $imageWidthMm * $scale;
-                $displayHeightMm = $imageHeightMm * $scale;
-            } catch (\Throwable $e) {
-                $displayWidthMm = $maxImageWidthMm;
-                $displayHeightMm = $maxImageWidthMm; // fallback square
-            }
+    if ($preview_url) {
+        // if it contains '/storage' -> map to storage/app/public/...
+        if (strpos($preview_url, '/storage/') !== false) {
+            $rel = substr($preview_url, strpos($preview_url, '/storage/') + 9);
+            $full = storage_path('app/public/' . $rel);
+            if (file_exists($full)) $preview_local_path = $full;
         } else {
-            // if no local file, still set a reasonable display height (approx)
-            $displayWidthMm = $maxImageWidthMm;
-            $displayHeightMm = 110; // fallback
+            // maybe it's stored relative to storage/app/public
+            $possible = storage_path('app/public/' . ltrim($preview_url, '/'));
+            if (file_exists($possible)) $preview_local_path = $possible;
         }
+    }
 
-        // ---------- compute absolute mm coordinates for overlays based on percent ----------
-        $name_left_mm = ($defaults['name_left_pct'] / 100.0) * $displayWidthMm;
-        $name_top_mm  = ($defaults['name_top_pct']  / 100.0) * $displayHeightMm;
-        $number_left_mm = ($defaults['number_left_pct'] / 100.0) * $displayWidthMm;
-        $number_top_mm  = ($defaults['number_top_pct']  / 100.0) * $displayHeightMm;
+    // ----- compute display size (mm) and overlay coordinates (mm) -----
+    // default slot percents (fallback)
+    $defaults = [
+        'name_left_pct' => 72, 'name_top_pct' => 25, 'name_width_pct' => 22, 'name_font_pt' => 22,
+        'number_left_pct' => 72, 'number_top_pct' => 48, 'number_width_pct' => 14, 'number_font_pt' => 40,
+    ];
 
-        // ---------- now build pdf data (pass mm positions and display sizes) ----------
-        $pdfData = [
-            'product_name' => $order->product_name ?? null,
-            'customer_name' => $order->name_text ?? null,
-            'customer_number' => $order->number_text ?? null,
-            'order_id' => $order->id,
-            'players' => $players,
-            'preview_local_path' => $preview_local_path,
-            'preview_url' => $preview_url,
-            'displayWidthMm' => round($displayWidthMm,2),
-            'displayHeightMm' => round($displayHeightMm,2),
-            'name_left_mm' => round($name_left_mm,2),
-            'name_top_mm'  => round($name_top_mm,2),
-            'name_font_size_pt' => $defaults['name_font_size_pt'],
-            'number_left_mm' => round($number_left_mm,2),
-            'number_top_mm'  => round($number_top_mm,2),
-            'number_font_size_pt' => $defaults['number_font_size_pt'],
-            'font' => $order->font ?? 'DejaVu Sans',
-            'color' => $order->color ?? '#000000',
-        ];
-
-
-    // ------------- generate PDF using blade that contains text overlays (vector) -------------
+    // try load layoutSlots from payload/meta if available (common in your app)
+    $slots = [];
+    if (!empty($order->payload)) {
+        $pl = json_decode($order->payload, true) ?: [];
+        if (!empty($pl['layoutSlots'])) $slots = $pl['layoutSlots'];
+    }
+    if (empty($slots) && !empty($order->meta)) {
+        $m = json_decode($order->meta, true) ?: [];
+        if (!empty($m['layoutSlots'])) $slots = $m['layoutSlots'];
+    }
     try {
-        $pdf = \PDF::loadView('admin.design_orders.package_for_corel', $pdfData);
-        $pdf->setPaper('a4', 'portrait');
+        if (!empty($slots) && is_array($slots)) {
+            $sname = $slots['name'] ?? $slots['Name'] ?? null;
+            $snum = $slots['number'] ?? $slots['Number'] ?? null;
+            if (is_array($sname)) {
+                $defaults['name_left_pct'] = $sname['left_pct'] ?? $defaults['name_left_pct'];
+                $defaults['name_top_pct']  = $sname['top_pct']  ?? $defaults['name_top_pct'];
+                $defaults['name_width_pct']= $sname['width_pct'] ?? $defaults['name_width_pct'];
+            }
+            if (is_array($snum)) {
+                $defaults['number_left_pct'] = $snum['left_pct'] ?? $defaults['number_left_pct'];
+                $defaults['number_top_pct']  = $snum['top_pct']  ?? $defaults['number_top_pct'];
+                $defaults['number_width_pct']= $snum['width_pct'] ?? $defaults['number_width_pct'];
+            }
+            if (!empty($sname['font_size_pt'])) $defaults['name_font_pt'] = $sname['font_size_pt'];
+            if (!empty($snum['font_size_pt'])) $defaults['number_font_pt'] = $snum['font_size_pt'];
+        }
+    } catch (\Throwable $e) {
+        // keep defaults
+    }
 
-        $tmpDir = storage_path('app/tmp/design_package_' . $id . '_' . time());
-        @mkdir($tmpDir, 0755, true);
+    // decide how wide the artwork appears on PDF (mm). A4 width minus margins gives ~170-180mm; use safe 150mm or adjust.
+    $maxImageWidthMm = 150.0;
+    $displayWidthMm = $maxImageWidthMm;
+    $displayHeightMm = 110.0;
+
+    if ($preview_local_path && file_exists($preview_local_path)) {
+        try {
+            [$imgWpx, $imgHpx] = getimagesize($preview_local_path);
+            $pxToMm = 25.4 / 96.0; // dompdf default 96 DPI
+            $imageWidthMm = $imgWpx * $pxToMm;
+            $imageHeightMm = $imgHpx * $pxToMm;
+            $scale = ($imageWidthMm > 0) ? ($maxImageWidthMm / $imageWidthMm) : 1.0;
+            $displayWidthMm = max(10, $imageWidthMm * $scale);
+            $displayHeightMm = max(10, $imageHeightMm * $scale);
+        } catch (\Throwable $e) {
+            // fallback sizes
+            $displayWidthMm = $maxImageWidthMm;
+            $displayHeightMm = 110.0;
+        }
+    }
+
+    // compute mm coordinates (left/top) relative to preview box
+    $name_left_mm   = ($defaults['name_left_pct'] / 100.0) * $displayWidthMm;
+    $name_top_mm    = ($defaults['name_top_pct']  / 100.0) * $displayHeightMm;
+    $number_left_mm = ($defaults['number_left_pct'] / 100.0) * $displayWidthMm;
+    $number_top_mm  = ($defaults['number_top_pct']  / 100.0) * $displayHeightMm;
+    $name_font_pt   = $defaults['name_font_pt'];
+    $number_font_pt = $defaults['number_font_pt'];
+
+    // color & font from order (fall back)
+    $color = $order->color ?? '#000000';
+    $fontName = $order->font ?? 'DejaVu Sans';
+
+    // --------- BUILD PDF DATA ----------
+    $pdfData = [
+        'product_name' => $order->product_name ?? null,
+        'customer_name' => $order->name_text ?? null,
+        'customer_number' => $order->number_text ?? null,
+        'order_id' => $order->id,
+        'players' => $players,
+        'preview_local_path' => $preview_local_path,
+        'preview_url' => $preview_url,
+        'displayWidthMm' => round($displayWidthMm,2),
+        'displayHeightMm' => round($displayHeightMm,2),
+        'name_left_mm' => round($name_left_mm,2),
+        'name_top_mm' => round($name_top_mm,2),
+        'name_font_size_pt' => (int)$name_font_pt,
+        'number_left_mm' => round($number_left_mm,2),
+        'number_top_mm' => round($number_top_mm,2),
+        'number_font_size_pt' => (int)$number_font_pt,
+        'font' => $fontName,
+        'color' => $color,
+    ];
+
+    // prepare temp dir
+    $tmpDir = storage_path('app/tmp/design_package_' . $id . '_' . time());
+    @mkdir($tmpDir, 0755, true);
+
+    try {
+        // generate PDF using blade that places text overlays in mm units
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('admin.design_orders.package_for_corel', $pdfData);
         $pdfPath = $tmpDir . DIRECTORY_SEPARATOR . 'design_order_' . $id . '.pdf';
         $pdf->save($pdfPath);
 
-        // create zip containing PDF and preview image and CSV as before
-        $zipName = 'design_order_' . $id . '.zip';
-        $zipPath = storage_path('app/tmp/' . $zipName);
-        if (file_exists($zipPath)) @unlink($zipPath);
-
-        $zip = new \ZipArchive();
-        if ($zip->open($zipPath, \ZipArchive::CREATE)!==true) {
-            throw new \Exception('Could not create zip file');
-        }
-
-        // add PDF
-        $zip->addFile($pdfPath, basename($pdfPath));
-
-        // add preview image if available
-        if ($preview_local_path && file_exists($preview_local_path)) {
-            $zip->addFile($preview_local_path, 'preview/' . basename($preview_local_path));
-        }
-
-        // players.csv
+        // players CSV
         $csvPath = $tmpDir . DIRECTORY_SEPARATOR . 'players.csv';
         $fp = fopen($csvPath, 'w');
         fputcsv($fp, ['id','name','number','size','font','variant_id','preview_src']);
@@ -309,19 +296,49 @@ public function download($id)
             fputcsv($fp, $row);
         }
         fclose($fp);
-        $zip->addFile($csvPath, 'players.csv');
 
+        // copy preview image (base) if exists into preview/ folder
+        if ($preview_local_path && file_exists($preview_local_path)) {
+            $previewDir = $tmpDir . DIRECTORY_SEPARATOR . 'preview';
+            @mkdir($previewDir, 0755, true);
+            copy($preview_local_path, $previewDir . DIRECTORY_SEPARATOR . basename($preview_local_path));
+        }
+
+        // info + raw payload
+        file_put_contents($tmpDir . DIRECTORY_SEPARATOR . 'info.txt', "Design Order: {$id}\nProduct: " . ($order->product_name ?? '') . "\nCreated: " . ($order->created_at ?? '') . "\n");
+        file_put_contents($tmpDir . DIRECTORY_SEPARATOR . 'raw_payload.json', $order->raw_payload ?? '{}');
+
+        // create zip
+        $zipName = 'design_order_' . $id . '.zip';
+        $zipPath = storage_path('app/tmp/' . $zipName);
+        if (file_exists($zipPath)) @unlink($zipPath);
+
+        $zip = new \ZipArchive();
+        if ($zip->open($zipPath, \ZipArchive::CREATE) !== true) {
+            throw new \Exception("Could not create zip file");
+        }
+        $files = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($tmpDir));
+        foreach ($files as $file) {
+            if (!$file->isFile()) continue;
+            $filePath = $file->getRealPath();
+            $relativePath = ltrim(str_replace($tmpDir, '', $filePath), DIRECTORY_SEPARATOR);
+            $zip->addFile($filePath, $relativePath);
+        }
         $zip->close();
 
-        // cleanup tmpdir but keep zip
+        // cleanup tmpDir
         $this->rrmdir($tmpDir);
 
+        // send zip response and delete after send
         return response()->download($zipPath, $zipName)->deleteFileAfterSend(true);
+
     } catch (\Throwable $e) {
-        \Log::error('DesignOrder download failed: '.$e->getMessage(), ['trace'=>$e->getTraceAsString()]);
-        abort(500, 'Could not create download package: '.$e->getMessage());
+        if (is_dir($tmpDir)) $this->rrmdir($tmpDir);
+        \Log::error('DesignOrder download failed: ' . $e->getMessage(), ['trace'=>$e->getTraceAsString()]);
+        abort(500, 'Could not create download package: ' . $e->getMessage());
     }
 }
+
 
 // helper: remove dir recursively
 private function rrmdir($dir) {
