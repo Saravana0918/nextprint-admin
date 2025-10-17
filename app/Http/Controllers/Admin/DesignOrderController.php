@@ -210,8 +210,8 @@ public function download($id)
             'players' => $players,
             'preview_local_path' => $preview_local_path,
             'preview_url' => $preview_url,
-            'font' => $font,
-            'color' => $color,
+            'font' => $order->font ?? null,
+            'color' => $order->color ?? null,
         ];
 
         // Ensure remote fonts/images allowed
