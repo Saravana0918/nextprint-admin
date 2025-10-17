@@ -35,7 +35,7 @@
       transform: none;
     }
     .name-text { font-weight:700; text-transform:uppercase; letter-spacing:1px; font-family: "{{ $font }}", DejaVu Sans, Arial, sans-serif; }
-    .number-text { font-weight:900; font-family: "{{ $font }}", DejaVu Sans, Arial, sans-serif; }
+    .number-text { font-weight:900; font-family: "{{ $font }}", DejaVu Sans, Arial, sans-serif; font-variant-numeric: tabular-nums; }
   </style>
 </head>
 <body>

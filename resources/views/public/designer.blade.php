@@ -830,7 +830,14 @@ async function handleFile(file) {
     }
   }
 
-// uploadBaseArtwork: hide overlays, capture base, upload, restore overlays
+  // helper: normalize color
+function normalizeColorHex(c) {
+  if (!c) return '#000000';
+  c = c.toString().trim();
+  if (c.charAt(0) !== '#') c = '#' + c;
+  return c;
+}
+
 async function uploadBaseArtwork() {
   const nameEl = document.getElementById('np-prev-name');
   const numEl = document.getElementById('np-prev-num');
@@ -860,8 +867,7 @@ async function uploadBaseArtwork() {
 }
 
 async function generateFullPreview() {
-  // Use your existing html2canvas or mechanism that produces preview_src and uploads it.
-  // Example placeholder: capture with overlays visible and upload to /designer/upload-temp (or your actual endpoint).
+  // if you already have a routine that uploads the full preview, use that instead.
   const previewNode = document.getElementById('design-canvas') || document.getElementById('np-preview-root');
   const canvas = await html2canvas(previewNode, {useCORS: true, scale: 2, backgroundColor: null});
   const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png', 0.92));
@@ -877,7 +883,6 @@ async function generateFullPreview() {
 async function doSave() {
   try {
     const fullPreviewUrl = await generateFullPreview();
-
     let previewBaseUrl = null;
     try {
       previewBaseUrl = await uploadBaseArtwork();
@@ -886,14 +891,17 @@ async function doSave() {
       previewBaseUrl = null;
     }
 
+    const selectedFontFamily = window.selectedFontName || 'Bebas Neue'; // exact family name registered
+    const selectedColor = normalizeColorHex(window.selectedColor || '#000000');
+
     const payload = {
       preview_src: fullPreviewUrl,
       preview_base: previewBaseUrl,
       name_text: document.getElementById('input-name') ? document.getElementById('input-name').value : '',
       number_text: document.getElementById('input-number') ? document.getElementById('input-number').value : '',
-      font: window.selectedFontName || 'Bebas Neue',
-      color: window.selectedColor || '#000000',
-      // add other fields your backend needs
+      font: selectedFontFamily,
+      color: selectedColor,
+      // add other fields you send
     };
 
     const res = await fetch('/designer/save', {

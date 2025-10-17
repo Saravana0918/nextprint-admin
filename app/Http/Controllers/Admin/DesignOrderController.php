@@ -6,9 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 use ZipArchive;
-use Barryvdh\DomPDF\Facade\Pdf as PDF;
 
 class DesignOrderController extends Controller
 {
@@ -145,10 +143,9 @@ class DesignOrderController extends Controller
             }
         }
 
-        // --- resolve preview_base strictly (prefer it) ---
+        // prefer preview_base
         $preview_local_path = null;
         $preview_url = null;
-
         if (!empty($order->preview_base)) {
             $preview_url = $order->preview_base;
         } elseif (!empty($order->preview_src)) {
@@ -241,10 +238,26 @@ class DesignOrderController extends Controller
         $name_font_pt   = $defaults['name_font_pt'];
         $number_font_pt = $defaults['number_font_pt'];
 
-        $color = $order->color ?? '#000000';
-        $fontName = $order->font ?? 'DejaVu Sans';
+        // normalize font name and color for PDF
+        $fontCandidates = [
+            'bebas' => 'Bebas Neue',
+            'bebas neue' => 'Bebas Neue',
+            'bebas-neue' => 'Bebas Neue',
+            'oswald' => 'Oswald',
+            'anton' => 'Anton',
+        ];
+        $fontNameRaw = trim((string)($order->font ?? ''));
+        $fontKey = strtolower(preg_replace('/[^a-z0-9]+/',' ', $fontNameRaw));
+        $fontName = $fontCandidates[$fontKey] ?? ($order->font ?? 'DejaVu Sans');
 
-        // --- embed preview as data URI (preferred) ---
+        $colorRaw = trim((string)($order->color ?? ''));
+        if ($colorRaw !== '') {
+            $color = ($colorRaw[0] === '#') ? $colorRaw : '#' . ltrim($colorRaw, '#');
+        } else {
+            $color = '#000000';
+        }
+
+        // embed preview as data uri if possible
         $preview_data_uri = null;
         if ($preview_local_path && file_exists($preview_local_path)) {
             try {
@@ -256,10 +269,9 @@ class DesignOrderController extends Controller
                 }
             } catch (\Throwable $e) {
                 Log::warning("DesignOrder #{$id}: reading preview file failed: " . $e->getMessage());
-                $preview_data_uri = null;
             }
         } else {
-            Log::info("DesignOrder #{$id}: preview_local_path not available for embedding (will fallback to URL if present)");
+            Log::info("DesignOrder #{$id}: preview_local_path not available for embedding (fallback to URL)");
         }
 
         $pdfData = [
@@ -375,7 +387,7 @@ class DesignOrderController extends Controller
                 $path = substr($row->preview_src, strpos($row->preview_src, '/storage/') + 9);
                 if ($path) {
                     try {
-                        Storage::disk('public')->delete($path);
+                        \Illuminate\Support\Facades\Storage::disk('public')->delete($path);
                     } catch (\Throwable $e) {
                         Log::warning('Could not delete preview file: ' . $e->getMessage());
                     }
