@@ -222,7 +222,7 @@ public function download($id)
         ]);
 
         // generate PDF (A4)
-        $pdf = PDF::loadView('admin.design_orders.package', $pdfData)->setPaper('a4', 'portrait');
+        $pdf = Pdf::loadView('admin.design_orders.package_image_only', $pdfData);
         $pdfPath = $tmpDir . DIRECTORY_SEPARATOR . 'design_order_' . $id . '.pdf';
         $pdf->save($pdfPath);
 
