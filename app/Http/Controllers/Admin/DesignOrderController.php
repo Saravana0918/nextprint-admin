@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use ZipArchive;
-use Barryvdh\DomPDF\Facade\Pdf;
+use Barryvdh\DomPDF\Facade\Pdf as PDF;
  
 
 class DesignOrderController extends Controller
@@ -136,130 +136,122 @@ class DesignOrderController extends Controller
 
 public function download($id)
 {
-    // fetch order row
     $order = DB::table('design_orders')->where('id', $id)->first();
-    if (!$order) abort(404, 'Order not found');
+    if (! $order) abort(404);
 
-    // players: prefer payload/payload field or team table
+    // players: prefer team -> meta -> payload
     $players = [];
-    if (!empty($order->payload)) {
-        $decoded = json_decode($order->payload, true);
-        if (!empty($decoded['players']) && is_array($decoded['players'])) {
-            $players = $decoded['players'];
-        }
-    }
-
-    // fallback: try raw_payload or team table (as in your show logic)
-    if (empty($players) && !empty($order->raw_payload)) {
-        $r = json_decode($order->raw_payload, true);
-        if (!empty($r['players'])) $players = $r['players'];
-    }
-    if (empty($players) && !empty($order->team_id)) {
+    if (!empty($order->team_id)) {
         $team = DB::table('teams')->where('id', $order->team_id)->first();
-        if ($team && !empty($team->players)) {
-            $players = json_decode($team->players, true) ?: [];
+        if ($team && !empty($team->players)) $players = json_decode($team->players, true) ?: [];
+    }
+    if (empty($players)) {
+        // try raw_payload or payload fields
+        $raw = $order->raw_payload ?? $order->payload ?? null;
+        if ($raw) {
+            $decoded = json_decode($raw, true);
+            if (is_array($decoded) && isset($decoded['players'])) $players = $decoded['players'];
         }
     }
 
-    // determine preview local path
-    $preview_local_path = null;
-    $preview_url = $order->preview_src ?? $order->preview_path ?? null;
-    if ($preview_url) {
-        // If preview_url contains '/storage/...' => map to storage/app/public/...
-        if (strpos($preview_url, '/storage/') !== false) {
-            $rel = substr($preview_url, strpos($preview_url, '/storage/') + 9);
-            $full = storage_path('app/public/' . $rel);
-            if (file_exists($full)) $preview_local_path = $full;
-        } else {
-            // maybe it's storage path without /storage prefix
-            $possible = storage_path('app/public/' . ltrim($preview_url, '/'));
-            if (file_exists($possible)) $preview_local_path = $possible;
-        }
-    }
+    // create a temp directory inside storage/app/public/tmp
+    $tmpDirRel = 'design_order_' . $order->id . '_' . time();
+    $tmpDirFull = storage_path('app/public/' . $tmpDirRel);
+    if (!is_dir($tmpDirFull)) mkdir($tmpDirFull, 0775, true);
 
-    // prepare temp dir
-    $tmpDir = storage_path('app/tmp/design_package_' . $id . '_' . time());
-    @mkdir($tmpDir, 0755, true);
-
-    try {
-        // 1) generate PDF using blade
-        $pdfData = [
-            'product_name' => $order->product_name ?? null,
-            'customer_name' => $order->name_text ?? null,
-            'customer_number' => $order->number_text ?? null,
-            'order_id' => $order->id,
-            'players' => $players,
-            'preview_local_path' => $preview_local_path,
-            'preview_url' => $preview_url,
+    // 1) Save CSV of players
+    $csvPathRel = $tmpDirRel . '/players.csv';
+    $csvFull = $tmpDirFull . '/players.csv';
+    $fh = fopen($csvFull, 'w');
+    fputcsv($fh, ['id','name','number','size','font','variant_id','preview_src']);
+    foreach ($players as $idx => $p) {
+        $row = [
+            $p['id'] ?? ($idx+1),
+            $p['name'] ?? '',
+            $p['number'] ?? '',
+            $p['size'] ?? '',
+            $p['font'] ?? '',
+            $p['variant_id'] ?? '',
+            $p['preview_src'] ?? '',
         ];
+        fputcsv($fh, $row);
+    }
+    fclose($fh);
 
-        // use barryvdh/dompdf
-        $pdf = Pdf::loadView('admin.design_orders.package', $pdfData);
-        $pdfPath = $tmpDir . DIRECTORY_SEPARATOR . 'design_order_' . $id . '.pdf';
-        $pdf->save($pdfPath);
-
-        // 2) create players CSV
-        $csvPath = $tmpDir . DIRECTORY_SEPARATOR . 'players.csv';
-        $fp = fopen($csvPath, 'w');
-        // header
-        fputcsv($fp, ['id','name','number','size','font','variant_id','preview_src']);
-        foreach ($players as $i => $p) {
-            $row = [
-                $p['id'] ?? ($i+1),
-                $p['name'] ?? '',
-                $p['number'] ?? '',
-                $p['size'] ?? '',
-                $p['font'] ?? '',
-                $p['variant_id'] ?? '',
-                $p['preview_src'] ?? '',
-            ];
-            fputcsv($fp, $row);
+    // 2) Copy preview image(s) into preview folder (if preview_src points to storage)
+    $previewDirFull = $tmpDirFull . '/preview';
+    mkdir($previewDirFull, 0755, true);
+    // if order->preview_src holds /storage/team_previews/...
+    $previewFiles = [];
+    if (!empty($order->preview_src)) {
+        // normalize: could be asset(...) or full url
+        $preview = $order->preview_src;
+        // handle storage path that starts with '/storage/'
+        if (strpos($preview, '/storage/') === 0) {
+            $rel = substr($preview, strlen('/storage/')); // team_previews/...
+            $src = storage_path('app/public/'.$rel);
+            if (is_file($src)) {
+                $dest = $previewDirFull . '/' . basename($src);
+                copy($src, $dest);
+                $previewFiles[] = $dest;
+            }
+        } else {
+            // try stripping domain
+            $parsed = parse_url($preview);
+            if (!empty($parsed['path']) && strpos($parsed['path'],'/storage/') !== false) {
+                $rel = substr($parsed['path'], strpos($parsed['path'],'/storage/') + 9);
+                $src = storage_path('app/public/'.$rel);
+                if (is_file($src)) {
+                    $dest = $previewDirFull . '/' . basename($src);
+                    copy($src, $dest);
+                    $previewFiles[] = $dest;
+                }
+            }
         }
-        fclose($fp);
+    }
 
-        // 3) copy preview image if exists into preview/ folder inside tmpDir
-        if ($preview_local_path && file_exists($preview_local_path)) {
-            $previewDir = $tmpDir . DIRECTORY_SEPARATOR . 'preview';
-            @mkdir($previewDir, 0755, true);
-            copy($preview_local_path, $previewDir . DIRECTORY_SEPARATOR . basename($preview_local_path));
-        }
+    // 3) Generate PDF (use a blade view)
+    $pdfViewData = [
+        'order' => $order,
+        'players' => $players,
+    ];
 
-        // 4) create info.txt / raw_payload.json optionally
-        file_put_contents($tmpDir . DIRECTORY_SEPARATOR . 'info.txt', "Design Order: {$id}\nProduct: " . ($order->product_name ?? '') . "\nCreated: " . ($order->created_at ?? '') . "\n");
-        file_put_contents($tmpDir . DIRECTORY_SEPARATOR . 'raw_payload.json', $order->raw_payload ?? '{}');
+    $pdfFileName = 'design_order_' . $order->id . '.pdf';
+    $pdfFullPath = $tmpDirFull . '/' . $pdfFileName;
 
-        // 5) create zip
-        $zipName = 'design_order_' . $id . '.zip';
-        $zipPath = storage_path('app/tmp/' . $zipName);
-        if (file_exists($zipPath)) @unlink($zipPath);
+    // Use absolute file path for images in the view (dompdf needs file:// or absolute)
+    $pdf = PDF::loadView('admin.design_orders.pdf', $pdfViewData)
+              ->setPaper('A4', 'portrait');
+    $pdf->save($pdfFullPath);
 
-        $zip = new \ZipArchive();
-        if ($zip->open($zipPath, \ZipArchive::CREATE) !== true) {
-            throw new \Exception("Could not create zip file");
-        }
+    // 4) write raw_payload / info text
+    file_put_contents($tmpDirFull . '/raw_payload.json', json_encode(['order'=> $order, 'players' => $players], JSON_PRETTY_PRINT));
+    file_put_contents($tmpDirFull . '/info.txt', "Design order {$order->id}\nCustomer: " . ($order->name_text ?? '') . " / " . ($order->number_text ?? '') . "\n");
 
-        // add all files from tmpDir
-        $files = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($tmpDir));
-        foreach ($files as $file) {
-            if (!$file->isFile()) continue;
-            $filePath = $file->getRealPath();
-            $relativePath = ltrim(str_replace($tmpDir, '', $filePath), DIRECTORY_SEPARATOR);
-            $zip->addFile($filePath, $relativePath);
+    // 5) Zip everything
+    $zipName = 'design_order_' . $order->id . '.zip';
+    $zipFull = storage_path('app/public/' . $tmpDirRel . '.zip');
+    $zip = new ZipArchive;
+    if ($zip->open($zipFull, ZipArchive::CREATE) === true) {
+        // add pdf
+        $zip->addFile($pdfFullPath, $pdfFileName);
+        // add csv
+        $zip->addFile($csvFull, 'players.csv');
+        // add raw payload
+        $zip->addFile($tmpDirFull . '/raw_payload.json', 'raw_payload.json');
+        $zip->addFile($tmpDirFull . '/info.txt', 'info.txt');
+        // add preview files if any
+        foreach (glob($previewDirFull . '/*') as $pf) {
+            $zip->addFile($pf, 'preview/' . basename($pf));
         }
         $zip->close();
-
-        // remove tmpDir recursively (optional) - but keep zip
-        $this->rrmdir($tmpDir);
-
-        // send download response and delete zip after send
-        return response()->download($zipPath, $zipName)->deleteFileAfterSend(true);
-
-    } catch (\Throwable $e) {
-        // cleanup
-        if (is_dir($tmpDir)) $this->rrmdir($tmpDir);
-        \Log::error('DesignOrder download failed: ' . $e->getMessage(), ['trace'=>$e->getTraceAsString()]);
-        abort(500, 'Could not create download package.');
+    } else {
+        // zip failed
+        abort(500, 'Could not create zip file');
     }
+
+    // 6) send zip for download and optionally delete after send
+    return response()->download($zipFull)->deleteFileAfterSend(true);
 }
 
 // helper in same controller (private) for cleanup
