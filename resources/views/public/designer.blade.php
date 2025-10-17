@@ -830,60 +830,85 @@ async function handleFile(file) {
     }
   }
 
-  async function uploadBaseArtwork() {
-  // temporarily hide overlays
-  const nameOverlay = document.getElementById('np-prev-name');
-  const numOverlay = document.getElementById('np-prev-num');
-  const userImgs = document.querySelectorAll('.np-user-image');
+// uploadBaseArtwork: hide overlays, capture base, upload, restore overlays
+async function uploadBaseArtwork() {
+  // hide overlays
+  const nameEl = document.getElementById('np-prev-name');
+  const numEl = document.getElementById('np-prev-num');
+  const overlays = [nameEl, numEl];
+  const originalDisplay = overlays.map(el => el ? el.style.display : null);
+  overlays.forEach(el => { if (el) el.style.display = 'none'; });
 
-  const prevNameDisplay = nameOverlay ? nameOverlay.style.display : null;
-  const prevNumDisplay  = numOverlay  ? numOverlay.style.display : null;
+  // small delay to allow repaint
+  await new Promise(r => setTimeout(r, 80));
 
-  if (nameOverlay) nameOverlay.style.display = 'none';
-  if (numOverlay) numOverlay.style.display = 'none';
-  userImgs.forEach(u => u.style.display = 'none');
-
-  // small delay then capture
-  await new Promise(r => setTimeout(r, 120));
-  let baseDataUrl = null;
-  try {
-    const canvas = await html2canvas(document.getElementById('np-stage'), { useCORS:true, backgroundColor: null, scale: window.devicePixelRatio || 1 });
-    baseDataUrl = canvas.toDataURL('image/png');
-  } catch(e) {
-    console.warn('base artwork capture failed', e);
-  }
+  // capture base using html2canvas (options tuned)
+  const previewNode = document.getElementById('design-canvas') || document.getElementById('np-preview-root');
+  const canvas = await html2canvas(previewNode, {useCORS: true, scale: 2, backgroundColor: null});
+  const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png', 0.92));
 
   // restore overlays
-  if (nameOverlay) nameOverlay.style.display = prevNameDisplay;
-  if (numOverlay) numOverlay.style.display = prevNumDisplay;
-  userImgs.forEach(u => u.style.display = '');
+  overlays.forEach((el, idx) => { if (el && originalDisplay[idx] !== null) el.style.display = originalDisplay[idx]; });
 
-  if (!baseDataUrl) return null;
+  // prepare upload
+  const form = new FormData();
+  form.append('file', blob, 'preview_base_' + Date.now() + '.png');
 
-  // convert to blob and upload via existing route
-  const blob = await (await fetch(baseDataUrl)).blob();
-  const fd = new FormData();
-  fd.append('file', blob, 'base_preview.png');
-  const token = document.querySelector('meta[name="csrf-token"]').getAttribute('content') || '';
+  // post to your temp upload endpoint
+  const res = await fetch('/designer/upload-temp', { method: 'POST', body: form });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error('Base upload failed: ' + txt);
+  }
+  const data = await res.json();
+
+  // expected: { ok: true, url: '/storage/designer_temp/xxx.png' }
+  if (!data.url) throw new Error('upload-temp did not return url');
+
+  return data.url;
+}
+
+// updated doSave that ensures preview_base included
+async function doSave() {
   try {
-    const res = await fetch('{{ route("designer.upload_temp") }}', {
-      method:'POST',
-      body: fd,
-      credentials: 'same-origin',
-      headers: { 'X-CSRF-TOKEN': token }
-    });
-    const json = await res.json().catch(()=>null);
-    if (res.ok && json && json.url) {
-      // json.url should be like '/storage/tmp/....png'
-      window.lastBasePreviewUrl = json.url;
-      return json.url;
-    } else {
-      console.warn('upload_temp returned no url', json);
-      return null;
+    // generate full preview (with text) - existing flow
+    const fullPreviewUrl = await generateFullPreview(); // your existing function that returns preview_src URL
+
+    // generate and upload base artwork (no overlays)
+    let previewBaseUrl = null;
+    try {
+      previewBaseUrl = await uploadBaseArtwork();
+    } catch (err) {
+      console.warn('uploadBaseArtwork failed, continuing with full preview only', err);
+      previewBaseUrl = null;
     }
-  } catch(e) {
-    console.warn('upload_temp error', e);
-    return null;
+
+    // collect payload
+    const payload = {
+      preview_src: fullPreviewUrl,
+      preview_base: previewBaseUrl,
+      // ... other fields your server expects
+      name: document.getElementById('input-name').value || '',
+      number: document.getElementById('input-number').value || '',
+      font: selectedFontName,
+      color: selectedColor,
+      // etc
+    };
+
+    const res = await fetch('/designer/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': window.Laravel.csrfToken || '' },
+      body: JSON.stringify(payload)
+    });
+
+    const result = await res.json();
+    if (!res.ok) throw new Error(result.message || 'Save failed');
+    alert('Saved!');
+    return result;
+  } catch (err) {
+    console.error('doSave error', err);
+    alert('Save failed: ' + (err.message || err));
+    throw err;
   }
 }
 

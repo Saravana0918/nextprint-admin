@@ -19,10 +19,11 @@
     .preview-box img { width:100%; height:100%; display:block; border-radius:4px; }
     .overlay {
       position:absolute;
-      transform: translate(-50%,-50%);
       white-space:nowrap;
       text-align:center;
       color: {{ $color }};
+      /* anchor top-left to avoid transform differences in viewers */
+      transform: none;
     }
     .name-text { font-weight:700; text-transform:uppercase; letter-spacing:1px; font-family: "{{ $font }}", DejaVu Sans, Arial, sans-serif; }
     .number-text { font-weight:900; font-family: "{{ $font }}", DejaVu Sans, Arial, sans-serif; }
