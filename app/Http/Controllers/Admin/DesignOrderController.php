@@ -136,11 +136,11 @@ class DesignOrderController extends Controller
 
 public function download($id)
 {
-    // fetch order row
+    // fetch order
     $order = DB::table('design_orders')->where('id', $id)->first();
     if (!$order) abort(404, 'Order not found');
 
-    // players: prefer payload/payload field or team table
+    // --- players: try payload/raw_payload/team etc ---
     $players = [];
     if (!empty($order->payload)) {
         $decoded = json_decode($order->payload, true);
@@ -148,11 +148,9 @@ public function download($id)
             $players = $decoded['players'];
         }
     }
-
-    // fallback: try raw_payload or team table (as in your show logic)
     if (empty($players) && !empty($order->raw_payload)) {
         $r = json_decode($order->raw_payload, true);
-        if (!empty($r['players'])) $players = $r['players'];
+        if (!empty($r['players']) && is_array($r['players'])) $players = $r['players'];
     }
     if (empty($players) && !empty($order->team_id)) {
         $team = DB::table('teams')->where('id', $order->team_id)->first();
@@ -161,28 +159,49 @@ public function download($id)
         }
     }
 
-    // determine preview local path
+    // --- determine preview local path (if stored in storage) ---
     $preview_local_path = null;
-    $preview_url = $order->preview_src ?? $order->preview_path ?? null;
+    $preview_url = $order->preview_src ?? $order->preview_path ?? $order->preview_url ?? null;
     if ($preview_url) {
-        // If preview_url contains '/storage/...' => map to storage/app/public/...
+        // If preview_url contains '/storage/' => map to storage/app/public/...
         if (strpos($preview_url, '/storage/') !== false) {
             $rel = substr($preview_url, strpos($preview_url, '/storage/') + 9);
-            $full = storage_path('app/public/' . $rel);
+            $full = storage_path('app/public/' . ltrim($rel, '/'));
             if (file_exists($full)) $preview_local_path = $full;
         } else {
-            // maybe it's storage path without /storage prefix
+            // maybe it's a relative storage path (without /storage prefix)
             $possible = storage_path('app/public/' . ltrim($preview_url, '/'));
             if (file_exists($possible)) $preview_local_path = $possible;
         }
     }
 
-    // prepare temp dir
+    // --- extract font & color if present (normalize) ---
+    $font = $order->font ?? null;
+    $color = $order->color ?? null;
+    if (empty($font) || empty($color)) {
+        $meta = null;
+        if (!empty($order->payload)) $meta = json_decode($order->payload, true);
+        if (empty($meta) && !empty($order->raw_payload)) $meta = json_decode($order->raw_payload, true);
+        if (is_array($meta)) {
+            $font = $font ?? ($meta['font'] ?? $meta['prefill_font'] ?? null);
+            $color = $color ?? ($meta['color'] ?? $meta['prefill_color'] ?? null);
+        }
+    }
+    if (!empty($color)) {
+        // decode if url encoded and ensure leading #
+        $color = urldecode($color);
+        if (strpos($color, '%23') !== false) $color = urldecode($color);
+        if ($color && $color[0] !== '#') $color = '#' . ltrim($color, '#');
+    } else {
+        $color = '#000000';
+    }
+
+    // --- tmp dir for packaging ---
     $tmpDir = storage_path('app/tmp/design_package_' . $id . '_' . time());
     @mkdir($tmpDir, 0755, true);
 
     try {
-        // 1) generate PDF using blade
+        // prepare data for PDF
         $pdfData = [
             'product_name' => $order->product_name ?? null,
             'customer_name' => $order->name_text ?? null,
@@ -191,17 +210,25 @@ public function download($id)
             'players' => $players,
             'preview_local_path' => $preview_local_path,
             'preview_url' => $preview_url,
+            'font' => $font,
+            'color' => $color,
         ];
 
-        // use barryvdh/dompdf
-        $pdf = Pdf::loadView('admin.design_orders.package', $pdfData);
+        // Ensure remote fonts/images allowed
+        PDF::setOptions([
+            'isRemoteEnabled' => true,
+            'isHtml5ParserEnabled' => true,
+            'defaultFont' => 'DejaVu Sans'
+        ]);
+
+        // generate PDF (A4)
+        $pdf = PDF::loadView('admin.design_orders.package', $pdfData)->setPaper('a4', 'portrait');
         $pdfPath = $tmpDir . DIRECTORY_SEPARATOR . 'design_order_' . $id . '.pdf';
         $pdf->save($pdfPath);
 
-        // 2) create players CSV
+        // create players CSV
         $csvPath = $tmpDir . DIRECTORY_SEPARATOR . 'players.csv';
         $fp = fopen($csvPath, 'w');
-        // header
         fputcsv($fp, ['id','name','number','size','font','variant_id','preview_src']);
         foreach ($players as $i => $p) {
             $row = [
@@ -217,18 +244,18 @@ public function download($id)
         }
         fclose($fp);
 
-        // 3) copy preview image if exists into preview/ folder inside tmpDir
+        // copy preview image into preview directory (if exists)
         if ($preview_local_path && file_exists($preview_local_path)) {
             $previewDir = $tmpDir . DIRECTORY_SEPARATOR . 'preview';
             @mkdir($previewDir, 0755, true);
             copy($preview_local_path, $previewDir . DIRECTORY_SEPARATOR . basename($preview_local_path));
         }
 
-        // 4) create info.txt / raw_payload.json optionally
-        file_put_contents($tmpDir . DIRECTORY_SEPARATOR . 'info.txt', "Design Order: {$id}\nProduct: " . ($order->product_name ?? '') . "\nCreated: " . ($order->created_at ?? '') . "\n");
+        // write info & raw_payload too
+        file_put_contents($tmpDir . DIRECTORY_SEPARATOR . 'info.txt', "Design Order: {$id}\nProduct: " . ($order->product_name ?? '') . "\nCreated: " . ($order->created_at ?? '') . "\nFont: " . ($font ?? '') . "\nColor: " . ($color ?? '') . "\n");
         file_put_contents($tmpDir . DIRECTORY_SEPARATOR . 'raw_payload.json', $order->raw_payload ?? '{}');
 
-        // 5) create zip
+        // create zip
         $zipName = 'design_order_' . $id . '.zip';
         $zipPath = storage_path('app/tmp/' . $zipName);
         if (file_exists($zipPath)) @unlink($zipPath);
@@ -238,7 +265,6 @@ public function download($id)
             throw new \Exception("Could not create zip file");
         }
 
-        // add all files from tmpDir
         $files = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($tmpDir));
         foreach ($files as $file) {
             if (!$file->isFile()) continue;
@@ -248,21 +274,20 @@ public function download($id)
         }
         $zip->close();
 
-        // remove tmpDir recursively (optional) - but keep zip
+        // cleanup temp directory
         $this->rrmdir($tmpDir);
 
-        // send download response and delete zip after send
+        // send and remove zip after send
         return response()->download($zipPath, $zipName)->deleteFileAfterSend(true);
 
     } catch (\Throwable $e) {
-        // cleanup
         if (is_dir($tmpDir)) $this->rrmdir($tmpDir);
-        \Log::error('DesignOrder download failed: ' . $e->getMessage(), ['trace'=>$e->getTraceAsString()]);
-        abort(500, 'Could not create download package.');
+        Log::error('DesignOrder download failed: ' . $e->getMessage(), ['trace'=>$e->getTraceAsString()]);
+        abort(500, 'Could not create download package: ' . $e->getMessage());
     }
 }
 
-// helper in same controller (private) for cleanup
+// helper: remove dir recursively
 private function rrmdir($dir) {
     if (!is_dir($dir)) return;
     $it = new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS);
