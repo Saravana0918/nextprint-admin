@@ -159,79 +159,110 @@ public function download($id)
     }
 
     // ------------- preview_local_path: try to map preview_src to storage path -------------
-    $preview_local_path = null;
-    $preview_url = $order->preview_src ?? $order->preview_path ?? null;
-    if ($preview_url) {
-        if (strpos($preview_url, '/storage/') !== false) {
-            $rel = substr($preview_url, strpos($preview_url, '/storage/') + 9);
-            $full = storage_path('app/public/' . $rel);
-            if (file_exists($full)) $preview_local_path = $full;
+          
+        $preview_local_path = null;
+        $preview_url = $order->preview_src ?? $order->preview_path ?? null;
+        if ($preview_url) {
+            if (strpos($preview_url, '/storage/') !== false) {
+                $rel = substr($preview_url, strpos($preview_url, '/storage/') + 9);
+                $full = storage_path('app/public/' . $rel);
+                if (file_exists($full)) $preview_local_path = $full;
+            } else {
+                $possible = storage_path('app/public/' . ltrim($preview_url, '/'));
+                if (file_exists($possible)) $preview_local_path = $possible;
+            }
+        }
+
+        // ---------- defaults (percent) if you don't have layoutSlots saved ----------
+        $defaults = [
+            'name_left_pct' => 72, 'name_top_pct' => 25, 'name_width_pct' => 22, 'name_font_size_pt' => 22,
+            'number_left_pct' => 72, 'number_top_pct' => 48, 'number_width_pct' => 14, 'number_font_size_pt' => 40,
+        ];
+
+        // try to extract layoutSlots positions if stored in payload/meta (keeps existing logic)
+        $slots = [];
+        if (!empty($order->payload)) {
+            $pl = json_decode($order->payload, true);
+            if (!empty($pl['layoutSlots'])) $slots = $pl['layoutSlots'];
+            elseif (!empty($pl['meta']['layoutSlots'])) $slots = $pl['meta']['layoutSlots'];
+        }
+        if (empty($slots) && !empty($order->meta)) {
+            $m = json_decode($order->meta, true);
+            if (!empty($m['layoutSlots'])) $slots = $m['layoutSlots'];
+        }
+        try {
+            if (!empty($slots) && is_array($slots)) {
+                $sname = $slots['name'] ?? $slots['Name'] ?? null;
+                $snum  = $slots['number'] ?? $slots['Number'] ?? null;
+                if ($sname && is_array($sname)) {
+                    $defaults['name_left_pct'] = $sname['left_pct'] ?? $defaults['name_left_pct'];
+                    $defaults['name_top_pct']  = $sname['top_pct']  ?? $defaults['name_top_pct'];
+                    $defaults['name_width_pct']= $sname['width_pct']?? $defaults['name_width_pct'];
+                }
+                if ($snum && is_array($snum)) {
+                    $defaults['number_left_pct'] = $snum['left_pct'] ?? $defaults['number_left_pct'];
+                    $defaults['number_top_pct']  = $snum['top_pct']  ?? $defaults['number_top_pct'];
+                    $defaults['number_width_pct']= $snum['width_pct']?? $defaults['number_width_pct'];
+                }
+            }
+        } catch (\Throwable $e) {
+            // ignore, keep defaults
+        }
+
+        // ---------- decide how large to print the image in the PDF (mm) ----------
+        $maxImageWidthMm = 150.0; // choose safe width so it fits A4 (adjust if needed)
+        $displayWidthMm = $maxImageWidthMm;
+        $displayHeightMm = null;
+
+        if ($preview_local_path && file_exists($preview_local_path)) {
+            try {
+                [$imgWpx, $imgHpx] = getimagesize($preview_local_path); // pixels
+                // convert px -> mm using 96 DPI reference (Dompdf default): 1px = 25.4/96 mm
+                $pxToMm = 25.4 / 96.0;
+                $imageWidthMm = $imgWpx * $pxToMm;
+                $imageHeightMm = $imgHpx * $pxToMm;
+
+                // scale so final printed width is maxImageWidthMm (preserve aspect)
+                $scale = ($imageWidthMm > 0) ? ($maxImageWidthMm / $imageWidthMm) : 1;
+                $displayWidthMm = $imageWidthMm * $scale;
+                $displayHeightMm = $imageHeightMm * $scale;
+            } catch (\Throwable $e) {
+                $displayWidthMm = $maxImageWidthMm;
+                $displayHeightMm = $maxImageWidthMm; // fallback square
+            }
         } else {
-            $possible = storage_path('app/public/' . ltrim($preview_url, '/'));
-            if (file_exists($possible)) $preview_local_path = $possible;
+            // if no local file, still set a reasonable display height (approx)
+            $displayWidthMm = $maxImageWidthMm;
+            $displayHeightMm = 110; // fallback
         }
-    }
 
-    // ------------- attempt to obtain layoutSlots from payload/meta (so we can place text correctly) -------------
-    $slots = [];
-    // many systems store layout in meta/payload; attempt both
-    if (!empty($order->payload)) {
-        $pl = json_decode($order->payload, true);
-        if (!empty($pl['layoutSlots'])) $slots = $pl['layoutSlots'];
-        elseif (!empty($pl['meta']['layoutSlots'])) $slots = $pl['meta']['layoutSlots'];
-    }
-    if (empty($slots) && !empty($order->meta)) {
-        $m = json_decode($order->meta, true);
-        if (!empty($m['layoutSlots'])) $slots = $m['layoutSlots'];
-    }
+        // ---------- compute absolute mm coordinates for overlays based on percent ----------
+        $name_left_mm = ($defaults['name_left_pct'] / 100.0) * $displayWidthMm;
+        $name_top_mm  = ($defaults['name_top_pct']  / 100.0) * $displayHeightMm;
+        $number_left_mm = ($defaults['number_left_pct'] / 100.0) * $displayWidthMm;
+        $number_top_mm  = ($defaults['number_top_pct']  / 100.0) * $displayHeightMm;
 
-    // fallback default coordinates (percentages) — tweak these per template
-    $defaults = [
-        'name_left_pct' => 72, 'name_top_pct' => 25, 'name_width_pct' => 22, 'name_font_size_pt' => 22,
-        'number_left_pct' => 72, 'number_top_pct' => 48, 'number_width_pct' => 14, 'number_font_size_pt' => 40,
-    ];
+        // ---------- now build pdf data (pass mm positions and display sizes) ----------
+        $pdfData = [
+            'product_name' => $order->product_name ?? null,
+            'customer_name' => $order->name_text ?? null,
+            'customer_number' => $order->number_text ?? null,
+            'order_id' => $order->id,
+            'players' => $players,
+            'preview_local_path' => $preview_local_path,
+            'preview_url' => $preview_url,
+            'displayWidthMm' => round($displayWidthMm,2),
+            'displayHeightMm' => round($displayHeightMm,2),
+            'name_left_mm' => round($name_left_mm,2),
+            'name_top_mm'  => round($name_top_mm,2),
+            'name_font_size_pt' => $defaults['name_font_size_pt'],
+            'number_left_mm' => round($number_left_mm,2),
+            'number_top_mm'  => round($number_top_mm,2),
+            'number_font_size_pt' => $defaults['number_font_size_pt'],
+            'font' => $order->font ?? 'DejaVu Sans',
+            'color' => $order->color ?? '#000000',
+        ];
 
-    // If slots include 'name' or 'number' keys with left_pct/top_pct/width_pct we use them
-    try {
-        if (!empty($slots) && is_array($slots)) {
-            // normalized slots -> try keys 'name' & 'number'
-            $sname = $slots['name'] ?? $slots['Name'] ?? null;
-            $snum  = $slots['number'] ?? $slots['Number'] ?? null;
-            if ($sname && is_array($sname)) {
-                $defaults['name_left_pct'] = $sname['left_pct'] ?? $defaults['name_left_pct'];
-                $defaults['name_top_pct']  = $sname['top_pct']  ?? $defaults['name_top_pct'];
-                $defaults['name_width_pct']= $sname['width_pct']?? $defaults['name_width_pct'];
-            }
-            if ($snum && is_array($snum)) {
-                $defaults['number_left_pct'] = $snum['left_pct'] ?? $defaults['number_left_pct'];
-                $defaults['number_top_pct']  = $snum['top_pct']  ?? $defaults['number_top_pct'];
-                $defaults['number_width_pct']= $snum['width_pct']?? $defaults['number_width_pct'];
-            }
-        }
-    } catch (\Throwable $e) {
-        // ignore, keep defaults
-    }
-
-    // ------------- prepare PDF data -------------
-    $pdfData = [
-        'product_name' => $order->product_name ?? null,
-        'customer_name' => $order->name_text ?? null,
-        'customer_number' => $order->number_text ?? null,
-        'order_id' => $order->id,
-        'players' => $players,
-        'preview_local_path' => $preview_local_path,
-        'preview_url' => $preview_url,
-        'name_left_pct' => $defaults['name_left_pct'],
-        'name_top_pct' => $defaults['name_top_pct'],
-        'name_width_pct' => $defaults['name_width_pct'],
-        'name_font_size_pt' => $defaults['name_font_size_pt'],
-        'number_left_pct' => $defaults['number_left_pct'],
-        'number_top_pct' => $defaults['number_top_pct'],
-        'number_width_pct' => $defaults['number_width_pct'],
-        'number_font_size_pt' => $defaults['number_font_size_pt'],
-        'font' => $order->font ?? 'DejaVu Sans',
-        'color' => $order->color ?? '#000000',
-    ];
 
     // ------------- generate PDF using blade that contains text overlays (vector) -------------
     try {
