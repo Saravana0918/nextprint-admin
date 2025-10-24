@@ -625,7 +625,6 @@ altNumEls.forEach(el => {
   const productId = $('np-product-id')?.value || null;
   // designer: when user clicks "Add Team Players"
 const params = new URLSearchParams();
-const productId = document.getElementById('np-product-id')?.value || '';
 const name = (document.querySelector('#np-name')?.value || '').toUpperCase();
 const number = (document.querySelector('#np-num')?.value || '').replace(/\D/g,'');
 const font = (document.getElementById('np-font')?.value || '');
