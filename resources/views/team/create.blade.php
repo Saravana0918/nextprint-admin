@@ -206,7 +206,7 @@
         <input type="hidden" name="shopify_product_id" value="{{ $product->shopify_product_id ?? '' }}">
         {{-- Persist uploaded logo for server-side storage --}}
         <input type="hidden" id="team-prefill-logo" name="team_logo_url" value="{{ $prefill['prefill_logo'] ?? '' }}">
-        <input type="hidden" id="team-preview-url" name="team_preview_url" value="">
+        <input type="hidden" id="team-preview-url" name="preview_url" value="">
         <input type="hidden" id="team-id-hidden" name="team_id" value="">
 
         <div class="mb-3 mobile-action-row">
@@ -216,7 +216,7 @@
           <button type="button" id="save-team-btn" class="btn btn-outline-primary">Save Design</button>
 
           <!-- Add To Cart (submit) -> initially disabled -->
-          <button type="submit" id="team-addtocart-btn" class="btn btn-success" disabled>Add To Cart</button>
+          <button type="submit" id="team-addtocart-btn" class="btn btn-success d-none" disabled data-label="Add To Cart">Add To Cart</button>
 
           <!-- Back button placed at the end; on mobile this will be pushed to right -->
           <a href="{{ url()->previous() }}" class="btn btn-secondary back-btn">Back</a>
@@ -975,89 +975,116 @@ document.addEventListener('DOMContentLoaded', function(){
 }
 
   async function saveDesign() {
-    // disable UX
-    saveBtn.disabled = true;
-    const originalText = saveBtn.textContent || 'Save Design';
-    saveBtn.textContent = 'Saving...';
+  // assume these DOM refs exist in outer scope:
+  // saveBtn, atcBtn, previewInput, form, saveUrl, csrf, makePreviewDataURL
+  if (!saveBtn) return;
+  saveBtn.disabled = true;
+  const originalText = saveBtn.textContent || 'Save Design';
+  saveBtn.textContent = 'Saving...';
 
-    try {
-      // collect players
-      const players = Array.from(document.querySelectorAll('#players-list .player-row')).map(r => {
-        return {
-          id: r.dataset.playerId ?? null,
-          name: (r.querySelector('.player-name')?.value || '').toString().toUpperCase().slice(0, 64),
-          number: (r.querySelector('.player-number')?.value || '').toString().replace(/\D/g,'').slice(0,3),
-          size: r.querySelector('.player-size')?.value || '',
-          font: r.querySelector('.player-font')?.value || '',
-          color: r.querySelector('.player-color')?.value || '',
-          preview_src: r.querySelector('.player-preview')?.value || null
-        };
-      }).filter(p => (p.name && p.name.trim() !== '') || (p.number && p.number.trim() !== ''));
-
-      if (players.length === 0) {
-        alert('Please add at least one player before saving.');
-        saveBtn.disabled = false;
-        saveBtn.textContent = originalText;
-        return;
-      }
-
-      // create preview (may be null if html2canvas fails)
-      let dataUrl = null;
-      try { dataUrl = await makePreviewDataURL(); } catch(e){ dataUrl = null; }
-
-      const payload = {
-        product_id: form.querySelector('input[name="product_id"]')?.value || null,
-        order_id: form.querySelector('input[name="order_id"]')?.value || null,
-        players: players,
-        preview_src: dataUrl,
-        team_logo_url: document.getElementById('team-prefill-logo')?.value || ''
+  try {
+    // collect players rows
+    const players = Array.from(document.querySelectorAll('#players-list .player-row')).map(r => {
+      return {
+        id: r.dataset.playerId ?? null,
+        name: (r.querySelector('.player-name')?.value || '').toString().toUpperCase().slice(0, 64),
+        number: (r.querySelector('.player-number')?.value || '').toString().replace(/\D/g,'').slice(0,3),
+        size: r.querySelector('.player-size')?.value || '',
+        font: r.querySelector('.player-font')?.value || '',
+        color: r.querySelector('.player-color')?.value || '',
+        preview_src: r.querySelector('.player-preview')?.value || null
       };
+    }).filter(p => (p.name && p.name.trim() !== '') || (p.number && p.number.trim() !== ''));
 
-      const resp = await fetch(saveUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'X-CSRF-TOKEN': csrf
-        },
-        credentials: 'same-origin',
-        body: JSON.stringify(payload)
-      });
-
-      const json = await resp.json().catch(()=>null);
-      const ok = resp.ok && json && (json.success === true || json.success == 1 || json.status === 'ok');
-
-      if (!ok) {
-        const msg = (json && (json.message || json.error)) || ('HTTP ' + resp.status);
-        alert('Save failed: ' + msg);
-        saveBtn.disabled = false;
-        saveBtn.textContent = originalText;
-        return;
-      }
-
-      // SUCCESS: set hidden fields + enable Add To Cart
-      const previewUrl = (json.preview_url || json.preview || null);
-      const teamId = (json.team_id || null);
-
-      try { if (previewInput) previewInput.value = previewUrl || ''; } catch(e){ console.warn(e); }
-      try { const hid = document.getElementById('team-id-hidden'); if (hid && teamId) hid.value = teamId; } catch(e){}
-
-      if (atcBtn) { atcBtn.disabled = false; atcBtn.classList.remove('d-none'); }
-
-      // remove save button to prevent duplicate saves
-      try { saveBtn.remove(); } catch(e){ saveBtn.style.display = 'none'; }
-
-      alert(json.message || 'Design saved ✔ You can now click Add To Cart.');
-      return;
-
-    } catch (err) {
-      console.error('Save error', err);
-      alert('Save failed — network/server error. See console.');
+    if (players.length === 0) {
+      alert('Please add at least one player before saving.');
       saveBtn.disabled = false;
-      saveBtn.textContent = 'Save Design';
+      saveBtn.textContent = originalText;
       return;
     }
+
+    // create preview (gracefully handle failure)
+    let dataUrl = null;
+    try {
+      dataUrl = await makePreviewDataURL();
+    } catch (err) {
+      console.warn('makePreviewDataURL error', err);
+      dataUrl = null;
+    }
+
+    const payload = {
+      product_id: form.querySelector('input[name="product_id"]')?.value || null,
+      order_id: form.querySelector('input[name="order_id"]')?.value || null,
+      players: players,
+      preview_src: dataUrl, // may be null
+      team_logo_url: document.getElementById('team-prefill-logo')?.value || ''
+    };
+
+    console.info('Saving team payload', payload);
+
+    const resp = await fetch(saveUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-CSRF-TOKEN': csrf
+      },
+      credentials: 'same-origin',
+      body: JSON.stringify(payload)
+    });
+
+    // try parse json safely
+    let json = null;
+    try { json = await resp.json(); } catch (e) { json = null; }
+
+    const ok = resp.ok && json && (json.success === true || json.success == 1 || json.status === 'ok');
+
+    if (!ok) {
+      const msg = (json && (json.message || json.error)) || ('HTTP ' + resp.status);
+      alert('Save failed: ' + msg);
+      saveBtn.disabled = false;
+      saveBtn.textContent = originalText;
+      return;
+    }
+
+    // success handling
+    const previewUrl = (json.preview_url || json.preview || '') || '';
+    const teamId = (json.team_id || '') || '';
+
+    try {
+      if (previewInput) previewInput.value = previewUrl;
+    } catch(e){ console.warn('set preview hidden failed', e); }
+
+    try {
+      const hid = document.getElementById('team-id-hidden') || document.querySelector('input[name="team_id"]');
+      if (hid && teamId) hid.value = teamId;
+    } catch(e){ console.warn('set team id hidden failed', e); }
+
+    // enable & show Add To Cart
+    try {
+      if (atcBtn) {
+        atcBtn.disabled = false;
+        atcBtn.classList.remove('d-none');
+        // optionally restore label
+        if (atcBtn.getAttribute('data-label')) atcBtn.textContent = atcBtn.getAttribute('data-label');
+      }
+    } catch(e){ console.warn('enable atc failed', e); }
+
+    // remove Save button to prevent duplicate saves
+    try { saveBtn.remove(); } catch(e){ saveBtn.style.display = 'none'; }
+
+    alert(json.message || 'Design saved ✔ You can now click Add To Cart.');
+    return;
+
+  } catch (err) {
+    console.error('Save error', err);
+    alert('Save failed — network/server error. See console.');
+    saveBtn.disabled = false;
+    saveBtn.textContent = originalText;
+    return;
   }
+}
+
 
   saveBtn.addEventListener('click', function(e){
     e.preventDefault();
