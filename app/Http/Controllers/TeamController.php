@@ -190,65 +190,88 @@ if (!empty($data['order_id'])) {
      * Classic form submit endpoint (Add To Cart / Team store)
      */
     public function store(Request $request)
-    {
-        $data = $request->validate([
-            'team_id'           => 'nullable|integer|exists:teams,id',
-            'product_id'        => 'required|integer|exists:products,id',
-            'players'           => 'required|array|min:1',
-            'players.*.name'    => 'required|string|max:60',
-            'players.*.number'  => ['required', 'regex:/^\d{1,3}$/'],
-            'players.*.size'    => 'nullable|string|max:10',
-            'players.*.font'    => 'nullable|string|max:50',
-            'players.*.color'   => 'nullable|string|max:20',
-            'players.*.variant_id' => 'nullable',
-            'preview_url'       => 'nullable|string',
-        ]);
+{
+    // load product early so we can detect layout slots
+    $product = Product::with('variants')->find($request->input('product_id'));
+    $hasNumberSlot = false;
+    if (!empty($data['product_id'])) {
+        $p = Product::find($data['product_id']);
+        if ($p && !empty($p->layout_slots)) {
+            $ls = is_array($p->layout_slots) ? $p->layout_slots : @json_decode($p->layout_slots, true);
+            $hasNumberSlot = !empty($ls) && !empty($ls['number']);
+        }
+    }
 
-        $product = Product::with('variants')->find($data['product_id']);
-        if (!$product) {
-            if ($request->wantsJson() || $request->ajax()) {
-                return response()->json(['success' => false, 'message' => 'Product not found.'], 404);
-            }
-            return back()->with('error', 'Product not found.');
+    // when building $orderData use number only if hasNumberSlot
+    $orderData['number_text'] = $hasNumberSlot ? ($first['number'] ?? null) : null;
+
+    // build validation rules dynamically
+    $rules = [
+        'team_id'           => 'nullable|integer|exists:teams,id',
+        'product_id'        => 'required|integer|exists:products,id',
+        'players'           => 'required|array|min:1',
+        'players.*.name'    => 'required|string|max:60',
+        'players.*.size'    => 'nullable|string|max:10',
+        'players.*.font'    => 'nullable|string|max:50',
+        'players.*.color'   => 'nullable|string|max:20',
+        'players.*.variant_id' => 'nullable',
+        'preview_url'       => 'nullable|string',
+    ];
+
+    if ($hasNumberSlot) {
+        // require a numeric number when product supports numbers
+        $rules['players.*.number'] = ['required', 'regex:/^\d{1,3}$/'];
+    } else {
+        // no number slot — accept nullable and will be ignored
+        $rules['players.*.number'] = 'nullable|string|max:10';
+    }
+
+    $data = $request->validate($rules);
+
+    // now process players
+    $variantMap = [];
+    if ($product && $product->relationLoaded('variants') && $product->variants) {
+        foreach ($product->variants as $v) {
+            $k = trim((string) ($v->option_value ?? $v->option_name ?? ''));
+            if ($k === '') continue;
+            $variantMap[strtoupper($k)] = (string) ($v->shopify_variant_id ?? $v->variant_id ?? '');
+        }
+    }
+
+    $playersProcessed = [];
+    foreach ($data['players'] as $p) {
+        // normalize fields
+        $name = $p['name'] ?? '';
+        $num  = $p['number'] ?? '';
+        // if product doesn't support numbers, ensure we clear number
+        if (!$hasNumberSlot) $num = '';
+
+        $variantId = isset($p['variant_id']) && $p['variant_id'] ? (string)$p['variant_id'] : null;
+
+        if (empty($variantId) && !empty($p['size'])) {
+            $sizeKey = strtoupper(trim((string)$p['size']));
+            $variantId = $variantMap[$sizeKey] ?? null;
         }
 
-        $variantMap = [];
-        if ($product->relationLoaded('variants') && $product->variants) {
+        if (empty($variantId) && !empty($p['size']) && isset($product->variants)) {
             foreach ($product->variants as $v) {
-                $k = trim((string) ($v->option_value ?? $v->option_name ?? ''));
-                if ($k === '') continue;
-                $variantMap[strtoupper($k)] = (string) ($v->shopify_variant_id ?? $v->variant_id ?? '');
-            }
-        }
-
-        $playersProcessed = [];
-        foreach ($data['players'] as $p) {
-            $variantId = isset($p['variant_id']) && $p['variant_id'] ? (string)$p['variant_id'] : null;
-
-            if (empty($variantId) && !empty($p['size'])) {
-                $sizeKey = strtoupper(trim((string)$p['size']));
-                $variantId = $variantMap[$sizeKey] ?? null;
-            }
-
-            if (empty($variantId) && !empty($p['size']) && isset($product->variants)) {
-                foreach ($product->variants as $v) {
-                    $title = strtoupper(trim((string)($v->title ?? '')));
-                    if ($title !== '' && strpos($title, strtoupper($p['size'])) !== false) {
-                        $variantId = (string)($v->shopify_variant_id ?? $v->variant_id ?? $v->id ?? null);
-                        break;
-                    }
+                $title = strtoupper(trim((string)($v->title ?? '')));
+                if ($title !== '' && strpos($title, strtoupper($p['size'])) !== false) {
+                    $variantId = (string)($v->shopify_variant_id ?? $v->variant_id ?? $v->id ?? null);
+                    break;
                 }
             }
-
-            $playersProcessed[] = [
-                'name' => $p['name'] ?? '',
-                'number' => $p['number'] ?? '',
-                'size' => $p['size'] ?? null,
-                'font' => $p['font'] ?? '',
-                'color' => $p['color'] ?? '',
-                'variant_id' => $variantId,
-            ];
         }
+
+        $playersProcessed[] = [
+            'name' => $name ?? '',
+            'number' => $num ?? '',
+            'size' => $p['size'] ?? null,
+            'font' => $p['font'] ?? '',
+            'color' => $p['color'] ?? '',
+            'variant_id' => $variantId,
+        ];
+    }
 
         $missingVariants = array_filter($playersProcessed, function($pl) {
             return empty($pl['variant_id']) || !preg_match('/^\d+$/', (string)$pl['variant_id']);

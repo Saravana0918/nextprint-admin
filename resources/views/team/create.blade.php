@@ -233,6 +233,8 @@
 <script>
   window.prefill = {!! json_encode($prefill ?? []) !!};
   window.layoutSlots = {!! json_encode($layoutSlots ?? [], JSON_NUMERIC_CHECK) !!};
+  window.hasNumberSlot = !!(typeof window.layoutSlots === 'object' && window.layoutSlots && window.layoutSlots.number);
+  console.info('hasNumberSlot=', window.hasNumberSlot);
   if (!window.layoutSlots || !window.layoutSlots.number) {
   // hide number input column in each player row template (client side)
   // we already create rows dynamically — hide number inputs on createRow()
@@ -240,6 +242,34 @@
   // hide overlay number visually
   document.getElementById('overlay-number').style.display = 'none';
 }
+</script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  try {
+    if (!window.hasNumberSlot) {
+      // hide stage overlay number
+      const ovNum = document.getElementById('overlay-number') || document.getElementById('player-overlay-number');
+      if (ovNum) ovNum.style.display = 'none';
+
+      // hide any existing inputs for number in list
+      document.querySelectorAll('.player-number, input[name="players[][number]"]').forEach(el => {
+        if (el) {
+          el.style.display = 'none';
+          try { el.value = ''; } catch(e){}
+          const row = el.closest('.player-row');
+          if (row) row.classList.add('no-number');
+        }
+      });
+
+      // hide any visible header label for Number if present
+      document.querySelectorAll('.player-number-label').forEach(l => l.style.display = 'none');
+
+      console.info('Team: number input & overlay hidden because no number slot.');
+    } else {
+      console.info('Team: number slot exists, keeping number inputs visible.');
+    }
+  } catch(e) { console.warn('init hide error', e); }
+});
 </script>
 
 <template id="player-row-template">
@@ -288,6 +318,24 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
   const list = document.getElementById('players-list');
+  try {
+    if (!window.hasNumberSlot) {
+      // hide overlay number if present
+      const ovNum = document.getElementById('overlay-number');
+      if (ovNum) ovNum.style.display = 'none';
+
+      // hide any existing player-number inputs (in case template already rendered)
+      document.querySelectorAll('.player-number, input[name="players[][number]"]').forEach(el => {
+        try { el.style.display = 'none'; el.value = ''; } catch(e) {}
+        const row = el.closest('.player-row');
+        if (row) row.classList.add('no-number');
+      });
+
+      console.info('Team (init): number UI hidden (no number slot).');
+    } else {
+      console.info('Team (init): number slot present, number UI visible.');
+    }
+  } catch(err) { console.warn('init hide error', err); }
   const tpl = document.getElementById('player-row-template');
   const addBtn = document.getElementById('btn-add-row');
   const form = document.getElementById('team-form');
@@ -493,7 +541,15 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     ovName.textContent = nm || 'NAME';
-    ovNum.textContent = nu || '09';
+
+    if (window.hasNumberSlot) {
+      ovNum.textContent = (nu || '09');
+      ovNum.style.display = '';
+    } else {
+      // make sure overlay hidden
+      if (ovNum) { ovNum.textContent = ''; ovNum.style.display = 'none'; }
+    }
+
     list.querySelectorAll('.player-row').forEach(r => r.classList.remove('preview-active'));
     row.classList.add('preview-active');
 
@@ -517,6 +573,13 @@ document.addEventListener('DOMContentLoaded', function() {
     const last = rows[rows.length - 1];
     const numEl = last.querySelector('.player-number');
     const nameEl = last.querySelector('.player-name');
+      if (!window.hasNumberSlot && numEl) {
+      try {
+        numEl.style.display = 'none';
+        numEl.value = '';
+        last.classList.add('no-number');
+      } catch(e) { console.warn('hide new row number failed', e); }
+    }
     const sizeEl = last.querySelector('.player-size');
     const fontHidden = last.querySelector('.player-font');
     const colorHidden = last.querySelector('.player-color');
@@ -689,7 +752,11 @@ document.addEventListener('DOMContentLoaded', function() {
       const modalOvNum  = clone.querySelector('#overlay-number') || (clone.querySelectorAll('.np-overlay')[1] || null);
 
       if (modalOvName) modalOvName.textContent = nameVal;
-      if (modalOvNum) modalOvNum.textContent = numVal;
+      if (window.hasNumberSlot) {
+        if (modalOvNum) { modalOvNum.textContent = numVal; modalOvNum.style.display = ''; }
+      } else {
+        if (modalOvNum) { modalOvNum.textContent = ''; modalOvNum.style.display = 'none'; }
+      }
 
       try {
         const fm = (fontVal || '').toString().toLowerCase();
