@@ -362,6 +362,7 @@ if (!empty($data['order_id'])) {
             return response()->json([
                 'success' => true,
                 'team_id' => $team->id,
+                'preview_url' => $previewPath ? asset($previewPath) : null,
                 'checkoutUrl' => $cartUrl,
             ], 200);
         }

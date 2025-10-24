@@ -891,23 +891,27 @@ document.addEventListener('DOMContentLoaded', function(){
   const saveBtn = document.getElementById('save-team-btn');
   const atcBtn  = document.getElementById('team-addtocart-btn');
   const previewInput = document.getElementById('team-preview-url');
-  const stage = document.getElementById('player-stage'); // your preview stage element
+  const stage = document.getElementById('player-stage'); // preview stage element
   const form = document.getElementById('team-form');
 
-  // route to save — make sure this name/URL matches your routes/web.php
-  // Example: Route::post('/admin/team/save-design', [TeamController::class,'saveDesign'])->name('team.save');
-  const saveUrl = "{{ route('team.save') }}"; // if blade renders route
+  const saveUrl = "{{ route('team.save') }}";
   const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ||
-               document.querySelector('input[name=\"_token\"]')?.value || '';
+               document.querySelector('input[name="_token"]')?.value || '';
 
-  if (!saveBtn) return;
+   if (!saveBtn) return;
 
-  async function makePreviewDataURL() {
+  // Ensure Add-to-cart is hidden/disabled initially
+  if (atcBtn) {
+    atcBtn.disabled = true;
+    atcBtn.classList.add('d-none');
+  }
+
+   async function makePreviewDataURL() {
     try {
       await (document.fonts?.ready || Promise.resolve());
-      const canvas = await html2canvas(stage, {useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1});
+      const canvas = await html2canvas(stage, { useCORS:true, backgroundColor: null, scale: window.devicePixelRatio || 1 });
       return canvas.toDataURL('image/png');
-    } catch(err) {
+    } catch (err) {
       console.warn('html2canvas failed:', err);
       return null;
     }
@@ -971,118 +975,89 @@ document.addEventListener('DOMContentLoaded', function(){
 }
 
   async function saveDesign() {
-  // disable save while processing
-  if (!saveBtn) return;
-  saveBtn.disabled = true;
-  const originalText = saveBtn.textContent || 'Save Design';
-  saveBtn.textContent = 'Saving...';
-
-  try {
-    // collect players from DOM
-    const players = Array.from(document.querySelectorAll('#players-list .player-row')).map((r, idx) => {
-      return {
-        id: r.dataset.playerId ?? null,
-        name: (r.querySelector('.player-name')?.value || '').toString().toUpperCase().slice(0, 64),
-        number: (r.querySelector('.player-number')?.value || '').toString().replace(/\D/g,'').slice(0,3),
-        size: r.querySelector('.player-size')?.value || '',
-        font: r.querySelector('.player-font')?.value || '',
-        color: r.querySelector('.player-color')?.value || '',
-        preview_src: r.querySelector('.player-preview')?.value || null
-      };
-    }).filter(p => (p.name && p.name.trim() !== '') || (p.number && p.number.trim() !== ''));
-
-    if (players.length === 0) {
-      alert('Please add at least one player before saving.');
-      saveBtn.disabled = false;
-      saveBtn.textContent = originalText;
-      return;
-    }
-
-    // create preview image (dataURL) with safe fallback
-    let dataUrl = null;
-    try {
-      dataUrl = await makePreviewDataURL(); // may throw or return null
-    } catch(err) {
-      console.warn('makePreviewDataURL failed', err);
-      dataUrl = null;
-    }
-
-    // build payload
-    const payload = {
-      product_id: form.querySelector('input[name="product_id"]')?.value || null,
-      order_id: form.querySelector('input[name="order_id"]')?.value || null,
-      players: players,
-      preview_src: dataUrl, // may be null
-      team_logo_url: document.getElementById('team-prefill-logo')?.value || ''
-    };
-
-    // debug logs (optional, remove later)
-    console.info('Saving team payload', payload, 'saveUrl=', saveUrl);
-
-    const resp = await fetch(saveUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'X-CSRF-TOKEN': csrf
-      },
-      credentials: 'same-origin',
-      body: JSON.stringify(payload)
-    });
-
-    const json = await resp.json().catch(()=>null);
-
-    // accept either boolean true or string "true" or status "ok"
-    const ok = resp.ok && json && (json.success === true || json.success === 'true' || json.status === 'ok' || json.success == 1);
-
-    if (!ok) {
-      console.error('Save failed', resp.status, json);
-      // show helpful message
-      const msg = (json && (json.message || json.error)) || ('HTTP ' + resp.status);
-      alert('Save failed: ' + msg);
-      saveBtn.disabled = false;
-      saveBtn.textContent = originalText;
-      return;
-    }
-
-    // -- SUCCESS PATH --
-    const previewUrl = (json.preview_url || json.preview || null);
-    const teamId = (json.team_id || null);
-
-    // set hidden inputs so next "Add To Cart" (form submit) sends them too
-    try {
-      const previewHidden = document.getElementById('team-preview-url') || document.querySelector('input[name="team_preview_url"]');
-      if (previewHidden) previewHidden.value = previewUrl || '';
-    } catch(e){ console.warn('Could not set preview hidden', e); }
+    // disable UX
+    saveBtn.disabled = true;
+    const originalText = saveBtn.textContent || 'Save Design';
+    saveBtn.textContent = 'Saving...';
 
     try {
-      const idHidden = document.getElementById('team-id-hidden') || document.querySelector('input[name="team_id"]');
-      if (idHidden && teamId) idHidden.value = teamId;
-    } catch(e){ console.warn('Could not set team id hidden', e); }
+      // collect players
+      const players = Array.from(document.querySelectorAll('#players-list .player-row')).map(r => {
+        return {
+          id: r.dataset.playerId ?? null,
+          name: (r.querySelector('.player-name')?.value || '').toString().toUpperCase().slice(0, 64),
+          number: (r.querySelector('.player-number')?.value || '').toString().replace(/\D/g,'').slice(0,3),
+          size: r.querySelector('.player-size')?.value || '',
+          font: r.querySelector('.player-font')?.value || '',
+          color: r.querySelector('.player-color')?.value || '',
+          preview_src: r.querySelector('.player-preview')?.value || null
+        };
+      }).filter(p => (p.name && p.name.trim() !== '') || (p.number && p.number.trim() !== ''));
 
-    // Enable Add To Cart button and make sure it's visible
-    try {
-      if (atcBtn) {
-        atcBtn.disabled = false;
-        atcBtn.classList.remove('d-none'); // in case it was hidden
-        try { atcBtn.textContent = atcBtn.getAttribute('data-label') || 'Add To Cart'; } catch(e){}
+      if (players.length === 0) {
+        alert('Please add at least one player before saving.');
+        saveBtn.disabled = false;
+        saveBtn.textContent = originalText;
+        return;
       }
-    } catch(e) { console.warn('Could not enable Add To Cart', e); }
 
-    // Remove the Save button (prevent duplicates)
-    try { saveBtn.remove(); } catch(e) { saveBtn.style.display = 'none'; }
+      // create preview (may be null if html2canvas fails)
+      let dataUrl = null;
+      try { dataUrl = await makePreviewDataURL(); } catch(e){ dataUrl = null; }
 
-    alert(json.message || 'Design saved ✔ You can now click Add To Cart.');
-    return;
+      const payload = {
+        product_id: form.querySelector('input[name="product_id"]')?.value || null,
+        order_id: form.querySelector('input[name="order_id"]')?.value || null,
+        players: players,
+        preview_src: dataUrl,
+        team_logo_url: document.getElementById('team-prefill-logo')?.value || ''
+      };
 
-  } catch (err) {
-    console.error('Save error', err);
-    alert('Save failed — network/server error. See console.');
-    saveBtn.disabled = false;
-    saveBtn.textContent = 'Save Design';
-    return;
+      const resp = await fetch(saveUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'X-CSRF-TOKEN': csrf
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify(payload)
+      });
+
+      const json = await resp.json().catch(()=>null);
+      const ok = resp.ok && json && (json.success === true || json.success == 1 || json.status === 'ok');
+
+      if (!ok) {
+        const msg = (json && (json.message || json.error)) || ('HTTP ' + resp.status);
+        alert('Save failed: ' + msg);
+        saveBtn.disabled = false;
+        saveBtn.textContent = originalText;
+        return;
+      }
+
+      // SUCCESS: set hidden fields + enable Add To Cart
+      const previewUrl = (json.preview_url || json.preview || null);
+      const teamId = (json.team_id || null);
+
+      try { if (previewInput) previewInput.value = previewUrl || ''; } catch(e){ console.warn(e); }
+      try { const hid = document.getElementById('team-id-hidden'); if (hid && teamId) hid.value = teamId; } catch(e){}
+
+      if (atcBtn) { atcBtn.disabled = false; atcBtn.classList.remove('d-none'); }
+
+      // remove save button to prevent duplicate saves
+      try { saveBtn.remove(); } catch(e){ saveBtn.style.display = 'none'; }
+
+      alert(json.message || 'Design saved ✔ You can now click Add To Cart.');
+      return;
+
+    } catch (err) {
+      console.error('Save error', err);
+      alert('Save failed — network/server error. See console.');
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Save Design';
+      return;
+    }
   }
-}
 
   saveBtn.addEventListener('click', function(e){
     e.preventDefault();
