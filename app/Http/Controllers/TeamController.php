@@ -44,7 +44,6 @@ class TeamController extends Controller
      */
     public function saveDesign(Request $request)
 {
-    // validation (same as before)
     $data = $request->validate([
         'product_id' => 'nullable|integer',
         'order_id' => 'nullable|integer',
@@ -53,51 +52,32 @@ class TeamController extends Controller
         'players.*.number' => 'nullable|string|max:20',
         'players.*.size' => 'nullable|string|max:20',
         'players.*.font' => 'nullable|string|max:100',
-        'preview_src' => 'nullable|string', // can be path or dataURL
+        'preview_src' => 'nullable|string',
     ]);
 
     DB::beginTransaction();
     try {
-        // 1) Save preview image if dataURL
-        $previewPublicRelative = null;   // like team_previews/xxx.png
-        $previewUrl = null;              // public url asset('storage/...') 
-        $previewLocalPath = null;        // absolute filesystem path storage_path('app/public/...')
-
-        if (!empty($data['preview_src']) && \Illuminate\Support\Str::startsWith($data['preview_src'], 'data:')) {
+        // ---------- 1) handle preview image ----------
+        $previewPath = null; // path stored in DB (public accessible path or URL)
+        if (!empty($data['preview_src']) && Str::startsWith($data['preview_src'], 'data:')) {
             $matches = [];
             if (preg_match('/^data:(image\/[a-zA-Z]+);base64,(.+)$/', $data['preview_src'], $matches)) {
                 $mime = $matches[1];
                 $base64 = $matches[2];
                 $ext = explode('/', $mime)[1] ?? 'png';
                 $binary = base64_decode($base64);
-                $filename = 'team_preview_' . time() . '_' . \Illuminate\Support\Str::random(6) . '.' . $ext;
+                $filename = 'team_preview_' . time() . '_' . Str::random(6) . '.' . $ext;
                 $storagePath = 'team_previews/' . $filename;
-
-                // ensure public disk exists and directory writable
-                \Illuminate\Support\Facades\Storage::disk('public')->put($storagePath, $binary);
-
-                $previewPublicRelative = $storagePath;
-                $previewUrl = asset('storage/' . $storagePath);
-                $previewLocalPath = storage_path('app/public/' . $storagePath);
+                Storage::disk('public')->put($storagePath, $binary);
+                // store a publicly accessible path (so asset() works)
+                $previewPath = 'storage/' . $storagePath;
             }
         } elseif (!empty($data['preview_src'])) {
-            // if frontend already passed a URL or relative path, try to normalize
-            $passed = $data['preview_src'];
-            // if it looks like a local storage path (starts with /storage/) convert to local path
-            if (\Illuminate\Support\Str::startsWith($passed, '/storage/')) {
-                $previewUrl = url($passed);
-                $relative = ltrim($passed, '/storage/');
-                $previewPublicRelative = $relative;
-                $previewLocalPath = storage_path('app/public/' . $relative);
-            } else {
-                // treat as full remote URL or full storage URL
-                $previewUrl = $passed;
-                // we can't derive local path for remote URL
-                $previewLocalPath = null;
-            }
+            // frontend gave us an existing path/URL
+            $previewPath = $data['preview_src'];
         }
 
-        // 2) Normalize players
+        // ---------- 2) normalize players ----------
         $players = array_map(function($p) {
             $p = (array)$p;
             return [
@@ -111,51 +91,68 @@ class TeamController extends Controller
             ];
         }, $data['players']);
 
-        // 3) Insert team row
-        $teamId = DB::table('teams')->insertGetId([
-            'product_id' => $data['product_id'] ?? null,
-            'players' => json_encode($players, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE),
-            'preview_url' => $previewUrl,
-            'preview_local_path' => $previewLocalPath,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-
-        // ---------- design_orders upsert block ----------
-        $first = $players[0] ?? null;
-
-        $orderData = [
-            'team_id'       => $teamId,
-            'product_id'    => $data['product_id'] ?? null,
-            'shopify_product_id' => $data['shopify_product_id'] ?? null,
-            'variant_id'    => $first['variant_id'] ?? null,
-            'size'          => $first['size'] ?? null,
-            'name_text'     => $first['name'] ?? ($data['name_text'] ?? null),
-            'number_text'   => $first['number'] ?? ($data['number_text'] ?? null),
-            'preview_src'   => $previewUrl ?? null,            // public URL (useful for web)
-            'preview_path'  => $previewLocalPath ?? null,      // local filesystem absolute path (useful for PDF embedding)
-            'raw_payload'   => json_encode(['team_id' => $teamId, 'players' => $players], JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE),
-            'payload'       => json_encode(['players' => $players], JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE),
-            'status'        => 'new',
-            'created_at'    => now(),
-            'updated_at'    => now(),
+        // ---------- 3) Insert team but only use existing table columns ----------
+        $teamPayload = [
+            'product_id'   => $data['product_id'] ?? null,
+            'players'      => json_encode($players, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE),
+            'team_logo_url'=> $data['team_logo_url'] ?? null,
+            'preview_url'  => $previewPath ? asset($previewPath) : null,
+            'preview_path' => $previewPath ?? null,
+            'created_by'   => auth()->id() ?? null,
+            'created_at'   => now(),
+            'updated_at'   => now(),
         ];
 
+        // Filter to only keys that actually exist in DB `teams` table
+        $teamCols = Schema::getColumnListing('teams');
+        $teamPayload = array_intersect_key($teamPayload, array_flip($teamCols));
+
+        $teamId = DB::table('teams')->insertGetId($teamPayload);
+
+        // ---------- 4) Build orderData (only safe columns) ----------
+        // pick first player for name/number/size meta
+        $first = $players[0] ?? [];
+
+        $orderData = [
+            'team_id'            => $teamId,
+            'product_id'         => $data['product_id'] ?? null,
+            'product_name'       => isset($data['product_name']) ? $data['product_name'] : null,
+            'shopify_product_id' => $data['shopify_product_id'] ?? null,
+            'variant_id'         => $first['variant_id'] ?? null,
+            'size'               => $first['size'] ?? null,
+            'name_text'          => $first['name'] ?? null,
+            'number_text'        => $first['number'] ?? null,
+            'preview_src'        => $previewPath ?? null,
+            'preview_path'       => $previewPath ?? null,
+            'raw_payload'        => json_encode(['team_id' => $teamId, 'players' => $players], JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE),
+            'payload'            => json_encode(['players' => $players], JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE),
+            'status'             => 'new',
+            'created_at'         => now(),
+            'updated_at'         => now(),
+        ];
+
+        // Filter orderData to only existing columns in design_orders
+        $orderCols = Schema::getColumnListing('design_orders');
+        $orderDataFiltered = array_intersect_key($orderData, array_flip($orderCols));
+
+        // ---------- 5) Link to design_orders: update existing or create ----------
         $linkedOrderId = null;
 
         if (!empty($data['order_id'])) {
-            DB::table('design_orders')->where('id', $data['order_id'])->update($orderData);
+            DB::table('design_orders')->where('id', $data['order_id'])->update($orderDataFiltered);
             $linkedOrderId = $data['order_id'];
         } else {
+            // try find an existing design_order that already references this team id in raw_payload
             $existing = DB::table('design_orders')->where(function($q) use ($teamId) {
                 $q->where('raw_payload', 'like', '%"team_id":' . $teamId . '%')
                   ->orWhere('raw_payload', 'like', '%"team_id":"' . $teamId . '"%');
             })->orderBy('created_at', 'desc')->first();
 
             if ($existing) {
-                DB::table('design_orders')->where('id', $existing->id)->update($orderData);
+                DB::table('design_orders')->where('id', $existing->id)->update($orderDataFiltered);
                 $linkedOrderId = $existing->id;
             } else {
+                // best-effort match by product + name/number
                 $candidateQuery = DB::table('design_orders')->orderBy('created_at', 'desc');
                 if (!empty($data['product_id'])) {
                     $candidateQuery->where('product_id', $data['product_id']);
@@ -171,14 +168,13 @@ class TeamController extends Controller
                 $candidate = $candidateQuery->first();
 
                 if ($candidate) {
-                    DB::table('design_orders')->where('id', $candidate->id)->update($orderData);
+                    DB::table('design_orders')->where('id', $candidate->id)->update($orderDataFiltered);
                     $linkedOrderId = $candidate->id;
                 } else {
-                    $linkedOrderId = DB::table('design_orders')->insertGetId($orderData);
+                    $linkedOrderId = DB::table('design_orders')->insertGetId($orderDataFiltered);
                 }
             }
         }
-        // ---------- end design_orders upsert ----------
 
         DB::commit();
 
@@ -186,12 +182,12 @@ class TeamController extends Controller
             'success' => true,
             'team_id' => $teamId,
             'order_id' => $linkedOrderId,
-            'preview_url' => $previewUrl ? asset($previewPublicRelative ? ('storage/'.$previewPublicRelative) : $previewUrl) : null,
+            'preview_url' => $previewPath ? asset($previewPath) : null,
             'message' => 'Design saved ✅ and linked to order #' . ($linkedOrderId ?? 'N/A'),
         ]);
     } catch (\Throwable $e) {
         DB::rollBack();
-        \Illuminate\Support\Facades\Log::error('TeamController::saveDesign failed: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
+        Log::error('TeamController::saveDesign failed: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
         return response()->json([
             'success' => false,
             'error' => 'Could not save team. Check logs.',
@@ -199,6 +195,7 @@ class TeamController extends Controller
         ], 500);
     }
 }
+
 
 
     /**
