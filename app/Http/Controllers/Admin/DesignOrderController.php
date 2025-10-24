@@ -219,54 +219,109 @@ class DesignOrderController extends Controller
     // At this point $preview_data_uri or $preview_url (which might be file://, asset url or remote url) will be used.
 
     // Layout / fonts / dimensions (you can re-use your existing calculations)
-    $maxImageWidthMm = 150.0;
-    $displayWidthMm = $maxImageWidthMm;
-    $displayHeightMm = 110.0;
-    if (!empty($preview_local_path) && file_exists($preview_local_path)) {
-        try {
-            [$imgWpx, $imgHpx] = getimagesize($preview_local_path);
-            $pxToMm = 25.4 / 96.0;
-            $imageWidthMm = $imgWpx * $pxToMm;
-            $imageHeightMm = $imgHpx * $pxToMm;
-            $scale = ($imageWidthMm > 0) ? ($maxImageWidthMm / $imageWidthMm) : 1.0;
-            $displayWidthMm = max(10, $imageWidthMm * $scale);
-            $displayHeightMm = max(10, $imageHeightMm * $scale);
-        } catch (\Throwable $e) {
-            $displayWidthMm = $maxImageWidthMm;
-            $displayHeightMm = 110.0;
-        }
+    // --- compute image display sizes (mm) and default layout if missing ---
+$maxImageWidthMm = 150.0;
+$displayWidthMm = $maxImageWidthMm;
+$displayHeightMm = 110.0;
+
+// if we resolved a local image path earlier, try to measure it
+if (!empty($preview_local_path) && file_exists($preview_local_path)) {
+    try {
+        [$imgWpx, $imgHpx] = getimagesize($preview_local_path);
+        // assume 96 DPI for conversion (same as earlier code)
+        $pxToMm = 25.4 / 96.0;
+        $imageWidthMm = $imgWpx * $pxToMm;
+        $imageHeightMm = $imgHpx * $pxToMm;
+        $scale = ($imageWidthMm > 0) ? ($maxImageWidthMm / $imageWidthMm) : 1.0;
+        $displayWidthMm = max(10, $imageWidthMm * $scale);
+        $displayHeightMm = max(10, $imageHeightMm * $scale);
+    } catch (\Throwable $e) {
+        // keep defaults if getimagesize fails
+        $displayWidthMm = $maxImageWidthMm;
+        $displayHeightMm = 110.0;
     }
+}
 
-    // font/color fallback logic (reuse your prior code)
-    $fontCandidates = [
-        'bebas' => 'Bebas Neue',
-        'oswald' => 'Oswald',
-        'anton' => 'Anton',
-        'impact' => 'Impact',
-    ];
-    $fontNameRaw = trim((string)($order->font ?? ''));
-    $fontKey = strtolower(preg_replace('/[^a-z0-9]+/',' ', $fontNameRaw));
-    $fontName = $fontCandidates[$fontKey] ?? ($order->font ?? 'DejaVu Sans');
+// defaults (percent-based) — use layout slots if present in order->payload/meta
+$defaults = [
+    'name_left_pct' => 72, 'name_top_pct' => 25, 'name_width_pct' => 22, 'name_font_pt' => 22,
+    'number_left_pct' => 72, 'number_top_pct' => 48, 'number_width_pct' => 14, 'number_font_pt' => 40,
+];
 
-    $colorRaw = trim((string)($order->color ?? ''));
-    $color = $colorRaw !== '' ? (($colorRaw[0] === '#') ? $colorRaw : '#' . ltrim($colorRaw, '#')) : '#000000';
+// try to read layoutSlots from order->payload or order->meta if available
+$slots = [];
+if (!empty($order->payload)) {
+    $pl = json_decode($order->payload, true) ?: [];
+    if (!empty($pl['layoutSlots']) && is_array($pl['layoutSlots'])) $slots = $pl['layoutSlots'];
+}
+if (empty($slots) && !empty($order->meta)) {
+    $m = json_decode($order->meta, true) ?: [];
+    if (!empty($m['layoutSlots']) && is_array($m['layoutSlots'])) $slots = $m['layoutSlots'];
+}
 
-    // prepare view data
-    $pdfData = [
-        'product_name' => $order->product_name ?? null,
-        'customer_name' => $order->name_text ?? null,
-        'customer_number' => $order->number_text ?? null,
-        'order_id' => $order->id,
-        'players' => $players,
-        'preview_data_uri' => $preview_data_uri,
-        'preview_url' => $preview_url,
-        'preview_local_path' => $preview_local_path,
-        'displayWidthMm' => round($displayWidthMm,2),
-        'displayHeightMm' => round($displayHeightMm,2),
-        'font' => $fontName,
-        'color' => $color,
-        // add other layout vars as you need...
-    ];
+// if slots found, map percentages into defaults safely
+if (!empty($slots) && is_array($slots)) {
+    $sname = $slots['name'] ?? $slots['Name'] ?? null;
+    $snum  = $slots['number'] ?? $slots['Number'] ?? null;
+    if (is_array($sname)) {
+        $defaults['name_left_pct'] = $sname['left_pct'] ?? $defaults['name_left_pct'];
+        $defaults['name_top_pct']  = $sname['top_pct'] ?? $defaults['name_top_pct'];
+        $defaults['name_width_pct']= $sname['width_pct'] ?? $defaults['name_width_pct'];
+        if (!empty($sname['font_size_pt'])) $defaults['name_font_pt'] = (int)$sname['font_size_pt'];
+    }
+    if (is_array($snum)) {
+        $defaults['number_left_pct'] = $snum['left_pct'] ?? $defaults['number_left_pct'];
+        $defaults['number_top_pct']  = $snum['top_pct'] ?? $defaults['number_top_pct'];
+        $defaults['number_width_pct']= $snum['width_pct'] ?? $defaults['number_width_pct'];
+        if (!empty($snum['font_size_pt'])) $defaults['number_font_pt'] = (int)$snum['font_size_pt'];
+    }
+}
+
+// convert percent positions to mm coordinates for the PDF view
+$name_left_mm   = ($defaults['name_left_pct'] / 100.0) * $displayWidthMm;
+$name_top_mm    = ($defaults['name_top_pct']  / 100.0) * $displayHeightMm;
+$number_left_mm = ($defaults['number_left_pct'] / 100.0) * $displayWidthMm;
+$number_top_mm  = ($defaults['number_top_pct']  / 100.0) * $displayHeightMm;
+
+$name_font_size_pt   = (int) ($defaults['name_font_pt'] ?? 22);
+$number_font_size_pt = (int) ($defaults['number_font_pt'] ?? 40);
+
+// normalize font name and color (fallbacks)
+$fontCandidates = [
+    'bebas' => 'Bebas Neue',
+    'oswald' => 'Oswald',
+    'anton' => 'Anton',
+    'impact' => 'Impact',
+];
+$fontNameRaw = trim((string)($order->font ?? ''));
+$fontKey = strtolower(preg_replace('/[^a-z0-9]+/',' ', $fontNameRaw));
+$fontName = $fontCandidates[$fontKey] ?? ($order->font ?? 'DejaVu Sans');
+
+$colorRaw = trim((string)($order->color ?? ''));
+$color = $colorRaw !== '' ? (($colorRaw[0] === '#') ? $colorRaw : '#' . ltrim($colorRaw, '#')) : '#000000';
+
+// finally build $pdfData including the required variables used in blade
+$pdfData = [
+    'product_name' => $order->product_name ?? null,
+    'customer_name' => $order->name_text ?? null,
+    'customer_number' => $order->number_text ?? null,
+    'order_id' => $order->id,
+    'players' => $players,
+    'preview_data_uri' => $preview_data_uri ?? null,
+    'preview_url' => $preview_url ?? null,
+    'preview_local_path' => $preview_local_path ?? null,
+    'displayWidthMm' => round($displayWidthMm,2),
+    'displayHeightMm' => round($displayHeightMm,2),
+    'name_left_mm' => round($name_left_mm,2),
+    'name_top_mm' => round($name_top_mm,2),
+    'number_left_mm' => round($number_left_mm,2),
+    'number_top_mm' => round($number_top_mm,2),
+    'name_font_size_pt' => $name_font_size_pt,
+    'number_font_size_pt' => $number_font_size_pt,
+    'font' => $fontName,
+    'color' => $color,
+];
+
 
     // generate pdf (use your existing blade view)
     try {
