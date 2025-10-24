@@ -244,38 +244,53 @@
   console.info('showUpload:', window.showUpload, 'hasArtworkSlot:', window.hasArtworkSlot);
 </script>
 <script>
-/* Hide number input fields when product does NOT have a number slot */
+/* SAFER: hide only the number INPUTs (and small wrappers) — do NOT hide .desktop-only column */
 (function(){
   const hasNumber = !!(window.layoutSlots && window.layoutSlots.number);
 
   if (!hasNumber) {
-    // hide visible number input elements (desktop + mobile)
-    ['#np-num', '#np-num-mobile'].forEach(sel => {
-      document.querySelectorAll(sel).forEach(el => {
-        const parent = el.closest('.np-field') || el.closest('.mb-2') || el.closest('.desktop-only') || el.parentElement;
-        if (parent) parent.style.display = 'none'; else el.style.display = 'none';
-        try { el.value = ''; } catch(e){}
-      });
-    });
+    // 1) Desktop: hide the actual input element only (do not hide the .desktop-only wrapper)
+    const desktopNum = document.querySelector('.desktop-only #np-num');
+    if (desktopNum) {
+      // hide input itself and its immediate margin wrapper (if any)
+      desktopNum.style.display = 'none';
+      // if bootstrap .mb-2 wrapper exists (input had class mb-2), hide that wrapper only if it's the direct parent
+      const p = desktopNum.parentElement;
+      if (p && p.classList && p.classList.contains('mb-2')) p.style.display = 'none';
+      try { desktopNum.value = ''; } catch(e){}
+    }
 
-    // hide the hidden number field used for form submission
+    // 2) Mobile: hide the np-field that wraps the mobile number input
+    const mobileField = document.querySelector('#np-num-mobile')?.closest('.np-field');
+    if (mobileField) mobileField.style.display = 'none';
+    const mobileInput = document.getElementById('np-num-mobile');
+    if (mobileInput) { try { mobileInput.value = ''; } catch(e){} }
+
+    // 3) Hidden form field: clear + disable (so submission won't include stale number)
     const hidden = document.getElementById('np-num-hidden') || document.querySelector('input[name="number_text"]');
     if (hidden) {
       try { hidden.value = ''; hidden.disabled = true; } catch(e){}
-      const p = hidden.closest('.mb-2') || hidden.parentElement;
-      if (p) p.style.display = 'none';
     }
 
-    // hide number overlay (defensive)
+    // 4) Hide the preview overlay for number (defensive)
     const pvNum = document.getElementById('np-prev-num');
     if (pvNum) pvNum.style.display = 'none';
 
-    console.info('Designer: number inputs hidden (no number slot).');
+    console.info('Designer: number inputs safely hidden (no number slot).');
   } else {
-    console.info('Designer: number slot present, inputs kept visible.');
+    // ensure inputs visible when number slot exists (undo any previous hiding)
+    const desktopNum = document.querySelector('.desktop-only #np-num');
+    if (desktopNum) { desktopNum.style.display = ''; if (desktopNum.parentElement?.classList?.contains('mb-2')) desktopNum.parentElement.style.display = ''; }
+    const mobileField = document.querySelector('#np-num-mobile')?.closest('.np-field');
+    if (mobileField) mobileField.style.display = '';
+    const hidden = document.getElementById('np-num-hidden') || document.querySelector('input[name="number_text"]');
+    if (hidden) { hidden.disabled = false; }
+    if (document.getElementById('np-prev-num')) document.getElementById('np-prev-num').style.display = '';
+    console.info('Designer: number inputs enabled (number slot present).');
   }
 })();
 </script>
+
 
 <script>
 /* MUST be placed before any code that calls findPreferredSlot() */
