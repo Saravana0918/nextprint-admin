@@ -6,18 +6,23 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use ZipArchive;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use ZipArchive;
 
 class DesignOrderController extends Controller
 {
+    /**
+     * List design orders (simple index)
+     */
     public function index()
     {
         $rows = DB::table('design_orders as d')
             ->leftJoin('products as p', 'p.id', '=', 'd.product_id')
             ->select([
                 'd.id',
-                'd.shopify_product_id',
+                'd.shopify_order_id',
                 'd.product_id',
                 DB::raw("p.name as product_name"),
                 'd.name_text',
@@ -31,6 +36,9 @@ class DesignOrderController extends Controller
         return view('admin.design_orders.index', ['rows' => $rows]);
     }
 
+    /**
+     * Show a single design order (detail)
+     */
     public function show($id)
     {
         $order = DB::table('design_orders as d')
@@ -46,6 +54,7 @@ class DesignOrderController extends Controller
         $players = collect();
 
         try {
+            // Try team players from teams table
             if (!empty($order->team_id)) {
                 $team = DB::table('teams')->where('id', (int)$order->team_id)->first();
                 if ($team && !empty($team->players)) {
@@ -66,6 +75,7 @@ class DesignOrderController extends Controller
                     }
                 }
 
+                // fallback to team_players table if teams.players not present
                 if ($players->isEmpty()) {
                     $players = DB::table('team_players')
                         ->where('team_id', $order->team_id)
@@ -74,12 +84,10 @@ class DesignOrderController extends Controller
                 }
             }
 
+            // fallback to payload/meta if still empty
             if ($players->isEmpty() && !empty($order->meta)) {
                 $metaDecoded = json_decode($order->meta, true);
-                if (is_string($metaDecoded)) {
-                    $metaDecoded = json_decode($metaDecoded, true);
-                }
-
+                if (is_string($metaDecoded)) $metaDecoded = json_decode($metaDecoded, true);
                 if (!empty($metaDecoded['players']) && is_array($metaDecoded['players'])) {
                     $players = collect($metaDecoded['players'])->map(function ($p, $i) use ($order) {
                         $p = (array)$p;
@@ -93,14 +101,10 @@ class DesignOrderController extends Controller
                             'created_at' => $p['created_at'] ?? $order->created_at ?? now(),
                         ];
                     });
-                } elseif (!empty($metaDecoded['team_id'])) {
-                    $players = DB::table('team_players')
-                        ->where('team_id', (int)$metaDecoded['team_id'])
-                        ->orderBy('id')
-                        ->get();
                 }
             }
 
+            // fallback to team_players by product
             if ($players->isEmpty() && !empty($order->product_id)) {
                 $players = DB::table('team_players')
                     ->where('product_id', $order->product_id)
@@ -120,226 +124,298 @@ class DesignOrderController extends Controller
         return view('admin.design_orders.show', compact('order', 'players'));
     }
 
+    /**
+     * Download package (PDF + CSV + preview image) as a ZIP.
+     * This method is robust about preview image sources:
+     *  - preview_base (data uri or raw base64) -> embed
+     *  - preview_src (data uri or path) -> use / resolve
+     *  - preview_path (relative storage path) -> resolve to storage_path('app/public/...') and embed
+     */
     public function download($id)
-{
-    $order = DB::table('design_orders')->where('id', $id)->first();
-    if (!$order) abort(404, 'Order not found');
+    {
+        $order = DB::table('design_orders')->where('id', $id)->first();
+        if (!$order) abort(404, 'Order not found');
 
-    // players extraction (same as you had)
-    $players = [];
-    if (!empty($order->payload)) {
-        $decoded = json_decode($order->payload, true) ?: [];
-        if (!empty($decoded['players']) && is_array($decoded['players'])) $players = $decoded['players'];
-    }
-    if (empty($players) && !empty($order->raw_payload)) {
-        $r = json_decode($order->raw_payload, true) ?: [];
-        if (!empty($r['players'])) $players = $r['players'];
-    }
-    if (empty($players) && !empty($order->team_id)) {
-        $team = DB::table('teams')->where('id', $order->team_id)->first();
-        if ($team && !empty($team->players)) $players = json_decode($team->players, true) ?: [];
-    }
-
-    // Determine preview source (priority: preview_base (raw data) -> preview_src if data: -> preview_path -> preview_url)
-    $preview_data_uri = null;
-    $preview_local_path = null;
-    $preview_url = null;
-
-    // if preview_base exists and looks like base64 or data-uri
-    if (!empty($order->preview_base)) {
-        // preview_base may be a data URI or raw base64; try to normalise
-        if (Str::startsWith($order->preview_base, 'data:')) {
-            $preview_data_uri = $order->preview_base;
-        } else {
-            // assume raw base64 (PNG)
-            $bin = base64_decode($order->preview_base);
-            if ($bin !== false) {
-                $preview_data_uri = 'data:image/png;base64,' . base64_encode($bin);
+        // --- players extraction (try multiple sources) ---
+        $players = [];
+        if (!empty($order->payload)) {
+            $decoded = json_decode($order->payload, true) ?: [];
+            if (!empty($decoded['players']) && is_array($decoded['players'])) {
+                $players = $decoded['players'];
             }
         }
-    }
-
-    // if not yet data-uri, check preview_src (could be data: or path)
-    if (!$preview_data_uri && !empty($order->preview_src)) {
-        if (Str::startsWith($order->preview_src, 'data:')) {
-            $preview_data_uri = $order->preview_src;
-        } else {
-            $preview_url = $order->preview_src;
+        if (empty($players) && !empty($order->raw_payload)) {
+            $r = json_decode($order->raw_payload, true) ?: [];
+            if (!empty($r['players'])) $players = $r['players'];
         }
-    }
-
-    // fallback to preview_path column
-    if (!$preview_data_uri && !$preview_url && !empty($order->preview_path)) {
-        $preview_url = $order->preview_path;
-    }
-
-    // Try to resolve local filesystem path from preview_url (if it points to /storage/...)
-    if ($preview_url) {
-        $pathOnly = parse_url($preview_url, PHP_URL_PATH) ?: $preview_url;
-        $pathOnly = ltrim($pathOnly, '/'); // remove leading slash if any
-
-        // If it's a storage path like "storage/team_previews/xxx.png" or "/storage/..."
-        if (strpos($pathOnly, 'storage/') === 0) {
-            $rel = preg_replace('#^storage/#', '', $pathOnly);
-            $possible = storage_path('app/public/' . $rel);
-            if (file_exists($possible) && is_readable($possible)) {
-                $preview_local_path = $possible;
+        if (empty($players) && !empty($order->team_id)) {
+            $team = DB::table('teams')->where('id', $order->team_id)->first();
+            if ($team && !empty($team->players)) {
+                $players = json_decode($team->players, true) ?: [];
             }
-        } else {
-            // maybe preview_url already is the relative path without "storage/" prefix (e.g. "team_previews/xxx.png")
-            if (strpos($pathOnly, 'team_previews/') === 0) {
+        }
+
+        // --- determine preview image source ---
+        $preview_data_uri = null;
+        $preview_local_path = null;
+        $preview_url = null;
+
+        // 1) preview_base (raw base64 or data uri)
+        if (!empty($order->preview_base)) {
+            if (Str::startsWith($order->preview_base, 'data:')) {
+                $preview_data_uri = $order->preview_base;
+            } else {
+                $bin = base64_decode($order->preview_base);
+                if ($bin !== false) {
+                    $preview_data_uri = 'data:image/png;base64,' . base64_encode($bin);
+                }
+            }
+        }
+
+        // 2) preview_src
+        if (!$preview_data_uri && !empty($order->preview_src)) {
+            if (Str::startsWith($order->preview_src, 'data:')) {
+                $preview_data_uri = $order->preview_src;
+            } else {
+                $preview_url = $order->preview_src;
+            }
+        }
+
+        // 3) preview_path fallback
+        if (!$preview_data_uri && !$preview_url && !empty($order->preview_path)) {
+            $preview_url = $order->preview_path;
+        }
+
+        // Try to resolve preview_url to a local file (storage/app/public/...)
+        if ($preview_url) {
+            $pathOnly = parse_url($preview_url, PHP_URL_PATH) ?: $preview_url;
+            $pathOnly = ltrim($pathOnly, '/');
+
+            if (strpos($pathOnly, 'storage/') === 0) {
+                $rel = preg_replace('#^storage/#', '', $pathOnly);
+                $possible = storage_path('app/public/' . $rel);
+                if (file_exists($possible) && is_readable($possible)) {
+                    $preview_local_path = $possible;
+                } else {
+                    Log::warning("DesignOrder #{$id}: expected local preview at {$possible} not found.");
+                }
+            } elseif (strpos($pathOnly, 'team_previews/') === 0) {
                 $possible = storage_path('app/public/' . $pathOnly);
                 if (file_exists($possible) && is_readable($possible)) {
                     $preview_local_path = $possible;
-                }
-            }
-        }
-    }
-
-    // If we have local file, embed as data-uri (if file size reasonable), else fallback to file:// or remote URL
-    if ($preview_local_path && file_exists($preview_local_path)) {
-        try {
-            $contents = file_get_contents($preview_local_path);
-            if ($contents !== false) {
-                // if file not huge, embed as data uri (safer)
-                if (strlen($contents) < (4 * 1024 * 1024)) { // 4MB threshold
-                    $mime = @mime_content_type($preview_local_path) ?: 'image/png';
-                    $preview_data_uri = 'data:' . $mime . ';base64,' . base64_encode($contents);
                 } else {
-                    // too big to embed, use file:// absolute path (DomPDF can read local files)
-                    $preview_url = 'file://' . $preview_local_path;
+                    Log::warning("DesignOrder #{$id}: expected local preview at {$possible} not found.");
                 }
             }
-        } catch (\Throwable $e) {
-            Log::warning("DesignOrder #{$id}: failed reading local preview file: " . $e->getMessage());
         }
-    }
 
-    // If still no preview_data_uri and preview_url exists, keep using preview_url (could be remote URL)
-    // At this point $preview_data_uri or $preview_url (which might be file://, asset url or remote url) will be used.
+        // If local file found, read/prepare data-uri or file:// fallback
+        if ($preview_local_path && file_exists($preview_local_path)) {
+            try {
+                $contents = file_get_contents($preview_local_path);
+                if ($contents !== false) {
+                    // embed if not too large, else fallback to file://
+                    if (strlen($contents) < (4 * 1024 * 1024)) { // 4MB threshold
+                        $mime = @mime_content_type($preview_local_path) ?: 'image/png';
+                        $preview_data_uri = 'data:' . $mime . ';base64,' . base64_encode($contents);
+                    } else {
+                        $preview_url = 'file://' . $preview_local_path;
+                        Log::info("DesignOrder #{$id}: preview file large; using file:// fallback.");
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::warning("DesignOrder #{$id}: failed reading preview file: " . $e->getMessage());
+            }
+        }
 
-    // Layout / fonts / dimensions (you can re-use your existing calculations)
-    // --- compute image display sizes (mm) and default layout if missing ---
-$maxImageWidthMm = 150.0;
-$displayWidthMm = $maxImageWidthMm;
-$displayHeightMm = 110.0;
-
-// if we resolved a local image path earlier, try to measure it
-if (!empty($preview_local_path) && file_exists($preview_local_path)) {
-    try {
-        [$imgWpx, $imgHpx] = getimagesize($preview_local_path);
-        // assume 96 DPI for conversion (same as earlier code)
-        $pxToMm = 25.4 / 96.0;
-        $imageWidthMm = $imgWpx * $pxToMm;
-        $imageHeightMm = $imgHpx * $pxToMm;
-        $scale = ($imageWidthMm > 0) ? ($maxImageWidthMm / $imageWidthMm) : 1.0;
-        $displayWidthMm = max(10, $imageWidthMm * $scale);
-        $displayHeightMm = max(10, $imageHeightMm * $scale);
-    } catch (\Throwable $e) {
-        // keep defaults if getimagesize fails
+        // Layout and dimension calculations for PDF (safe defaults)
+        $maxImageWidthMm = 150.0;
         $displayWidthMm = $maxImageWidthMm;
         $displayHeightMm = 110.0;
+
+        if ($preview_local_path && file_exists($preview_local_path)) {
+            try {
+                [$imgWpx, $imgHpx] = getimagesize($preview_local_path);
+                $pxToMm = 25.4 / 96.0;
+                $imageWidthMm = $imgWpx * $pxToMm;
+                $imageHeightMm = $imgHpx * $pxToMm;
+                $scale = ($imageWidthMm > 0) ? ($maxImageWidthMm / $imageWidthMm) : 1.0;
+                $displayWidthMm = max(10, $imageWidthMm * $scale);
+                $displayHeightMm = max(10, $imageHeightMm * $scale);
+            } catch (\Throwable $e) {
+                $displayWidthMm = $maxImageWidthMm;
+                $displayHeightMm = 110.0;
+            }
+        }
+
+        // default slot percentages (can be overridden by payload/meta layoutSlots)
+        $defaults = [
+            'name_left_pct' => 72, 'name_top_pct' => 25, 'name_width_pct' => 22, 'name_font_pt' => 22,
+            'number_left_pct' => 72, 'number_top_pct' => 48, 'number_width_pct' => 14, 'number_font_pt' => 40,
+        ];
+
+        $slots = [];
+        if (!empty($order->payload)) {
+            $pl = json_decode($order->payload, true) ?: [];
+            if (!empty($pl['layoutSlots']) && is_array($pl['layoutSlots'])) $slots = $pl['layoutSlots'];
+        }
+        if (empty($slots) && !empty($order->meta)) {
+            $m = json_decode($order->meta, true) ?: [];
+            if (!empty($m['layoutSlots']) && is_array($m['layoutSlots'])) $slots = $m['layoutSlots'];
+        }
+
+        if (!empty($slots) && is_array($slots)) {
+            $sname = $slots['name'] ?? $slots['Name'] ?? null;
+            $snum = $slots['number'] ?? $slots['Number'] ?? null;
+            if (is_array($sname)) {
+                $defaults['name_left_pct'] = $sname['left_pct'] ?? $defaults['name_left_pct'];
+                $defaults['name_top_pct']  = $sname['top_pct'] ?? $defaults['name_top_pct'];
+                $defaults['name_width_pct']= $sname['width_pct'] ?? $defaults['name_width_pct'];
+                if (!empty($sname['font_size_pt'])) $defaults['name_font_pt'] = (int)$sname['font_size_pt'];
+            }
+            if (is_array($snum)) {
+                $defaults['number_left_pct'] = $snum['left_pct'] ?? $defaults['number_left_pct'];
+                $defaults['number_top_pct']  = $snum['top_pct'] ?? $defaults['number_top_pct'];
+                $defaults['number_width_pct']= $snum['width_pct'] ?? $defaults['number_width_pct'];
+                if (!empty($snum['font_size_pt'])) $defaults['number_font_pt'] = (int)$snum['font_size_pt'];
+            }
+        }
+
+        $name_left_mm   = ($defaults['name_left_pct'] / 100.0) * $displayWidthMm;
+        $name_top_mm    = ($defaults['name_top_pct']  / 100.0) * $displayHeightMm;
+        $number_left_mm = ($defaults['number_left_pct'] / 100.0) * $displayWidthMm;
+        $number_top_mm  = ($defaults['number_top_pct']  / 100.0) * $displayHeightMm;
+
+        $name_font_size_pt   = (int) ($defaults['name_font_pt'] ?? 22);
+        $number_font_size_pt = (int) ($defaults['number_font_pt'] ?? 40);
+
+        // font & color normalization
+        $fontCandidates = [
+            'bebas' => 'Bebas Neue',
+            'oswald' => 'Oswald',
+            'anton' => 'Anton',
+            'impact' => 'Impact',
+        ];
+        $fontNameRaw = trim((string)($order->font ?? ''));
+        $fontKey = strtolower(preg_replace('/[^a-z0-9]+/',' ', $fontNameRaw));
+        $fontName = $fontCandidates[$fontKey] ?? ($order->font ?? 'DejaVu Sans');
+
+        $colorRaw = trim((string)($order->color ?? ''));
+        $color = $colorRaw !== '' ? (($colorRaw[0] === '#') ? $colorRaw : '#' . ltrim($colorRaw, '#')) : '#000000';
+
+        // build pdf view data
+        $pdfData = [
+            'product_name' => $order->product_name ?? null,
+            'customer_name' => $order->name_text ?? null,
+            'customer_number' => $order->number_text ?? null,
+            'order_id' => $order->id,
+            'players' => $players,
+            'preview_data_uri' => $preview_data_uri,
+            'preview_url' => $preview_url,
+            'preview_local_path' => $preview_local_path,
+            'displayWidthMm' => round($displayWidthMm,2),
+            'displayHeightMm' => round($displayHeightMm,2),
+            'name_left_mm' => round($name_left_mm,2),
+            'name_top_mm' => round($name_top_mm,2),
+            'number_left_mm' => round($number_left_mm,2),
+            'number_top_mm' => round($number_top_mm,2),
+            'name_font_size_pt' => $name_font_size_pt,
+            'number_font_size_pt' => $number_font_size_pt,
+            'font' => $fontName,
+            'color' => $color,
+        ];
+
+        // --- create temp dir & generate PDF + package ---
+        $tmpDir = storage_path('app/tmp/design_package_' . $order->id . '_' . time());
+        @mkdir($tmpDir, 0755, true);
+
+        try {
+            $pdf = \Barryvdh\DomPDF\Facade\Pdf::setOptions([
+                'isRemoteEnabled' => true,
+                'isHtml5ParserEnabled' => true,
+                'defaultFont' => 'DejaVu Sans',
+            ])->loadView('admin.design_orders.package_for_corel', $pdfData);
+
+            $pdfPath = $tmpDir . DIRECTORY_SEPARATOR . 'design_order_' . $order->id . '.pdf';
+            $pdf->save($pdfPath);
+
+            // players CSV
+            $csvPath = $tmpDir . DIRECTORY_SEPARATOR . 'players.csv';
+            $fp = fopen($csvPath, 'w');
+            fputcsv($fp, ['id','name','number','size','font','variant_id','preview_src']);
+            foreach ($players as $i => $p) {
+                $row = [
+                    $p['id'] ?? ($i+1),
+                    $p['name'] ?? '',
+                    $p['number'] ?? '',
+                    $p['size'] ?? '',
+                    $p['font'] ?? '',
+                    $p['variant_id'] ?? '',
+                    $p['preview_src'] ?? '',
+                ];
+                fputcsv($fp, $row);
+            }
+            fclose($fp);
+
+            // copy preview file into package if local file exists, otherwise try to write from data-uri
+            if (!empty($preview_local_path) && file_exists($preview_local_path)) {
+                $previewDir = $tmpDir . DIRECTORY_SEPARATOR . 'preview';
+                @mkdir($previewDir, 0755, true);
+                copy($preview_local_path, $previewDir . DIRECTORY_SEPARATOR . basename($preview_local_path));
+            } elseif (!empty($preview_data_uri) && strpos($preview_data_uri, 'data:') === 0) {
+                // decode and save one preview image
+                try {
+                    $matches = [];
+                    if (preg_match('/^data:(image\/[a-zA-Z]+);base64,(.+)$/', $preview_data_uri, $matches)) {
+                        $ext = explode('/', $matches[1])[1] ?? 'png';
+                        $bin = base64_decode($matches[2]);
+                        if ($bin !== false) {
+                            $previewDir = $tmpDir . DIRECTORY_SEPARATOR . 'preview';
+                            @mkdir($previewDir, 0755, true);
+                            file_put_contents($previewDir . DIRECTORY_SEPARATOR . 'preview.' . $ext, $bin);
+                        }
+                    }
+                } catch (\Throwable $e) {
+                    // ignore preview write failure
+                }
+            }
+
+            file_put_contents($tmpDir . DIRECTORY_SEPARATOR . 'info.txt',
+                "Design Order: {$order->id}\nProduct: " . ($order->product_name ?? '') . "\nCreated: " . ($order->created_at ?? '') . "\n");
+            file_put_contents($tmpDir . DIRECTORY_SEPARATOR . 'raw_payload.json', $order->raw_payload ?? '{}');
+
+            $zipName = 'design_order_' . $order->id . '.zip';
+            $zipPath = storage_path('app/tmp/' . $zipName);
+            if (file_exists($zipPath)) @unlink($zipPath);
+
+            $zip = new \ZipArchive();
+            if ($zip->open($zipPath, \ZipArchive::CREATE) !== true) {
+                throw new \Exception("Could not create zip file");
+            }
+
+            $files = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($tmpDir));
+            foreach ($files as $file) {
+                if (!$file->isFile()) continue;
+                $filePath = $file->getRealPath();
+                $relativePath = ltrim(str_replace($tmpDir, '', $filePath), DIRECTORY_SEPARATOR);
+                $zip->addFile($filePath, $relativePath);
+            }
+            $zip->close();
+
+            $this->rrmdir($tmpDir);
+
+            return response()->download($zipPath, $zipName)->deleteFileAfterSend(true);
+
+        } catch (\Throwable $e) {
+            if (is_dir($tmpDir)) $this->rrmdir($tmpDir);
+            Log::error('DesignOrder download failed: ' . $e->getMessage(), ['trace'=>$e->getTraceAsString()]);
+            abort(500, 'Could not create download package: ' . $e->getMessage());
+        }
     }
-}
 
-// defaults (percent-based) — use layout slots if present in order->payload/meta
-$defaults = [
-    'name_left_pct' => 72, 'name_top_pct' => 25, 'name_width_pct' => 22, 'name_font_pt' => 22,
-    'number_left_pct' => 72, 'number_top_pct' => 48, 'number_width_pct' => 14, 'number_font_pt' => 40,
-];
-
-// try to read layoutSlots from order->payload or order->meta if available
-$slots = [];
-if (!empty($order->payload)) {
-    $pl = json_decode($order->payload, true) ?: [];
-    if (!empty($pl['layoutSlots']) && is_array($pl['layoutSlots'])) $slots = $pl['layoutSlots'];
-}
-if (empty($slots) && !empty($order->meta)) {
-    $m = json_decode($order->meta, true) ?: [];
-    if (!empty($m['layoutSlots']) && is_array($m['layoutSlots'])) $slots = $m['layoutSlots'];
-}
-
-// if slots found, map percentages into defaults safely
-if (!empty($slots) && is_array($slots)) {
-    $sname = $slots['name'] ?? $slots['Name'] ?? null;
-    $snum  = $slots['number'] ?? $slots['Number'] ?? null;
-    if (is_array($sname)) {
-        $defaults['name_left_pct'] = $sname['left_pct'] ?? $defaults['name_left_pct'];
-        $defaults['name_top_pct']  = $sname['top_pct'] ?? $defaults['name_top_pct'];
-        $defaults['name_width_pct']= $sname['width_pct'] ?? $defaults['name_width_pct'];
-        if (!empty($sname['font_size_pt'])) $defaults['name_font_pt'] = (int)$sname['font_size_pt'];
-    }
-    if (is_array($snum)) {
-        $defaults['number_left_pct'] = $snum['left_pct'] ?? $defaults['number_left_pct'];
-        $defaults['number_top_pct']  = $snum['top_pct'] ?? $defaults['number_top_pct'];
-        $defaults['number_width_pct']= $snum['width_pct'] ?? $defaults['number_width_pct'];
-        if (!empty($snum['font_size_pt'])) $defaults['number_font_pt'] = (int)$snum['font_size_pt'];
-    }
-}
-
-// convert percent positions to mm coordinates for the PDF view
-$name_left_mm   = ($defaults['name_left_pct'] / 100.0) * $displayWidthMm;
-$name_top_mm    = ($defaults['name_top_pct']  / 100.0) * $displayHeightMm;
-$number_left_mm = ($defaults['number_left_pct'] / 100.0) * $displayWidthMm;
-$number_top_mm  = ($defaults['number_top_pct']  / 100.0) * $displayHeightMm;
-
-$name_font_size_pt   = (int) ($defaults['name_font_pt'] ?? 22);
-$number_font_size_pt = (int) ($defaults['number_font_pt'] ?? 40);
-
-// normalize font name and color (fallbacks)
-$fontCandidates = [
-    'bebas' => 'Bebas Neue',
-    'oswald' => 'Oswald',
-    'anton' => 'Anton',
-    'impact' => 'Impact',
-];
-$fontNameRaw = trim((string)($order->font ?? ''));
-$fontKey = strtolower(preg_replace('/[^a-z0-9]+/',' ', $fontNameRaw));
-$fontName = $fontCandidates[$fontKey] ?? ($order->font ?? 'DejaVu Sans');
-
-$colorRaw = trim((string)($order->color ?? ''));
-$color = $colorRaw !== '' ? (($colorRaw[0] === '#') ? $colorRaw : '#' . ltrim($colorRaw, '#')) : '#000000';
-
-// finally build $pdfData including the required variables used in blade
-$pdfData = [
-    'product_name' => $order->product_name ?? null,
-    'customer_name' => $order->name_text ?? null,
-    'customer_number' => $order->number_text ?? null,
-    'order_id' => $order->id,
-    'players' => $players,
-    'preview_data_uri' => $preview_data_uri ?? null,
-    'preview_url' => $preview_url ?? null,
-    'preview_local_path' => $preview_local_path ?? null,
-    'displayWidthMm' => round($displayWidthMm,2),
-    'displayHeightMm' => round($displayHeightMm,2),
-    'name_left_mm' => round($name_left_mm,2),
-    'name_top_mm' => round($name_top_mm,2),
-    'number_left_mm' => round($number_left_mm,2),
-    'number_top_mm' => round($number_top_mm,2),
-    'name_font_size_pt' => $name_font_size_pt,
-    'number_font_size_pt' => $number_font_size_pt,
-    'font' => $fontName,
-    'color' => $color,
-];
-
-
-    // generate pdf (use your existing blade view)
-    try {
-        $pdf = \Barryvdh\DomPDF\Facade\Pdf::setOptions([
-            'isRemoteEnabled' => true,
-            'isHtml5ParserEnabled' => true,
-            'defaultFont' => 'DejaVu Sans',
-        ])->loadView('admin.design_orders.package_for_corel', $pdfData);
-
-        // save to temp and zip as you already do, or just stream pdf:
-        return $pdf->stream('design_order_' . $id . '.pdf'); // or ->download(...)
-    } catch (\Throwable $e) {
-        Log::error('DesignOrder download PDF generation failed: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
-        abort(500, 'Could not generate PDF: ' . $e->getMessage());
-    }
-}
-
-
+    /**
+     * Recursively remove a directory
+     */
     private function rrmdir($dir) {
         if (!is_dir($dir)) return;
         $it = new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS);
@@ -351,6 +427,9 @@ $pdfData = [
         @rmdir($dir);
     }
 
+    /**
+     * Delete a design order (and preview file if present)
+     */
     public function destroy(Request $request, $id)
     {
         try {
@@ -363,7 +442,7 @@ $pdfData = [
                 $path = substr($row->preview_src, strpos($row->preview_src, '/storage/') + 9);
                 if ($path) {
                     try {
-                        \Illuminate\Support\Facades\Storage::disk('public')->delete($path);
+                        Storage::disk('public')->delete($path);
                     } catch (\Throwable $e) {
                         Log::warning('Could not delete preview file: ' . $e->getMessage());
                     }
