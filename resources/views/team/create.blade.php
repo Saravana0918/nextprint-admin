@@ -998,19 +998,27 @@ document.addEventListener('DOMContentLoaded', function(){
       return;
     }
 
-    // create preview image (dataURL)
-    const dataUrl = await makePreviewDataURL(); // makePreviewDataURL must exist in scope (you have it)
+    // create preview image (dataURL) with safe fallback
+    let dataUrl = null;
+    try {
+      dataUrl = await makePreviewDataURL(); // may throw or return null
+    } catch(err) {
+      console.warn('makePreviewDataURL failed', err);
+      dataUrl = null;
+    }
 
     // build payload
     const payload = {
       product_id: form.querySelector('input[name="product_id"]')?.value || null,
       order_id: form.querySelector('input[name="order_id"]')?.value || null,
       players: players,
-      preview_src: dataUrl,
+      preview_src: dataUrl, // may be null
       team_logo_url: document.getElementById('team-prefill-logo')?.value || ''
     };
 
-    // send to server
+    // debug logs (optional, remove later)
+    console.info('Saving team payload', payload, 'saveUrl=', saveUrl);
+
     const resp = await fetch(saveUrl, {
       method: 'POST',
       headers: {
@@ -1024,17 +1032,22 @@ document.addEventListener('DOMContentLoaded', function(){
 
     const json = await resp.json().catch(()=>null);
 
-    if (!resp.ok || !json || json.success !== true) {
-      console.error('Save failed', json);
-      alert('Save failed: ' + ((json && (json.message || json.error)) || ('HTTP ' + resp.status)));
+    // accept either boolean true or string "true" or status "ok"
+    const ok = resp.ok && json && (json.success === true || json.success === 'true' || json.status === 'ok' || json.success == 1);
+
+    if (!ok) {
+      console.error('Save failed', resp.status, json);
+      // show helpful message
+      const msg = (json && (json.message || json.error)) || ('HTTP ' + resp.status);
+      alert('Save failed: ' + msg);
       saveBtn.disabled = false;
       saveBtn.textContent = originalText;
       return;
     }
 
     // -- SUCCESS PATH --
-    const previewUrl = json.preview_url || json.preview || null;
-    const teamId = json.team_id || null;
+    const previewUrl = (json.preview_url || json.preview || null);
+    const teamId = (json.team_id || null);
 
     // set hidden inputs so next "Add To Cart" (form submit) sends them too
     try {
@@ -1047,26 +1060,19 @@ document.addEventListener('DOMContentLoaded', function(){
       if (idHidden && teamId) idHidden.value = teamId;
     } catch(e){ console.warn('Could not set team id hidden', e); }
 
-    // Also persist preview to per-row fields (optional) - not necessary but helpful
-    // If your backend expects player-level preview_src, you can set them here.
-
     // Enable Add To Cart button and make sure it's visible
     try {
       if (atcBtn) {
         atcBtn.disabled = false;
         atcBtn.classList.remove('d-none'); // in case it was hidden
-        // optionally set text
         try { atcBtn.textContent = atcBtn.getAttribute('data-label') || 'Add To Cart'; } catch(e){}
       }
     } catch(e) { console.warn('Could not enable Add To Cart', e); }
 
-    // Remove the Save button (prevents duplicate saves)
+    // Remove the Save button (prevent duplicates)
     try { saveBtn.remove(); } catch(e) { saveBtn.style.display = 'none'; }
 
-    // nice UX message
     alert(json.message || 'Design saved ✔ You can now click Add To Cart.');
-
-    // done - you may choose to redirect somewhere else if backend returned an order id
     return;
 
   } catch (err) {
