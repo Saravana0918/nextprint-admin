@@ -156,14 +156,47 @@ class PublicDesignerController extends Controller
         // ----------------------------
         // Filter only real areas (existing IDs)
         // ----------------------------
-        $filteredLayoutSlots = [];
-        if (!empty($layoutSlots) && is_array($layoutSlots)) {
-            foreach (['name', 'number'] as $k) {
-                if (isset($layoutSlots[$k]) && !empty($layoutSlots[$k]['id'])) {
-                    $filteredLayoutSlots[$k] = $layoutSlots[$k];
+        // ----------------------------
+// Filter only real areas (existing IDs)
+// and fallback: if no explicit "name" but there is exactly one
+// non-name/number slot defined, map it to "name" so designer shows NAME.
+// ----------------------------
+$filteredLayoutSlots = [];
+if (!empty($layoutSlots) && is_array($layoutSlots)) {
+    // include explicit name/number only when they originate from DB (have id)
+    foreach (['name', 'number'] as $k) {
+        if (isset($layoutSlots[$k]) && !empty($layoutSlots[$k]['id'])) {
+            $filteredLayoutSlots[$k] = $layoutSlots[$k];
+        }
+    }
+
+    // If name missing, try to detect a single meaningful artwork slot and map it to name.
+    if (empty($filteredLayoutSlots['name'])) {
+        // find candidate slots that are NOT named 'number' and have an id
+        $candidates = [];
+        foreach ($layoutSlots as $key => $slot) {
+            $kl = strtolower((string)$key);
+            if ($kl === 'number' || $kl === 'name') continue;
+            if (!empty($slot['id'])) {
+                // require a minimal sensible size to avoid tiny artifacts
+                $w = isset($slot['width_pct']) ? (float)$slot['width_pct'] : 0;
+                $h = isset($slot['height_pct']) ? (float)$slot['height_pct'] : 0;
+                if ($w <= 1) $w *= 100;
+                if ($h <= 1) $h *= 100;
+                if ($w > 2 || $h > 2) { // modest size threshold
+                    $candidates[$key] = $slot;
                 }
             }
         }
+
+        // If exactly one candidate, map it to 'name'
+        if (count($candidates) === 1) {
+            $firstKey = array_keys($candidates)[0];
+            $filteredLayoutSlots['name'] = $candidates[$firstKey];
+            \Log::info("designer: mapped single generic slot '{$firstKey}' -> name for product_id={$product->id}");
+        }
+    }
+}
 
         // ----------------------------
         // Compute display price
