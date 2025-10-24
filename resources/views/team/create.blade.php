@@ -207,6 +207,7 @@
         {{-- Persist uploaded logo for server-side storage --}}
         <input type="hidden" id="team-prefill-logo" name="team_logo_url" value="{{ $prefill['prefill_logo'] ?? '' }}">
         <input type="hidden" id="team-preview-url" name="team_preview_url" value="">
+        <input type="hidden" id="team-id-hidden" name="team_id" value="">
 
         <div class="mb-3 mobile-action-row">
           <button type="button" id="btn-add-row" class="btn btn-primary">ADD NEW</button>
@@ -969,12 +970,15 @@ document.addEventListener('DOMContentLoaded', function(){
   }
 }
 
-
   async function saveDesign() {
-    saveBtn.disabled = true;
-    saveBtn.textContent = 'Saving...';
+  // disable save while processing
+  if (!saveBtn) return;
+  saveBtn.disabled = true;
+  const originalText = saveBtn.textContent || 'Save Design';
+  saveBtn.textContent = 'Saving...';
 
-    // collect players array from DOM rows (ensure classes match your HTML)
+  try {
+    // collect players from DOM
     const players = Array.from(document.querySelectorAll('#players-list .player-row')).map((r, idx) => {
       return {
         id: r.dataset.playerId ?? null,
@@ -990,66 +994,89 @@ document.addEventListener('DOMContentLoaded', function(){
     if (players.length === 0) {
       alert('Please add at least one player before saving.');
       saveBtn.disabled = false;
-      saveBtn.textContent = 'Save Design';
+      saveBtn.textContent = originalText;
       return;
     }
 
     // create preview image (dataURL)
-    const dataUrl = await makePreviewDataURL();
+    const dataUrl = await makePreviewDataURL(); // makePreviewDataURL must exist in scope (you have it)
 
-    // Build payload: include order_id (VERY IMPORTANT) so backend updates design_orders.team_id immediately
+    // build payload
     const payload = {
       product_id: form.querySelector('input[name="product_id"]')?.value || null,
-      order_id: form.querySelector('input[name="order_id"]')?.value || null, // ensure this input exists in the form
+      order_id: form.querySelector('input[name="order_id"]')?.value || null,
       players: players,
-      preview_src: dataUrl,      // backend accepts dataURL and will save it
+      preview_src: dataUrl,
       team_logo_url: document.getElementById('team-prefill-logo')?.value || ''
     };
 
-    try {
-      const resp = await fetch(saveUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'X-CSRF-TOKEN': csrf
-        },
-        credentials: 'same-origin',
-        body: JSON.stringify(payload)
-      });
+    // send to server
+    const resp = await fetch(saveUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-CSRF-TOKEN': csrf
+      },
+      credentials: 'same-origin',
+      body: JSON.stringify(payload)
+    });
 
-      const json = await resp.json().catch(()=>null);
-      if (!resp.ok || !json || json.success !== true) {
-        console.error('Save failed', json);
-        alert('Save failed: ' + ((json && (json.message || json.error)) || ('HTTP ' + resp.status)) );
-        saveBtn.disabled = false;
-        saveBtn.textContent = 'Save Design';
-        return;
-      }
+    const json = await resp.json().catch(()=>null);
 
-      // success -> server returns preview_url and team_id (if implemented)
-      const previewUrl = json.preview_url || json.preview || null;
-      const teamId = json.team_id || null;
-
-      if (previewUrl && previewInput) previewInput.value = previewUrl;
-
-      // enable Add To Cart (if present)
-      if (atcBtn) { atcBtn.disabled = false; atcBtn.classList.remove('d-none'); }
-      saveBtn.remove();
-
-      // show toast / alert
-      alert(json.message || 'Design saved ✔ You can now click Add To Cart.');
-
-      // OPTIONAL: redirect to order show or admin view
-      // if (teamId) window.location.href = '/admin/design-orders/' + (payload.order_id || '');
-
-    } catch (err) {
-      console.error('Save error', err);
-      alert('Save failed — network/server error. See console.');
+    if (!resp.ok || !json || json.success !== true) {
+      console.error('Save failed', json);
+      alert('Save failed: ' + ((json && (json.message || json.error)) || ('HTTP ' + resp.status)));
       saveBtn.disabled = false;
-      saveBtn.textContent = 'Save Design';
+      saveBtn.textContent = originalText;
+      return;
     }
+
+    // -- SUCCESS PATH --
+    const previewUrl = json.preview_url || json.preview || null;
+    const teamId = json.team_id || null;
+
+    // set hidden inputs so next "Add To Cart" (form submit) sends them too
+    try {
+      const previewHidden = document.getElementById('team-preview-url') || document.querySelector('input[name="team_preview_url"]');
+      if (previewHidden) previewHidden.value = previewUrl || '';
+    } catch(e){ console.warn('Could not set preview hidden', e); }
+
+    try {
+      const idHidden = document.getElementById('team-id-hidden') || document.querySelector('input[name="team_id"]');
+      if (idHidden && teamId) idHidden.value = teamId;
+    } catch(e){ console.warn('Could not set team id hidden', e); }
+
+    // Also persist preview to per-row fields (optional) - not necessary but helpful
+    // If your backend expects player-level preview_src, you can set them here.
+
+    // Enable Add To Cart button and make sure it's visible
+    try {
+      if (atcBtn) {
+        atcBtn.disabled = false;
+        atcBtn.classList.remove('d-none'); // in case it was hidden
+        // optionally set text
+        try { atcBtn.textContent = atcBtn.getAttribute('data-label') || 'Add To Cart'; } catch(e){}
+      }
+    } catch(e) { console.warn('Could not enable Add To Cart', e); }
+
+    // Remove the Save button (prevents duplicate saves)
+    try { saveBtn.remove(); } catch(e) { saveBtn.style.display = 'none'; }
+
+    // nice UX message
+    alert(json.message || 'Design saved ✔ You can now click Add To Cart.');
+
+    // done - you may choose to redirect somewhere else if backend returned an order id
+    return;
+
+  } catch (err) {
+    console.error('Save error', err);
+    alert('Save failed — network/server error. See console.');
+    saveBtn.disabled = false;
+    saveBtn.textContent = 'Save Design';
+    return;
   }
+}
 
   saveBtn.addEventListener('click', function(e){
     e.preventDefault();
