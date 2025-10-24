@@ -318,7 +318,6 @@ if (!empty($data['order_id'])) {
             $firstPlayer = $playersProcessed[0] ?? null;
             $orderData = [
                 'product_id' => $data['product_id'],
-                'product_name' => $product->name ?? null,
                 'shopify_product_id' => $product->shopify_product_id ?? null,
                 'variant_id' => $firstPlayer['variant_id'] ?? null,
                 'size' => $firstPlayer['size'] ?? null,
