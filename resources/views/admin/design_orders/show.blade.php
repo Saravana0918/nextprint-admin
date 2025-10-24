@@ -1,7 +1,35 @@
 @extends('layouts.app')
 
 @section('content')
-@php use Illuminate\Support\Str; @endphp
+@php
+  use Illuminate\Support\Str;
+  use Illuminate\Support\Facades\Storage;
+
+  // small font key -> friendly name map
+  $fontMap = [
+    'bebas' => 'Bebas Neue',
+    'bebas neue' => 'Bebas Neue',
+    'bebas-neue' => 'Bebas Neue',
+    'oswald' => 'Oswald',
+    'anton' => 'Anton',
+    'impact' => 'Impact',
+  ];
+
+  // helper: normalize color to hex with leading #
+  $normalizeColor = function($c) {
+    if (!$c) return null;
+    $c = trim((string)$c);
+    try { $c = urldecode($c); } catch(\Throwable$e){}
+    if ($c === '') return null;
+    if ($c[0] !== '#') $c = '#' . ltrim($c, '#');
+    return $c;
+  };
+
+  $orderFontRaw = trim((string)($order->font ?? ''));
+  $orderFontKey = strtolower(preg_replace('/[^a-z0-9]+/',' ', $orderFontRaw));
+  $orderFontLabel = $fontMap[$orderFontKey] ?? ($order->font ? $order->font : '—');
+  $orderColorHex = $normalizeColor($order->color ?? null);
+@endphp
 
 <div class="container py-4">
   <div class="mb-3 d-flex justify-content-between align-items-center">
@@ -26,7 +54,20 @@
             {{ $order->name_text ?? '—' }} / {{ $order->number_text ?? '—' }}
           </p>
 
-          <p class="mb-1"><strong>Font / Color:</strong> {{ $order->font ?? '—' }} / {{ $order->color ?? '—' }}</p>
+          <p class="mb-1">
+            <strong>Font / Color:</strong>
+            <span title="{{ $orderFontRaw }}">{{ $orderFontLabel }}</span>
+            &nbsp;/&nbsp;
+            @if($orderColorHex)
+              <span class="d-inline-flex align-items-center">
+                <span style="display:inline-block;width:18px;height:18px;border:1px solid #ccc;background:{{ $orderColorHex }};margin-right:6px;border-radius:3px;"></span>
+                <code style="font-size:11px;">{{ $orderColorHex }}</code>
+              </span>
+            @else
+              <span class="text-muted">—</span>
+            @endif
+          </p>
+
           <p class="mb-1"><strong>Quantity:</strong> {{ $order->quantity ?? '1' }}</p>
 
           <p class="mb-1"><strong>Uploaded Logo URL:</strong>
@@ -44,18 +85,21 @@
           <h6 class="mb-2">Preview</h6>
 
           @php
-            $preview = $order->preview_src ?? null;
+            $preview = $order->preview_src ?? $order->preview_path ?? null;
             $previewUrl = null;
             if (!empty($preview)) {
-              // normalize storage paths and absolute urls
               if (Str::startsWith($preview, '/storage') || Str::startsWith($preview, 'storage')) {
-                // if it's '/storage/...' make it asset()
                 $previewUrl = asset(ltrim($preview, '/'));
               } elseif (Str::startsWith($preview, 'http://') || Str::startsWith($preview, 'https://')) {
                 $previewUrl = $preview;
               } else {
-                // maybe it's stored path relative to storage/app/public
-                $previewUrl = Storage::disk('public')->exists($preview) ? asset('storage/'.$preview) : $preview;
+                // try disk public existence (preview may be "team_previews/xxx.png")
+                if (Storage::disk('public')->exists($preview)) {
+                  $previewUrl = asset('storage/' . ltrim($preview, '/'));
+                } else {
+                  // maybe saved already as '/storage/...'
+                  $previewUrl = $preview;
+                }
               }
             }
           @endphp
@@ -97,15 +141,19 @@
                 <tbody>
                   @foreach($players as $index => $p)
                     @php
-                      // support both object and array shapes
-                      $pId = is_object($p) ? ($p->id ?? $index+1) : ($p['id'] ?? $index+1);
-                      $pName = is_object($p) ? ($p->name ?? '') : ($p['name'] ?? '');
-                      $pNumber = is_object($p) ? ($p->number ?? '') : ($p['number'] ?? '');
-                      $pSize = is_object($p) ? ($p->size ?? '') : ($p['size'] ?? '');
-                      $pFont = is_object($p) ? ($p->font ?? $order->font ?? '—') : ($p['font'] ?? $order->font ?? '—');
-                      $pPreview = is_object($p) ? ($p->preview_src ?? $p->preview_image ?? null) : ($p['preview_src'] ?? $p['preview_image'] ?? null);
-                      $pCreated = is_object($p) ? ($p->created_at ?? null) : ($p['created_at'] ?? null);
+                      $pObj = is_object($p) ? $p : (object)$p;
+                      $pId = $pObj->id ?? ($index+1);
+                      $pName = $pObj->name ?? '';
+                      $pNumber = $pObj->number ?? '';
+                      $pSize = $pObj->size ?? '';
+                      $pFontRaw = $pObj->font ?? $order->font ?? '';
+                      $pFontKey = strtolower(preg_replace('/[^a-z0-9]+/',' ', trim((string)$pFontRaw)));
+                      $pFontLabel = $fontMap[$pFontKey] ?? ($pFontRaw ?: '—');
 
+                      $pColor = $pObj->color ?? null;
+                      if ($pColor) { $pColor = (strpos($pColor, '#') === 0) ? $pColor : '#' . ltrim($pColor, '#'); }
+
+                      $pPreview = $pObj->preview_src ?? null;
                       $pUrl = null;
                       if (!empty($pPreview)) {
                         if (Str::startsWith($pPreview, '/storage') || Str::startsWith($pPreview, 'storage')) {
@@ -116,6 +164,8 @@
                           $pUrl = Storage::disk('public')->exists($pPreview) ? asset('storage/'.$pPreview) : $pPreview;
                         }
                       }
+
+                      $pCreated = $pObj->created_at ?? null;
                     @endphp
 
                     <tr>
@@ -123,7 +173,15 @@
                       <td>{{ $pName }}</td>
                       <td>{{ $pNumber }}</td>
                       <td>{{ $pSize }}</td>
-                      <td>{{ $pFont }}</td>
+                      <td>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                          <span>{{ $pFontLabel }}</span>
+                          @if($pColor)
+                            <span style="display:inline-block;width:14px;height:14px;background:{{ $pColor }};border:1px solid #ccc;border-radius:3px;"></span>
+                            <small class="text-muted">{{ $pColor }}</small>
+                          @endif
+                        </div>
+                      </td>
                       <td style="width:90px;">
                         @if($pUrl)
                           <img src="{{ $pUrl }}" width="56" height="56" style="object-fit:cover; border-radius:4px;">
