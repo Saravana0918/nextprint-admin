@@ -244,6 +244,40 @@
   console.info('showUpload:', window.showUpload, 'hasArtworkSlot:', window.hasArtworkSlot);
 </script>
 <script>
+/* Hide number input fields when product does NOT have a number slot */
+(function(){
+  const hasNumber = !!(window.layoutSlots && window.layoutSlots.number);
+
+  if (!hasNumber) {
+    // hide visible number input elements (desktop + mobile)
+    ['#np-num', '#np-num-mobile'].forEach(sel => {
+      document.querySelectorAll(sel).forEach(el => {
+        const parent = el.closest('.np-field') || el.closest('.mb-2') || el.closest('.desktop-only') || el.parentElement;
+        if (parent) parent.style.display = 'none'; else el.style.display = 'none';
+        try { el.value = ''; } catch(e){}
+      });
+    });
+
+    // hide the hidden number field used for form submission
+    const hidden = document.getElementById('np-num-hidden') || document.querySelector('input[name="number_text"]');
+    if (hidden) {
+      try { hidden.value = ''; hidden.disabled = true; } catch(e){}
+      const p = hidden.closest('.mb-2') || hidden.parentElement;
+      if (p) p.style.display = 'none';
+    }
+
+    // hide number overlay (defensive)
+    const pvNum = document.getElementById('np-prev-num');
+    if (pvNum) pvNum.style.display = 'none';
+
+    console.info('Designer: number inputs hidden (no number slot).');
+  } else {
+    console.info('Designer: number slot present, inputs kept visible.');
+  }
+})();
+</script>
+
+<script>
 /* MUST be placed before any code that calls findPreferredSlot() */
 window.findPreferredSlot = function(){
   try {
@@ -610,7 +644,12 @@ altNumEls.forEach(el => {
     evt.preventDefault();
     const size = $('np-size')?.value || '';
     if (!size) { alert('Please select a size.'); return; }
-    if (!NAME_RE.test(nameEl.value||'') || !NUM_RE.test(numEl.value||'')) { alert('Please enter valid Name and Number'); return; }
+    if (!NAME_RE.test((nameEl?.value||''))) {
+  alert('Please enter a valid Name'); return;
+  }
+  if (window.layoutSlots && window.layoutSlots.number) {
+    if (!NUM_RE.test((numEl?.value||''))) { alert('Please enter a valid Number'); return; }
+  }
     syncHidden();
     const variantId = (document.getElementById('np-variant-id') || { value: '' }).value;
     if (!variantId || !/^\d+$/.test(variantId)) { alert('Variant not selected or invalid. Please re-select size.'); return; }
