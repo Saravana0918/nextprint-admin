@@ -623,22 +623,26 @@ altNumEls.forEach(el => {
   if (addTeam) addTeam.addEventListener('click', function(e) {
   e.preventDefault();
   const productId = $('np-product-id')?.value || null;
-  const params = new URLSearchParams();
-  if (productId) params.set('product_id', productId);
-  if (nameEl?.value) params.set('prefill_name', nameEl.value);
-  if (numEl?.value) params.set('prefill_number', numEl.value.replace(/\D/g,'')); 
-  if (fontEl?.value) params.set('prefill_font', fontEl.value);
-  if (colorEl?.value) params.set('prefill_color', encodeURIComponent(colorEl.value));
-  const sizeVal = $('np-size')?.value || '';
-  if (sizeVal) params.set('prefill_size', sizeVal);
-  try { if (window.layoutSlots && Object.keys(window.layoutSlots || {}).length) params.set('layoutSlots', encodeURIComponent(JSON.stringify(window.layoutSlots))); } catch (err) {}
-  // NEW: include public logo URL (if available)
-  try {
-    if (window.lastUploadedLogoUrl) params.set('prefill_logo', encodeURIComponent(window.lastUploadedLogoUrl));
-  } catch(e){}
+  // designer: when user clicks "Add Team Players"
+const params = new URLSearchParams();
+const productId = document.getElementById('np-product-id')?.value || '';
+const name = (document.querySelector('#np-name')?.value || '').toUpperCase();
+const number = (document.querySelector('#np-num')?.value || '').replace(/\D/g,'');
+const font = (document.getElementById('np-font')?.value || '');
+const color = (document.getElementById('np-color')?.value || '');
+if (productId) params.set('product_id', productId);
+if (name) params.set('prefill_name', encodeURIComponent(name));
+if (number) params.set('prefill_number', encodeURIComponent(number));
+if (font) params.set('prefill_font', encodeURIComponent(font));
+if (color) params.set('prefill_color', encodeURIComponent(color));
+// layoutSlots might be large JSON -> encode once
+if (window.layoutSlots) params.set('layoutSlots', encodeURIComponent(JSON.stringify(window.layoutSlots)));
+// logo must be public URL (see step 2)
+if (window.lastUploadedLogoUrl) params.set('prefill_logo', encodeURIComponent(window.lastUploadedLogoUrl));
 
-  const base = "{{ route('team.create') }}";
-  window.location.href = base + (params.toString() ? ('?' + params.toString()) : '');
+const base = "{{ route('team.create') }}"; // blade variable in designer
+window.location.href = base + (params.toString() ? ('?' + params.toString()) : '');
+
 });
 
 

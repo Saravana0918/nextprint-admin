@@ -25,9 +25,15 @@
       if ($qLogo)  $prefill['prefill_logo']   = urldecode($qLogo);
 
       if (!empty($qLayout)) {
-          $decoded = json_decode(urldecode($qLayout), true);
-          if (is_array($decoded)) $layoutSlots = $decoded;
+          $decoded = @json_decode(urldecode($qLayout), true);
+          if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) $layoutSlots = $decoded;
+          else {
+              // fallback: maybe it wasn't encoded
+              $decoded2 = @json_decode($qLayout, true);
+              if (json_last_error() === JSON_ERROR_NONE && is_array($decoded2)) $layoutSlots = $decoded2;
+          }
       }
+
   } catch(\Throwable $e) {
       // ignore
   }
@@ -227,6 +233,13 @@
 <script>
   window.prefill = {!! json_encode($prefill ?? []) !!};
   window.layoutSlots = {!! json_encode($layoutSlots ?? [], JSON_NUMERIC_CHECK) !!};
+  if (!window.layoutSlots || !window.layoutSlots.number) {
+  // hide number input column in each player row template (client side)
+  // we already create rows dynamically — hide number inputs on createRow()
+  document.querySelectorAll('.player-number').forEach(n => { n.closest('.player-row')?.classList.add('no-number'); n.style.display='none'; });
+  // hide overlay number visually
+  document.getElementById('overlay-number').style.display = 'none';
+}
 </script>
 
 <template id="player-row-template">
@@ -954,12 +967,7 @@ document.addEventListener('DOMContentLoaded', function(){
       if (previewUrl && previewInput) previewInput.value = previewUrl;
 
       // enable Add To Cart (if present)
-      if (atcBtn) {
-        atcBtn.disabled = false;
-        atcBtn.classList.remove('d-none');
-      }
-
-      // remove Save button to prevent duplicate saves (as per your UX)
+      if (atcBtn) { atcBtn.disabled = false; atcBtn.classList.remove('d-none'); }
       saveBtn.remove();
 
       // show toast / alert
