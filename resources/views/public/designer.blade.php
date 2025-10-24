@@ -117,12 +117,12 @@
         <div class="mobile-only">
           <div class="np-input-group">
             <div class="np-field">
-              <input id="np-name" type="text" maxlength="11" class="np-input" placeholder="YOUR NAME">
+              <input id="np-name-mobile" type="text" maxlength="11" class="np-input" placeholder="YOUR NAME">
               <span class="np-max">MAX. 11</span>
             </div>
 
             <div class="np-field">
-              <input id="np-num" type="text" maxlength="2" inputmode="numeric" class="np-input" placeholder="09">
+              <input id="np-num-mobile" type="text" maxlength="2" inputmode="numeric" class="np-input" placeholder="09">
               <span class="np-max">MAX. 2</span>
             </div>
           </div>
@@ -294,20 +294,18 @@ window.findPreferredSlot = function(){
 (function(){
   const $ = id => document.getElementById(id);
 
-// helper: find visible input (prefer mobile if small screen)
 function findVisibleInput(id) {
-  // prefer an input inside .mobile-only on mobile
   try {
     if (window.innerWidth <= 767) {
-      const m = document.querySelector('.mobile-only #' + id);
+      // prefer mobile id when on small screens
+      const m = document.querySelector('.mobile-only #' + id + '-mobile');
       if (m) return m;
     }
-    // otherwise prefer desktop explicitly
     const d = document.querySelector('.desktop-only #' + id);
     if (d) return d;
-  } catch(e) { /* ignore */ }
-  // fallback to any id match
-  return document.getElementById(id);
+  } catch(e) {}
+  // fallback: try desktop then mobile then any
+  return document.querySelector('#' + id) || document.querySelector('#' + id + '-mobile') || null;
 }
 
 // grab elements (use visible ones for main listeners)
@@ -319,9 +317,9 @@ const colorEl = findVisibleInput('np-color') || $('np-color');
 
 const pvName  = $('np-prev-name'), pvNum = $('np-prev-num'), baseImg = $('np-base'), stage = $('np-stage');
 
-// also find possible alternate inputs (both mobile & desktop) so we can attach listeners to all
-const altNameEls = Array.from(document.querySelectorAll('#np-name')); // may include duplicate ids: select all
-const altNumEls  = Array.from(document.querySelectorAll('#np-num'));
+  const altNameEls = Array.from(document.querySelectorAll('#np-name, #np-name-mobile')).filter(Boolean);
+  const altNumEls  = Array.from(document.querySelectorAll('#np-num, #np-num-mobile')).filter(Boolean);
+
   const btn = $('np-atc-btn'), form = $('np-atc-form'), addTeam = $('btn-add-team');
   const sizeEl = $('np-size');
   const layout = (typeof window.layoutSlots === 'object' && window.layoutSlots !== null) ? window.layoutSlots : {};
@@ -436,11 +434,29 @@ const altNumEls  = Array.from(document.querySelectorAll('#np-num'));
   }
 
   function applyLayout(){
-    if (!baseImg || !baseImg.complete) return;
-    if (layout && layout.name) placeOverlay(pvName, layout.name, 'name'); else { pvName.style.left='50%'; pvName.style.top='45%'; pvName.style.transform='translate(-50%,-50%)'; }
-    if (layout && layout.number) placeOverlay(pvNum, layout.number, 'number'); else { pvNum.style.left='50%'; pvNum.style.top='65%'; pvNum.style.transform='translate(-50%,-50%)'; }
-    renderMasks();
+  if (!baseImg || !baseImg.complete) return;
+
+  // NAME
+  if (layout && layout.name) {
+    pvName.style.display = 'flex';
+    placeOverlay(pvName, layout.name, 'name');
+  } else {
+    // hide name overlay if no slot
+    pvName.style.display = 'none';
   }
+
+  // NUMBER
+  if (layout && layout.number) {
+    pvNum.style.display = 'flex';
+    placeOverlay(pvNum, layout.number, 'number');
+  } else {
+    // hide number overlay if no slot
+    pvNum.style.display = 'none';
+  }
+
+  renderMasks();
+}
+
 
   // place user image inside chosen slot (cover)
   function placeUserImage(slot){
@@ -521,7 +537,11 @@ altNumEls.forEach(el => {
     syncPreview(); syncHidden(); updateATCState();
   });
 });
-  if (fontEl) fontEl.addEventListener('change', ()=>{ applyFont(fontEl.value); syncHidden(); syncPreview(); });
+  if (fontEl) fontEl.addEventListener('change', ()=>{ 
+  applyFont(fontEl.value); 
+  window.selectedFontName = fontEl.options[fontEl.selectedIndex]?.text || fontEl.value;
+  syncHidden(); syncPreview(); 
+});
   if (colorEl) colorEl.addEventListener('input', ()=>{ if(pvName) pvName.style.color = colorEl.value; if(pvNum) pvNum.style.color = colorEl.value; syncHidden(); });
 
   document.querySelectorAll('.np-swatch').forEach(b=>{
@@ -842,12 +862,12 @@ async function uploadBaseArtwork() {
   const nameEl = document.getElementById('np-prev-name');
   const numEl = document.getElementById('np-prev-num');
   const overlays = [nameEl, numEl];
-  const originalDisplay = overlays.map(el => el ? el.style.display : null);
+  const originalDisplay = overlays.map(el => el ? el.style.display || '' : null);
   overlays.forEach(el => { if (el) el.style.display = 'none'; });
 
   await new Promise(r => setTimeout(r, 80));
 
-  const previewNode = document.getElementById('design-canvas') || document.getElementById('np-preview-root');
+  const previewNode = document.getElementById('np-stage');
   const canvas = await html2canvas(previewNode, {useCORS: true, scale: 2, backgroundColor: null});
   const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png', 0.92));
 
@@ -856,27 +876,30 @@ async function uploadBaseArtwork() {
   const form = new FormData();
   form.append('file', blob, 'preview_base_' + Date.now() + '.png');
 
-  const res = await fetch('/designer/upload-temp', { method: 'POST', body: form, headers: { 'X-CSRF-TOKEN': window.Laravel ? window.Laravel.csrfToken : '' } });
+  const res = await fetch('{{ route("designer.upload_temp") }}', { method: 'POST', body: form, credentials: 'same-origin', headers: { 'X-CSRF-TOKEN': csrf } });
   if (!res.ok) {
-    const txt = await res.text();
-    throw new Error('Base upload failed: ' + txt);
+    const txt = await res.text().catch(()=>null);
+    throw new Error('Base upload failed: ' + (txt || res.status));
   }
-  const data = await res.json();
-  if (!data.url) throw new Error('upload-temp did not return url');
+  const data = await res.json().catch(()=>null);
+  if (!data || !data.url) throw new Error('upload-temp did not return url');
   return data.url;
 }
 
 async function generateFullPreview() {
-  // if you already have a routine that uploads the full preview, use that instead.
-  const previewNode = document.getElementById('design-canvas') || document.getElementById('np-preview-root');
+  const previewNode = document.getElementById('np-stage');
   const canvas = await html2canvas(previewNode, {useCORS: true, scale: 2, backgroundColor: null});
   const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png', 0.92));
   const form = new FormData();
   form.append('file', blob, 'preview_full_' + Date.now() + '.png');
 
-  const res = await fetch('/designer/upload-temp', { method: 'POST', body: form, headers: { 'X-CSRF-TOKEN': window.Laravel ? window.Laravel.csrfToken : '' } });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.message || 'Full preview upload failed');
+  const res = await fetch('{{ route("designer.upload_temp") }}', { method: 'POST', body: form, credentials: 'same-origin', headers: { 'X-CSRF-TOKEN': csrf } });
+  if (!res.ok) {
+    const txt = await res.text().catch(()=>null);
+    throw new Error('Full preview upload failed: ' + (txt || res.status));
+  }
+  const data = await res.json().catch(()=>null);
+  if (!data || !data.url) throw new Error('upload-temp did not return url');
   return data.url;
 }
 
