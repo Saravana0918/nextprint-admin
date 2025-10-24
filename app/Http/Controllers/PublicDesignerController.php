@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
@@ -6,38 +7,52 @@ use App\Models\Product;
 use App\Models\ProductView;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
 
 class PublicDesignerController extends Controller
 {
+    /**
+     * Show public designer for a product + view
+     *
+     * Expects query params: product_id (shopify id or local id), view_id (optional)
+     *
+     * Returns view with:
+     * - product, view, areas
+     * - layoutSlots (filtered name+number)
+     * - originalLayoutSlots (full set)
+     * - artworkUrl, artworkOrigW, artworkOrigH
+     * - showUpload (bool)
+     * - displayPrice (float)
+     */
     public function show(Request $request)
     {
         $productId = $request->query('product_id');
         $viewId    = $request->query('view_id');
 
         // ----------------------------
-        // product lookup (robust) - eager load variants, views and view->areas
+        // product lookup (robust) - eager load relations
         // ----------------------------
         $product = null;
 
         if ($productId) {
-            // If looks like a Shopify product id (long numeric), prefer shopify_product_id
+            // if looks like long numeric => possibly shopify id
             if (ctype_digit((string)$productId) && strlen((string)$productId) >= 8) {
-                $product = Product::with(['views','views.areas','variants'])
-                            ->where('shopify_product_id', $productId)
-                            ->first();
+                $product = Product::with(['views', 'views.areas', 'variants'])
+                    ->where('shopify_product_id', $productId)
+                    ->first();
 
                 if (! $product) {
                     // fallback: local primary key
-                    $product = Product::with(['views','views.areas','variants'])->find((int)$productId);
+                    $product = Product::with(['views', 'views.areas', 'variants'])->find((int)$productId);
                 }
             } else {
                 // short numeric likely local id
                 if (ctype_digit((string)$productId)) {
-                    $product = Product::with(['views','views.areas','variants'])->find((int)$productId);
+                    $product = Product::with(['views', 'views.areas', 'variants'])->find((int)$productId);
                 }
             }
 
-            // fallback: try matching across useful columns
+            // further fallback: try matching across common columns
             if (!$product) {
                 $query = Product::with(['views','views.areas','variants']);
                 $cols = [];
@@ -57,7 +72,7 @@ class PublicDesignerController extends Controller
         }
 
         if (!$product) {
-            \Log::warning("designer: product not found for product_id={$productId}");
+            Log::warning("designer: product not found for product_id={$productId}");
             abort(404, 'Product not found');
         }
 
@@ -79,69 +94,82 @@ class PublicDesignerController extends Controller
         $areas = $view ? ($view->relationLoaded('areas') ? $view->areas : $view->areas()->get()) : collect([]);
 
         // ----------------------------
-        // Build layoutSlots with server-side normalization (including mask svg public URL)
+        // Build layoutSlots with normalization (returns percent values 0..100)
         // ----------------------------
         $layoutSlots = [];
 
-foreach ($areas as $a) {
-    // prefer explicit percent values, fallback to mm→percent if you stored mm; here assume pct fields exist
-    $left  = (float)($a->left_pct ?? $a->x_mm ?? 0);
-    $top   = (float)($a->top_pct ?? $a->y_mm ?? 0);
-    $w     = (float)($a->width_pct ?? $a->width_mm ?? 10);
-    $h     = (float)($a->height_pct ?? $a->height_mm ?? 10);
+        foreach ($areas as $a) {
+            // Prefer percent fields; fallback to mm or px fields if present.
+            // We'll normalize to percent (0..100)
+            $leftRaw  = $a->left_pct ?? $a->x_pct ?? $a->left ?? $a->x ?? null;
+            $topRaw   = $a->top_pct  ?? $a->y_pct ?? $a->top  ?? $a->y ?? null;
+            $wRaw     = $a->width_pct ?? $a->w_pct ?? $a->width ?? $a->w ?? null;
+            $hRaw     = $a->height_pct ?? $a->h_pct ?? $a->height ?? $a->h ?? null;
 
-    // If any value looks like fraction (0..1) convert to percent
-    if ($left <= 1) $left *= 100;
-    if ($top   <= 1) $top  *= 100;
-    if ($w     <= 1) $w    *= 100;
-    if ($h     <= 1) $h    *= 100;
+            // If DB stored mm or px you'll need to convert using the original artwork dimensions.
+            // Assume values <= 1 are fractional and represent 0..1 (multiply by 100)
+            $left  = is_null($leftRaw) ? 0 : (float)$leftRaw;
+            $top   = is_null($topRaw)  ? 0 : (float)$topRaw;
+            $w     = is_null($wRaw)    ? 10 : (float)$wRaw;
+            $h     = is_null($hRaw)    ? 10 : (float)$hRaw;
 
-    // mask_url - build a public URL if mask_svg_path exists
-    $mask = null;
-    if (!empty($a->mask_svg_path)) {
-        // If you are storing path like "area_shapes/xxx.svg" in storage/app/public you can use:
-        // $mask = Storage::disk('public')->url($a->mask_svg_path);
-        // or if you serve via /files/ path:
-        $mask = strpos($a->mask_svg_path, '/files/') === 0 ? $a->mask_svg_path : ('/files/' . ltrim($a->mask_svg_path, '/'));
-    }
+            if ($left <= 1) $left *= 100;
+            if ($top  <= 1) $top  *= 100;
+            if ($w    <= 1) $w    *= 100;
+            if ($h    <= 1) $h    *= 100;
 
-    // slot key & name
-    $slotKey = null;
-    if (!empty($a->slot_key)) $slotKey = strtolower(trim($a->slot_key));
-    if (!$slotKey && !empty($a->name)) {
-        $n = strtolower($a->name);
-        if (strpos($n, 'name') !== false) $slotKey = 'name';
-        if (strpos($n, 'num') !== false || strpos($n,'no') !== false || strpos($n,'number') !== false) $slotKey = 'number';
-    }
+            // mask_url - prefer public storage URL if mask path stored
+            $mask = null;
+            if (!empty($a->mask_svg_path)) {
+                try {
+                    // If mask path is stored in storage/app/public...
+                    if (Storage::disk('public')->exists($a->mask_svg_path)) {
+                        $mask = Storage::disk('public')->url($a->mask_svg_path);
+                    } else {
+                        // fallback: if it's already a URL or "/files/..." path use directly
+                        $mask = (strpos($a->mask_svg_path, 'http') === 0 || strpos($a->mask_svg_path, '/')) ? $a->mask_svg_path : null;
+                    }
+                } catch (\Throwable $e) {
+                    $mask = null;
+                }
+            }
 
-    // fallback by template_id (if you use templates to denote name/number)
-    if (!$slotKey && isset($a->template_id)) {
-        if ((int)$a->template_id === 1) $slotKey = 'name';
-        if ((int)$a->template_id === 2) $slotKey = 'number';
-    }
+            // slot key determination (name/number heuristics)
+            $slotKey = null;
+            if (!empty($a->slot_key)) $slotKey = strtolower(trim($a->slot_key));
+            if (!$slotKey && !empty($a->name)) {
+                $n = strtolower($a->name);
+                if (strpos($n, 'name') !== false) $slotKey = 'name';
+                if (strpos($n, 'num') !== false || strpos($n,'no') !== false || strpos($n,'number') !== false) $slotKey = 'number';
+            }
 
-    // final fallback naming
-    if (!$slotKey) {
-        // choose a stable key: use the DB id to make unique key names
-        $slotKey = 'slot_' . ($a->id ?? uniqid());
-    }
+            // template_id heuristics
+            if (!$slotKey && isset($a->template_id)) {
+                if ((int)$a->template_id === 1) $slotKey = 'name';
+                if ((int)$a->template_id === 2) $slotKey = 'number';
+            }
 
-    $layoutSlots[$slotKey] = [
-        'id' => $a->id,
-        'left_pct'  => round($left, 6),
-        'top_pct'   => round($top, 6),
-        'width_pct' => round($w, 6),
-        'height_pct'=> round($h, 6),
-        'rotation'  => (int)($a->rotation ?? 0),
-        'name'      => $a->name ?? null,
-        'slot_key'  => $a->slot_key ?? null,
-        'template_id' => $a->template_id ?? null,
-        'mask'      => $mask,
-    ];
-}
+            // final fallback stable key
+            if (!$slotKey) {
+                $slotKey = 'slot_' . ($a->id ?? uniqid());
+            }
 
-        // ensure both keys exist (fallback defaults)
-                // ensure both keys exist (fallback defaults)
+            $layoutSlots[$slotKey] = [
+                'id' => $a->id ?? null,
+                'left_pct'  => round($left, 6),
+                'top_pct'   => round($top, 6),
+                'width_pct' => round($w, 6),
+                'height_pct'=> round($h, 6),
+                'rotation'  => (int)($a->rotation ?? 0),
+                'name'      => $a->name ?? null,
+                'slot_key'  => $a->slot_key ?? null,
+                'template_id'=> $a->template_id ?? null,
+                'mask'      => $mask,
+                'raw'       => $a, // keep original area object for debug if needed
+            ];
+        }
+
+        // Ensure 'name' and 'number' exist as fallbacks (sane defaults)
         if (!isset($layoutSlots['name'])) {
             $layoutSlots['name'] = [
                 'id' => null, 'left_pct' => 10, 'top_pct' => 5, 'width_pct' => 60, 'height_pct' => 8, 'rotation' => 0, 'mask' => null
@@ -153,57 +181,140 @@ foreach ($areas as $a) {
             ];
         }
 
-        // ----------------------------------------------------------------
-        // Keep a copy of the full/original layout (used for detection + debug)
-        // ----------------------------------------------------------------
-        $originalLayoutSlots = $layoutSlots; // full set before front-end filtering
+        // Keep a copy of the full/original layout for front-end debug & artwork detection
+        $originalLayoutSlots = $layoutSlots;
 
-        // ----------------------------------------------------------------
-        // Detect whether product view/layout actually has an artwork/logo area
-        // We'll only allow uploads when this is true.
-        // ----------------------------------------------------------------
+        // ----------------------------
+        // Determine if the view has an artwork/logo area (to show upload)
+        // ----------------------------
         $hasArtworkSlot = false;
-
-        if (!empty($originalLayoutSlots) && is_array($originalLayoutSlots)) {
-            foreach ($originalLayoutSlots as $slotKey => $slot) {
-                $k = strtolower((string)$slotKey);
-
-                // Named slots that typically indicate artwork/logo
-                if (in_array($k, ['logo','artwork','team_logo','graphic','image','art','badge','patch','patches'])) {
+        foreach ($originalLayoutSlots as $slotKey => $slot) {
+            $k = strtolower((string)$slotKey);
+            if (in_array($k, ['logo','artwork','team_logo','graphic','image','art','badge','patch','patches'])) {
+                $hasArtworkSlot = true;
+                break;
+            }
+            if (!empty($slot['mask'])) {
+                $hasArtworkSlot = true;
+                break;
+            }
+            if (!in_array($k, ['name','number']) && !empty($slot['width_pct']) && !empty($slot['height_pct'])) {
+                if ($slot['width_pct'] > 2 || $slot['height_pct'] > 2) {
                     $hasArtworkSlot = true;
                     break;
                 }
+            }
+        }
+        $showUpload = (bool)$hasArtworkSlot;
 
-                // mask presence strongly implies artwork region
-                if (!empty($slot['mask']) || !empty($slot['mask_url'])) {
-                    $hasArtworkSlot = true;
-                    break;
-                }
+        Log::info("designer: product_id={$product->id} showUpload=" . (int)$showUpload . " hasArtworkSlot=" . (int)$hasArtworkSlot);
 
-                // if slot is neither name nor number and has a meaningful size -> consider artwork
-                if (!in_array($k, ['name','number']) && !empty($slot['width_pct']) && !empty($slot['height_pct'])) {
-                    // small sizes (like <2%) likely not artwork - require a modest size
-                    if ($slot['width_pct'] > 2 || $slot['height_pct'] > 2) {
-                        $hasArtworkSlot = true;
-                        break;
+        // ----------------------------
+        // Resolve artwork URL and original pixel dimensions (origW, origH)
+        // ----------------------------
+        $artworkUrl = null;
+        $origW = 0;
+        $origH = 0;
+
+        if ($view) {
+            // prefer stored public URL fields if present
+            if (!empty($view->image_url)) {
+                $artworkUrl = $view->image_url;
+            } elseif (!empty($view->image_path)) {
+                // common: path stored in storage/app/public
+                try {
+                    if (Storage::disk('public')->exists($view->image_path)) {
+                        $artworkUrl = Storage::disk('public')->url($view->image_path);
+                    } else {
+                        // if image_path looks like absolute path or URL, use directly
+                        $artworkUrl = $view->image_path;
                     }
+                } catch (\Throwable $e) {
+                    $artworkUrl = $view->image_path;
+                }
+            } elseif (!empty($view->image)) {
+                // other naming conventions
+                $artworkUrl = $view->image;
+            }
+        }
+
+        // original dims: prefer DB fields then try reading file on disk
+        if ($view) {
+            if (!empty($view->original_width) && !empty($view->original_height)) {
+                $origW = (int)$view->original_width;
+                $origH = (int)$view->original_height;
+            } else {
+                // try reading file from storage (if we have a storage path)
+                try {
+                    $possiblePaths = [];
+                    if (!empty($view->image_path)) $possiblePaths[] = storage_path('app/public/' . ltrim($view->image_path, '/'));
+                    if (!empty($view->image_local_path)) $possiblePaths[] = $view->image_local_path;
+                    // if artworkUrl is a storage url '/storage/...' derive path
+                    if (!empty($artworkUrl) && strpos($artworkUrl, '/storage/') !== false) {
+                        $rel = substr($artworkUrl, strpos($artworkUrl, '/storage/') + 9);
+                        $possiblePaths[] = storage_path('app/public/' . ltrim($rel, '/'));
+                    }
+
+                    foreach ($possiblePaths as $p) {
+                        if (!empty($p) && file_exists($p)) {
+                            try {
+                                [$w, $h] = getimagesize($p);
+                                if ($w && $h) {
+                                    $origW = (int)$w;
+                                    $origH = (int)$h;
+                                    break;
+                                }
+                            } catch (\Throwable $e) {
+                                // ignore and continue
+                            }
+                        }
+                    }
+                } catch (\Throwable $e) {
+                    Log::warning('designer: error detecting artwork size: ' . $e->getMessage());
                 }
             }
         }
 
-        // ----------------------------------------------------------------
-        // Compute showUpload flag (robust): only true when artwork region exists.
-        // (You can extend with product properties heuristics if desired.)
-        // ----------------------------------------------------------------
-        $showUpload = (bool)$hasArtworkSlot;
+        // fallback if still missing
+        if ($origW <= 0) $origW = 1200;
+        if ($origH <= 0) $origH = 1200;
 
-        // Log the decision for debugging
-        \Log::info("designer: product_id={$product->id} showUpload=" . (int)$showUpload . " hasArtworkSlot=" . (int)$hasArtworkSlot);
+        // ----------------------------
+        // Compute a safe display price
+        // ----------------------------
+        $displayPrice = null;
+        try {
+            if (isset($product->min_price) && is_numeric($product->min_price) && (float)$product->min_price > 0) {
+                $displayPrice = (float)$product->min_price;
+            } elseif (isset($product->price) && is_numeric($product->price) && (float)$product->price > 0) {
+                $displayPrice = (float)$product->price;
+            } else {
+                // try variants
+                if ($product->relationLoaded('variants')) {
+                    $variantPrices = [];
+                    foreach ($product->variants as $v) {
+                        if (!empty($v->price) && (float)$v->price > 0) $variantPrices[] = (float)$v->price;
+                        elseif (!empty($v->price_cents) && (int)$v->price_cents > 0) $variantPrices[] = (float)$v->price_cents / 100;
+                        elseif (!empty($v->price_in_cents) && (int)$v->price_in_cents > 0) $variantPrices[] = (float)$v->price_in_cents / 100;
+                    }
+                    if (count($variantPrices)) $displayPrice = min($variantPrices);
+                } else {
+                    // DB-level min
+                    if (Schema::hasColumn('variants','price')) {
+                        $minP = $product->variants()->min('price');
+                        if ($minP && $minP > 0) $displayPrice = (float)$minP;
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::warning('designer: price compute failed: ' . $e->getMessage());
+        }
+        if ($displayPrice === null) $displayPrice = 0.00;
 
-        // ----------------------------------------------------------------
-        // Filter layoutSlots passed to front-end (per your previous request we only pass name+number),
-        // but also send originalLayoutSlots so front-end can use artwork coords when needed.
-        // ----------------------------------------------------------------
+        // ----------------------------
+        // Filter layoutSlots to only name + number for the front-end interactive UI
+        // but also pass originalLayoutSlots for cropping/artwork coordinates
+        // ----------------------------
         $filteredLayoutSlots = [];
         if (!empty($layoutSlots) && is_array($layoutSlots)) {
             foreach (['name', 'number'] as $k) {
@@ -211,67 +322,19 @@ foreach ($areas as $a) {
             }
         }
 
-        // ----------------------------
-        // compute a safe display price (robust)
-        // ----------------------------
-        $displayPrice = null;
-        try {
-            \Log::info("designer: product id={$product->id} shopify_product_id={$product->shopify_product_id} min_price=" . ($product->min_price ?? 'NULL') . " price=" . ($product->price ?? 'NULL'));
-
-            if (isset($product->min_price) && is_numeric($product->min_price) && (float)$product->min_price > 0) {
-                $displayPrice = (float)$product->min_price;
-            } elseif (isset($product->price) && is_numeric($product->price) && (float)$product->price > 0) {
-                $displayPrice = (float)$product->price;
-            }
-
-            if ($displayPrice === null && method_exists($product, 'variants')) {
-                if ($product->relationLoaded('variants')) {
-                    $variantPrices = [];
-                    foreach ($product->variants as $v) {
-                        if (!empty($v->price) && (float)$v->price > 0) {
-                            $variantPrices[] = (float)$v->price;
-                        } elseif (!empty($v->price_cents) && (int)$v->price_cents > 0) {
-                            $variantPrices[] = (float)$v->price_cents / 100;
-                        } elseif (!empty($v->price_in_cents) && (int)$v->price_in_cents > 0) {
-                            $variantPrices[] = (float)$v->price_in_cents / 100;
-                        }
-                    }
-                    if (count($variantPrices)) $displayPrice = min($variantPrices);
-                } else {
-                    $variantPrices = [];
-                    if (Schema::hasColumn('variants','price')) {
-                        $minP = $product->variants()->min('price');
-                        if ($minP && $minP > 0) $variantPrices[] = (float)$minP;
-                    }
-                    if (Schema::hasColumn('variants','price_cents')) {
-                        $minPc = $product->variants()->whereNotNull('price_cents')->min('price_cents');
-                        if ($minPc && $minPc > 0) $variantPrices[] = (float)$minPc / 100;
-                    }
-                    if (Schema::hasColumn('variants','price_in_cents')) {
-                        $minPi = $product->variants()->whereNotNull('price_in_cents')->min('price_in_cents');
-                        if ($minPi && $minPi > 0) $variantPrices[] = (float)$minPi / 100;
-                    }
-                    if (count($variantPrices)) $displayPrice = min($variantPrices);
-                }
-            }
-        } catch (\Throwable $e) {
-            \Log::warning('designer: price compute failed: ' . $e->getMessage());
-        }
-
-        if ($displayPrice === null) $displayPrice = 0.00;
-
+        // final return
         return view('public.designer', [
             'product' => $product,
             'view'    => $view,
             'areas'   => $areas,
-            // pass filtered slots (name+number) to existing front-end code
             'layoutSlots' => $filteredLayoutSlots,
-            // pass original full slots so front-end or debug tools can use artwork coords
             'originalLayoutSlots' => $originalLayoutSlots,
             'showUpload' => $showUpload,
             'hasArtworkSlot' => $hasArtworkSlot,
+            'artworkUrl' => $artworkUrl,
+            'artworkOrigW' => (int)$origW,
+            'artworkOrigH' => (int)$origH,
             'displayPrice' => (float)$displayPrice,
         ]);
-
     }
 }

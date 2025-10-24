@@ -108,8 +108,8 @@
       <!-- Desktop inputs (your original markup) -->
         <div class="desktop-only">
           <!-- keep your existing desktop inputs here -->
-          <input id="np-name" type="text" maxlength="12" class="form-control mb-2 text-center" placeholder="YOUR NAME">
-          <input id="np-num"  type="text" maxlength="3" inputmode="numeric" class="form-control mb-2 text-center" placeholder="09">
+          <input id="np-name-mobile" type="text" maxlength="11" class="np-input" placeholder="YOUR NAME">
+          <input id="np-num-mobile"  type="text" maxlength="2"  inputmode="numeric" class="np-input" placeholder="09">
           <!-- other desktop-only elements (font picker, color dots, etc.) -->
         </div>
 
@@ -117,12 +117,12 @@
         <div class="mobile-only">
           <div class="np-input-group">
             <div class="np-field">
-              <input id="np-name" type="text" maxlength="11" class="np-input" placeholder="YOUR NAME">
+              <input id="np-name-mobile" type="text" maxlength="11" class="np-input" placeholder="YOUR NAME">
               <span class="np-max">MAX. 11</span>
             </div>
 
             <div class="np-field">
-              <input id="np-num" type="text" maxlength="2" inputmode="numeric" class="np-input" placeholder="09">
+              <input id="np-num-mobile"  type="text" maxlength="2"  inputmode="numeric" class="np-input" placeholder="09">
               <span class="np-max">MAX. 2</span>
             </div>
           </div>
@@ -319,9 +319,24 @@ const colorEl = findVisibleInput('np-color') || $('np-color');
 
 const pvName  = $('np-prev-name'), pvNum = $('np-prev-num'), baseImg = $('np-base'), stage = $('np-stage');
 
-// also find possible alternate inputs (both mobile & desktop) so we can attach listeners to all
-const altNameEls = Array.from(document.querySelectorAll('#np-name')); // may include duplicate ids: select all
-const altNumEls  = Array.from(document.querySelectorAll('#np-num'));
+// find all name & number inputs (desktop + mobile)
+const nameInputs = Array.from(document.querySelectorAll('#np-name, #np-name-mobile'));
+const numInputs  = Array.from(document.querySelectorAll('#np-num,  #np-num-mobile'));
+
+// sync handler example
+nameInputs.forEach(el => el.addEventListener('input', (e) => {
+  const v = e.target.value;
+  nameInputs.forEach(x => { if (x !== e.target) x.value = v; });
+  document.getElementById('np-prev-name').textContent = (v || 'NAME').toUpperCase();
+  document.getElementById('np-name-hidden').value = (v||'').toUpperCase().trim();
+}));
+
+numInputs.forEach(el => el.addEventListener('input', (e) => {
+  const v = (e.target.value||'').replace(/\D/g,'').slice(0,3);
+  numInputs.forEach(x => { if (x !== e.target) x.value = v; });
+  document.getElementById('np-prev-num').textContent = v || '09';
+  document.getElementById('np-num-hidden').value = v;
+}));
   const btn = $('np-atc-btn'), form = $('np-atc-form'), addTeam = $('btn-add-team');
   const sizeEl = $('np-size');
   const layout = (typeof window.layoutSlots === 'object' && window.layoutSlots !== null) ? window.layoutSlots : {};
