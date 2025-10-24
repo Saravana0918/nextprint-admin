@@ -59,24 +59,45 @@ class TeamController extends Controller
     DB::beginTransaction();
     try {
         // 1) Save preview image if dataURL
-        $previewPath = null;
-        if (!empty($data['preview_src']) && Str::startsWith($data['preview_src'], 'data:')) {
+        $previewPublicRelative = null;   // like team_previews/xxx.png
+        $previewUrl = null;              // public url asset('storage/...') 
+        $previewLocalPath = null;        // absolute filesystem path storage_path('app/public/...')
+
+        if (!empty($data['preview_src']) && \Illuminate\Support\Str::startsWith($data['preview_src'], 'data:')) {
             $matches = [];
             if (preg_match('/^data:(image\/[a-zA-Z]+);base64,(.+)$/', $data['preview_src'], $matches)) {
                 $mime = $matches[1];
                 $base64 = $matches[2];
                 $ext = explode('/', $mime)[1] ?? 'png';
                 $binary = base64_decode($base64);
-                $filename = 'team_preview_' . time() . '_' . Str::random(6) . '.' . $ext;
+                $filename = 'team_preview_' . time() . '_' . \Illuminate\Support\Str::random(6) . '.' . $ext;
                 $storagePath = 'team_previews/' . $filename;
-                Storage::disk('public')->put($storagePath, $binary);
-                $previewPath = 'storage/' . $storagePath; // asset path
+
+                // ensure public disk exists and directory writable
+                \Illuminate\Support\Facades\Storage::disk('public')->put($storagePath, $binary);
+
+                $previewPublicRelative = $storagePath;
+                $previewUrl = asset('storage/' . $storagePath);
+                $previewLocalPath = storage_path('app/public/' . $storagePath);
             }
         } elseif (!empty($data['preview_src'])) {
-            $previewPath = $data['preview_src'];
+            // if frontend already passed a URL or relative path, try to normalize
+            $passed = $data['preview_src'];
+            // if it looks like a local storage path (starts with /storage/) convert to local path
+            if (\Illuminate\Support\Str::startsWith($passed, '/storage/')) {
+                $previewUrl = url($passed);
+                $relative = ltrim($passed, '/storage/');
+                $previewPublicRelative = $relative;
+                $previewLocalPath = storage_path('app/public/' . $relative);
+            } else {
+                // treat as full remote URL or full storage URL
+                $previewUrl = $passed;
+                // we can't derive local path for remote URL
+                $previewLocalPath = null;
+            }
         }
 
-        // 2) Normalize players array
+        // 2) Normalize players
         $players = array_map(function($p) {
             $p = (array)$p;
             return [
@@ -94,89 +115,83 @@ class TeamController extends Controller
         $teamId = DB::table('teams')->insertGetId([
             'product_id' => $data['product_id'] ?? null,
             'players' => json_encode($players, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE),
-            'preview_url' => $previewPath,
+            'preview_url' => $previewUrl,
+            'preview_local_path' => $previewLocalPath,
             'created_at' => now(),
             'updated_at' => now(),
         ]);
 
-        // ---------- REPLACE START (order upsert block) ----------
-$first = $players[0] ?? null;
+        // ---------- design_orders upsert block ----------
+        $first = $players[0] ?? null;
 
-// Build orderData using ONLY existing design_orders columns
-$orderData = [
-    'team_id'       => $teamId,
-    'product_id'    => $data['product_id'] ?? null,
-    'shopify_product_id' => $shopifyProductId ?? null,
-    'variant_id'    => $first['variant_id'] ?? null,
-    'size'          => $first['size'] ?? null,
-    'name_text'     => $first['name'] ?? ($data['name_text'] ?? null),
-    'number_text'   => $first['number'] ?? ($data['number_text'] ?? null),
-    'preview_src'   => $previewPath ?? null,
-    'preview_path'  => $previewPath ?? null,
-    'raw_payload'   => json_encode(['team_id' => $teamId, 'players' => $players], JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE),
-    'payload'       => json_encode(['players' => $players], JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE),
-    'status'        => 'new',
-    'created_at'    => now(),
-    'updated_at'    => now(),
-];
+        $orderData = [
+            'team_id'       => $teamId,
+            'product_id'    => $data['product_id'] ?? null,
+            'shopify_product_id' => $data['shopify_product_id'] ?? null,
+            'variant_id'    => $first['variant_id'] ?? null,
+            'size'          => $first['size'] ?? null,
+            'name_text'     => $first['name'] ?? ($data['name_text'] ?? null),
+            'number_text'   => $first['number'] ?? ($data['number_text'] ?? null),
+            'preview_src'   => $previewUrl ?? null,            // public URL (useful for web)
+            'preview_path'  => $previewLocalPath ?? null,      // local filesystem absolute path (useful for PDF embedding)
+            'raw_payload'   => json_encode(['team_id' => $teamId, 'players' => $players], JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE),
+            'payload'       => json_encode(['players' => $players], JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE),
+            'status'        => 'new',
+            'created_at'    => now(),
+            'updated_at'    => now(),
+        ];
 
-$linkedOrderId = null;
+        $linkedOrderId = null;
 
-// 1) If frontend provided explicit order_id -> update that
-if (!empty($data['order_id'])) {
-    DB::table('design_orders')->where('id', $data['order_id'])->update($orderData);
-    $linkedOrderId = $data['order_id'];
-} else {
-    // 2) Try find existing design_order that already references this team in raw_payload
-    $existing = DB::table('design_orders')->where(function($q) use ($teamId) {
-        $q->where('raw_payload', 'like', '%"team_id":' . $teamId . '%')
-          ->orWhere('raw_payload', 'like', '%"team_id":"' . $teamId . '"%');
-    })->orderBy('created_at', 'desc')->first();
-
-    if ($existing) {
-        DB::table('design_orders')->where('id', $existing->id)->update($orderData);
-        $linkedOrderId = $existing->id;
-    } else {
-        // 3) If not found, try best-effort match by product_id + name/number
-        $candidateQuery = DB::table('design_orders')->orderBy('created_at', 'desc');
-        if (!empty($data['product_id'])) {
-            $candidateQuery->where('product_id', $data['product_id']);
-        }
-        $candidateQuery->where(function($q) use ($first) {
-            if (!empty($first['number'])) {
-                $q->orWhere('number_text', $first['number']);
-            }
-            if (!empty($first['name'])) {
-                $q->orWhere('name_text', 'like', '%' . substr($first['name'], 0, 50) . '%');
-            }
-        });
-        $candidate = $candidateQuery->first();
-
-        if ($candidate) {
-            DB::table('design_orders')->where('id', $candidate->id)->update($orderData);
-            $linkedOrderId = $candidate->id;
+        if (!empty($data['order_id'])) {
+            DB::table('design_orders')->where('id', $data['order_id'])->update($orderData);
+            $linkedOrderId = $data['order_id'];
         } else {
-            // 4) Nothing found -> create a minimal design_orders row (safe columns only)
-            $linkedOrderId = DB::table('design_orders')->insertGetId($orderData);
-        }
-    }
-}
-// ---------- REPLACE END ----------
+            $existing = DB::table('design_orders')->where(function($q) use ($teamId) {
+                $q->where('raw_payload', 'like', '%"team_id":' . $teamId . '%')
+                  ->orWhere('raw_payload', 'like', '%"team_id":"' . $teamId . '"%');
+            })->orderBy('created_at', 'desc')->first();
 
+            if ($existing) {
+                DB::table('design_orders')->where('id', $existing->id)->update($orderData);
+                $linkedOrderId = $existing->id;
+            } else {
+                $candidateQuery = DB::table('design_orders')->orderBy('created_at', 'desc');
+                if (!empty($data['product_id'])) {
+                    $candidateQuery->where('product_id', $data['product_id']);
+                }
+                $candidateQuery->where(function($q) use ($first) {
+                    if (!empty($first['number'])) {
+                        $q->orWhere('number_text', $first['number']);
+                    }
+                    if (!empty($first['name'])) {
+                        $q->orWhere('name_text', 'like', '%' . substr($first['name'], 0, 50) . '%');
+                    }
+                });
+                $candidate = $candidateQuery->first();
+
+                if ($candidate) {
+                    DB::table('design_orders')->where('id', $candidate->id)->update($orderData);
+                    $linkedOrderId = $candidate->id;
+                } else {
+                    $linkedOrderId = DB::table('design_orders')->insertGetId($orderData);
+                }
+            }
+        }
+        // ---------- end design_orders upsert ----------
 
         DB::commit();
 
-        // Return success with team_id and linked order id
         return response()->json([
             'success' => true,
             'team_id' => $teamId,
             'order_id' => $linkedOrderId,
-            'preview_url' => $previewPath ? asset($previewPath) : null,
+            'preview_url' => $previewUrl ? asset($previewPublicRelative ? ('storage/'.$previewPublicRelative) : $previewUrl) : null,
             'message' => 'Design saved ✅ and linked to order #' . ($linkedOrderId ?? 'N/A'),
         ]);
     } catch (\Throwable $e) {
         DB::rollBack();
-        Log::error('TeamController::saveDesign failed: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
+        \Illuminate\Support\Facades\Log::error('TeamController::saveDesign failed: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
         return response()->json([
             'success' => false,
             'error' => 'Could not save team. Check logs.',
