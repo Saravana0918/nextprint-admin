@@ -154,11 +154,7 @@
       <!-- uploader not available for this product (controller decided no artwork region) -->
       @endif
     </div>
-      <div class="mb-2">
-           <button id="np-share-img-btn" type="button" class="btn btn-outline-light ms-2" style="padding:.25rem .6rem; display:none;">
-               Share Image
-           </button>
-      </div>
+      
     <div class="col-md-3 np-col order-3 order-md-3 right-layout mobile-layout">
       <h4 class="desktop-display">{{ $product->name ?? ($product->title ?? 'Product') }}</h4>
       <form id="np-atc-form" method="post" action="{{ route('designer.addtocart') }}">
@@ -218,7 +214,12 @@
     <div>
       <a href="#" class="btn btn-success" id="btn-add-team">Add Team Players</a>
     </div>
-  </div>
+          <div class="form-control mb-2 text-center">
+                <button id="np-share-img-btn" type="button" class="btn btn-outline-light ms-2" style="padding:.25rem .6rem; display:none;">
+                    Share Image
+                </button>
+            </div>
+         </div>
       </form>
     </div>
   </div>
