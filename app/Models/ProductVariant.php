@@ -6,7 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class ProductVariant extends Model
 {
-    protected $fillable = ['product_id','shopify_variant_id','option_value','price'];
+    protected $table = 'product_variants';
+    protected $fillable = ['product_id','option_name','option_value','shopify_variant_id'];
 
     public function product()
     {

@@ -13,13 +13,11 @@ return new class extends Migration
 {
     Schema::create('product_variants', function (Blueprint $table) {
         $table->id();
-        $table->unsignedBigInteger('product_id');
-        $table->string('option_name')->nullable();   // e.g. Size
-        $table->string('option_value')->nullable();  // e.g. M, L, XL
-        $table->string('shopify_variant_id')->nullable(); // Shopify GID or numeric id
+        $table->unsignedBigInteger('product_id')->nullable()->index();
+        $table->string('option_name')->nullable();
+        $table->string('option_value')->nullable();
+        $table->string('shopify_variant_id')->nullable()->unique();
         $table->timestamps();
-
-        $table->foreign('product_id')->references('id')->on('products')->onDelete('cascade');
     });
 }
 

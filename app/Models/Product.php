@@ -22,6 +22,11 @@ class Product extends Model
         return $this->hasMany(\App\Models\ProductVariant::class, 'product_id', 'id');
     }
 
+    public function productVariants() {
+        
+        return $this->hasMany(\App\Models\ProductVariant::class, 'product_id');
+    }
+
         public function printMethods()
     {
         return $this->belongsToMany(

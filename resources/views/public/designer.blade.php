@@ -179,9 +179,16 @@
         <div class="mb-2">
           <select id="np-size" name="size" class="form-select" required>
             <option value="">Select Size</option>
-            @foreach($sizeOptions as $opt)
-              <option value="{{ $opt }}">{{ $opt }}</option>
-            @endforeach
+            @if(!empty($product) && $product->relationLoaded('variants'))
+              @foreach($product->variants as $v)
+                @php
+                  $optLabel = trim((string)($v->option_value ?? $v->option_name ?? $v->title ?? ''));
+                  // prefer shopify_variant_id or fallback to internal id
+                  $variantId = (string)($v->shopify_variant_id ?? $v->variant_id ?? $v->id ?? '');
+                @endphp
+                <option value="{{ $variantId }}">{{ $optLabel }}</option>
+              @endforeach
+            @endif
           </select>
         </div>
 
@@ -607,18 +614,17 @@ altNumEls.forEach(el => {
   function updateATCState(){ if (!btn) return; btn.disabled = false; }
 
   if (sizeEl) {
-    sizeEl.addEventListener('change', function(){
-      const sizeVal = (sizeEl.value || '').toString();
-      if (window.variantMap) {
-        const k = sizeVal;
-        const variant = window.variantMap[k] || window.variantMap[k.toUpperCase()] || window.variantMap[k.toLowerCase()] || '';
-        if (document.getElementById('np-variant-id')) document.getElementById('np-variant-id').value = variant;
-      }
-      syncHidden();
-      syncPreview();
-    });
-    try { sizeEl.dispatchEvent(new Event('change')); } catch(e) {}
-  }
+  sizeEl.addEventListener('change', function(){
+    // sizeEl.value is now the variant id (because option.value = variant id)
+    const selectedVariantId = (sizeEl.value || '').toString().trim();
+    if (document.getElementById('np-variant-id')) {
+      document.getElementById('np-variant-id').value = selectedVariantId;
+    }
+    syncHidden();
+    syncPreview();
+  });
+  try { sizeEl.dispatchEvent(new Event('change')); } catch(e) {}
+}
 
   if (addTeam) addTeam.addEventListener('click', function(e) {
   e.preventDefault();

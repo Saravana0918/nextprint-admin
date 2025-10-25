@@ -12,6 +12,7 @@ class Kernel extends ConsoleKernel
      */
     protected $commands = [
         \App\Console\Commands\SyncShopifyDesignerProducts::class,
+        \App\Console\Commands\ShopifySyncVariants::class,
     ];
 
     /**
