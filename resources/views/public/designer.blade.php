@@ -564,17 +564,37 @@ const pvName  = $('np-prev-name'), pvNum = $('np-prev-num'), baseImg = $('np-bas
   }
 
   function syncHidden(){
-    const n = $('np-name-hidden'), nm = $('np-num-hidden'), f = $('np-font-hidden'), c = $('np-color-hidden');
-    if (n) n.value = (nameEl ? (nameEl.value||'') : '').toUpperCase().trim();
-    if (nm) nm.value = (numEl ? (numEl.value||'') : '').replace(/\D/g,'').trim();
-    if (f) f.value = fontEl ? fontEl.value : '';
-    if (c) c.value = colorEl ? colorEl.value : '';
-    const size = $('np-size')?.value || '';
-    if (window.variantMap && size) {
-      const k = (size || '').toString();
-      $('np-variant-id').value = window.variantMap[k] || window.variantMap[k.toUpperCase()] || window.variantMap[k.toLowerCase()] || '';
-    } else { if ($('np-variant-id')) $('np-variant-id').value = ''; }
+  const n = $('np-name-hidden'), nm = $('np-num-hidden'), f = $('np-font-hidden'), c = $('np-color-hidden');
+  if (n) n.value = (nameEl ? (nameEl.value||'') : '').toUpperCase().trim();
+  if (nm) nm.value = (numEl ? (numEl.value||'') : '').replace(/\D/g,'').trim();
+  if (f) f.value = fontEl ? fontEl.value : '';
+  if (c) c.value = colorEl ? colorEl.value : '';
+
+  // SIZE / VARIANT handling (robust: supports option.value being variant id OR label)
+  const sizeVal = $('np-size')?.value || '';
+  const variantInput = $('np-variant-id');
+  if (!variantInput) return;
+
+  if (!sizeVal) {
+    variantInput.value = '';
+    return;
   }
+
+  // if sizeVal looks like a numeric variant id, use it directly
+  if (/^\d+$/.test(sizeVal)) {
+    variantInput.value = sizeVal;
+    return;
+  }
+
+  // otherwise try to map via variantMap (keys likely are labels)
+  if (window.variantMap && typeof window.variantMap === 'object') {
+    const key = sizeVal.toString();
+    variantInput.value = window.variantMap[key] || window.variantMap[key.toUpperCase()] || window.variantMap[key.toLowerCase()] || '';
+  } else {
+    variantInput.value = '';
+  }
+}
+
 
   // events
   // attach input listeners to every name input found (desktop + mobile)
