@@ -250,8 +250,8 @@ class DesignOrderController extends Controller
 
         // default slot percentages (can be overridden by payload/meta layoutSlots)
         $defaults = [
-            'name_left_pct' => 72, 'name_top_pct' => 25, 'name_width_pct' => 22, 'name_font_pt' => 22,
-            'number_left_pct' => 72, 'number_top_pct' => 48, 'number_width_pct' => 14, 'number_font_pt' => 40,
+            'name_left_pct' => 90, 'name_top_pct' => 25, 'name_width_pct' => 22, 'name_font_pt' => 22,
+            'number_left_pct' => 90, 'number_top_pct' => 48, 'number_width_pct' => 14, 'number_font_pt' => 40,
         ];
 
         $slots = [];
