@@ -14,13 +14,23 @@ class ShopifyService
 
     public function __construct()
     {
-        // env keys: SHOPIFY_STORE (example: yogireddy.myshopify.com)
-        //           SHOPIFY_ADMIN_API_TOKEN
-        //           SHOPIFY_API_VERSION (optional)
-        $this->base    = 'https://' . trim((string) env('SHOPIFY_STORE'));
-        $this->token   = trim((string) env('SHOPIFY_ADMIN_API_TOKEN'));
-        $this->version = env('SHOPIFY_API_VERSION', '2024-10');
+        // use config() instead of env() directly
+        $this->base    = 'https://' . trim(config('shopify.store'));
+        $this->token   = trim(config('shopify.token'));
+        $this->version = config('shopify.version', '2024-10');
+
+        // Log check to confirm loaded values
+        \Log::info('ShopifyService init', [
+            'base' => $this->base,
+            'token_status' => $this->token ? 'SET' : 'MISSING',
+            'version' => $this->version,
+        ]);
+
+        if (empty($this->token) || empty($this->base)) {
+            throw new \RuntimeException("Shopify credentials not configured");
+        }
     }
+
 
     /**
      * Low-level GraphQL caller
