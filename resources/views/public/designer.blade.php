@@ -202,11 +202,11 @@
     <!-- LEFT group -->
     <div class="d-flex align-items-center">
       <button id="save-design-btn" type="button" class="btn btn-primary me-2" style="padding: .25rem .5rem;font-size: .96rem;">
-        Save Design
+        Add To Cart
       </button>
 
       <button id="np-atc-btn" type="submit" class="btn btn-primary d-none" disabled>
-        Add to Cart
+        Buy Now
       </button>
     </div>
 

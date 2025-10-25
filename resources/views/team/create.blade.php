@@ -213,10 +213,10 @@
           <button type="button" id="btn-add-row" class="btn btn-primary">ADD NEW</button>
 
           <!-- Save as outline -->
-          <button type="button" id="save-team-btn" class="btn btn-outline-primary">Save Design</button>
+          <button type="button" id="save-team-btn" class="btn btn-outline-primary">Add To Cart</button>
 
           <!-- Add To Cart (submit) -> initially disabled -->
-          <button type="submit" id="team-addtocart-btn" class="btn btn-success d-none" disabled data-label="Add To Cart">Add To Cart</button>
+          <button type="submit" id="team-addtocart-btn" class="btn btn-success d-none" disabled data-label="Add To Cart">Buy Now</button>
 
           <!-- Back button placed at the end; on mobile this will be pushed to right -->
           <a href="{{ url()->previous() }}" class="btn btn-secondary back-btn">Back</a>
