@@ -121,6 +121,13 @@ Route::post('/admin/sync-now', function () {
     return back()->with('ok', "Synced {$synced} products.");
 })->name('admin.sync-now');
 
+Route::get('admin/designer/sync-variants/{productId}', function($productId){
+    $prod = \App\Models\Product::find($productId);
+    if (!$prod) abort(404);
+    (new \App\Http\Controllers\PublicDesignerController)->fetchShopifyVariantsAndStore($prod);
+    return "ok";
+})->middleware('auth');
+
 Route::get('/files/{path}', function ($path) {
     $full = storage_path('app/public/'.$path);
     abort_unless(is_file($full), 404);

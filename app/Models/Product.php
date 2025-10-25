@@ -19,11 +19,11 @@ class Product extends Model
 
     public function variants()
     {
-        return $this->hasMany(\App\Models\ProductVariant::class, 'product_id', 'id');
+        return $this->hasMany(ProductVariant::class); 
     }
 
     public function productVariants() {
-        
+
         return $this->hasMany(\App\Models\ProductVariant::class, 'product_id');
     }
 

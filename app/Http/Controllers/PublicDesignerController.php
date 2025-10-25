@@ -6,6 +6,7 @@ use App\Models\Product;
 use App\Models\ProductView;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Log;
+use GuzzleHttp\Client;
 
 class PublicDesignerController extends Controller
 {
@@ -14,29 +15,26 @@ class PublicDesignerController extends Controller
         $productId = $request->query('product_id');
         $viewId    = $request->query('view_id');
 
-        // ----------------------------
-        // Product lookup
-        // ----------------------------
+        // Product lookup (your existing logic)...
         $product = null;
 
         if ($productId) {
-            // Prefer shopify_product_id when long numeric id
             if (ctype_digit((string)$productId) && strlen((string)$productId) >= 8) {
-                $product = Product::with(['views', 'views.areas', 'variants'])
-                                  ->where('shopify_product_id', $productId)
-                                  ->first();
+                $product = Product::with(['views','views.areas','variants'])
+                            ->where('shopify_product_id', $productId)
+                            ->first();
 
                 if (!$product) {
-                    $product = Product::with(['views', 'views.areas', 'variants'])->find((int)$productId);
+                    $product = Product::with(['views','views.areas','variants'])->find((int)$productId);
                 }
             } else {
                 if (ctype_digit((string)$productId)) {
-                    $product = Product::with(['views', 'views.areas', 'variants'])->find((int)$productId);
+                    $product = Product::with(['views','views.areas','variants'])->find((int)$productId);
                 }
             }
 
             if (!$product) {
-                $query = Product::with(['views', 'views.areas', 'variants']);
+                $query = Product::with(['views','views.areas','variants']);
                 $cols = [];
                 if (Schema::hasColumn('products','shopify_product_id')) $cols[] = 'shopify_product_id';
                 if (Schema::hasColumn('products','name')) $cols[] = 'name';
@@ -58,13 +56,19 @@ class PublicDesignerController extends Controller
             abort(404, 'Product not found');
         }
 
-        // ----------------------------
-        // Ensure variants are loaded (robust)
-        // ----------------------------
-        $product->loadMissing('variants');
+        // --- NEW: If no variants loaded or variants count 0, try fetch from Shopify and save locally
+        if (!$product->relationLoaded('variants') || $product->variants->count() === 0) {
+            try {
+                $this->fetchShopifyVariantsAndStore($product);
+                // reload relation
+                $product->load('variants');
+            } catch (\Throwable $e) {
+                Log::warning("designer: fetchShopifyVariants failed product_id={$product->id} error=".$e->getMessage());
+            }
+        }
 
         // ----------------------------
-        // Resolve view
+        // Resolve view (same as before)
         // ----------------------------
         $view = null;
         if ($viewId) {
@@ -81,10 +85,9 @@ class PublicDesignerController extends Controller
         $areas = $view ? ($view->relationLoaded('areas') ? $view->areas : $view->areas()->get()) : collect([]);
 
         // ----------------------------
-        // Build layout slots
+        // Build layout slots (same as your code)
         // ----------------------------
         $layoutSlots = [];
-
         foreach ($areas as $a) {
             $left  = (float)($a->left_pct ?? $a->x_mm ?? 0);
             $top   = (float)($a->top_pct ?? $a->y_mm ?? 0);
@@ -130,38 +133,28 @@ class PublicDesignerController extends Controller
             ];
         }
 
-        // Keep original layout for debug or artwork detection
         $originalLayoutSlots = $layoutSlots;
 
-        // ----------------------------
-        // Detect artwork/logo slot
-        // ----------------------------
+        // artwork detection and filtering --- keep your existing logic
         $hasArtworkSlot = false;
-
         foreach ($originalLayoutSlots as $slotKey => $slot) {
             $k = strtolower((string)$slotKey);
-
             if (in_array($k, ['logo','artwork','team_logo','graphic','image','art','badge','patch','patches'])) {
                 $hasArtworkSlot = true; break;
             }
-
             if (!empty($slot['mask']) || !empty($slot['mask_url'])) {
                 $hasArtworkSlot = true; break;
             }
-
             if (!in_array($k, ['name','number']) && !empty($slot['width_pct']) && !empty($slot['height_pct'])) {
                 if ($slot['width_pct'] > 2 || $slot['height_pct'] > 2) {
                     $hasArtworkSlot = true; break;
                 }
             }
         }
-
         $showUpload = (bool)$hasArtworkSlot;
-        Log::info("designer: product_id={$product->id} showUpload=" . (int)$showUpload . " hasArtworkSlot=" . (int)$hasArtworkSlot);
+        \Log::info("designer: product_id={$product->id} showUpload=" . (int)$showUpload . " hasArtworkSlot=" . (int)$hasArtworkSlot);
 
-        // ----------------------------
-        // Filter only real areas (existing IDs) & candidate mapping
-        // ----------------------------
+        // filteredLayoutSlots (same as your code)...
         $filteredLayoutSlots = [];
         if (!empty($layoutSlots) && is_array($layoutSlots)) {
             foreach (['name', 'number'] as $k) {
@@ -185,18 +178,15 @@ class PublicDesignerController extends Controller
                         }
                     }
                 }
-
                 if (count($candidates) === 1) {
                     $firstKey = array_keys($candidates)[0];
                     $filteredLayoutSlots['name'] = $candidates[$firstKey];
-                    Log::info("designer: mapped single generic slot '{$firstKey}' -> name for product_id={$product->id}");
+                    \Log::info("designer: mapped single generic slot '{$firstKey}' -> name for product_id={$product->id}");
                 }
             }
         }
 
-        // ----------------------------
-        // Compute display price
-        // ----------------------------
+        // displayPrice compute (same as your code)
         $displayPrice = 0.00;
         try {
             if (isset($product->min_price) && is_numeric($product->min_price) && (float)$product->min_price > 0) {
@@ -215,72 +205,22 @@ class PublicDesignerController extends Controller
                 }
             }
         } catch (\Throwable $e) {
-            Log::warning('designer: price compute failed: ' . $e->getMessage());
+            \Log::warning('designer: price compute failed: ' . $e->getMessage());
         }
 
-        // ----------------------------
-        // Build sizeOptions and variantMap for blade/js (robust)
-        // ----------------------------
+        // Build sizeOptions + variantMap for blade
         $sizeOptions = [];
         $variantMap = [];
-
         if ($product->relationLoaded('variants')) {
             foreach ($product->variants as $v) {
-                // try various fields that might contain the human label
-                $label = trim((string)(
-                    $v->option_value ??
-                    $v->option_name ??
-                    $v->option1 ??
-                    $v->option_1 ??
-                    $v->title ??
-                    $v->name ?? ''
-                ));
-
-                // variant id: try known id fields
+                $label = trim((string)($v->option_value ?? $v->option_name ?? $v->title ?? ''));
                 $variantId = (string)($v->shopify_variant_id ?? $v->variant_id ?? $v->id ?? '');
-
-                if ($variantId === '') {
-                    // skip invalid
-                    continue;
-                }
-
-                if ($label === '') {
-                    // if no label, fallback to option combination or the id itself
-                    // try building from option columns if available
-                    $parts = [];
-                    foreach (['option1','option2','option3','option_1','option_2','option_3'] as $optField) {
-                        if (isset($v->$optField) && $v->$optField) $parts[] = trim((string)$v->$optField);
-                    }
-                    $label = $parts ? implode(' / ', $parts) : $variantId;
-                }
-
-                // push only once
+                if ($label === '' || $variantId === '') continue;
                 $sizeOptions[] = ['label' => $label, 'variant_id' => $variantId];
-
-                // store mappings for multiple key forms
-                $variantMap[$label] = $variantId;
                 $variantMap[strtoupper($label)] = $variantId;
-                $variantMap[strtolower($label)] = $variantId;
             }
         }
 
-        // If still empty, expose generic fallback (variant ids only)
-        if (empty($sizeOptions) && $product->variants && $product->variants->count()) {
-            foreach ($product->variants as $v) {
-                $variantId = (string)($v->shopify_variant_id ?? $v->variant_id ?? $v->id ?? '');
-                if ($variantId === '') continue;
-                $sizeOptions[] = ['label' => $variantId, 'variant_id' => $variantId];
-                $variantMap[$variantId] = $variantId;
-            }
-        }
-
-        if (empty($sizeOptions)) {
-            Log::warning("designer: no sizeOptions built for product {$product->id}; variants_count=" . ($product->variants ? $product->variants->count() : 0));
-        }
-
-        // ----------------------------
-        // Return view
-        // ----------------------------
         return view('public.designer', [
             'product' => $product,
             'view'    => $view,
@@ -293,5 +233,76 @@ class PublicDesignerController extends Controller
             'sizeOptions' => $sizeOptions,
             'variantMap' => $variantMap,
         ]);
+    }
+
+    /**
+     * Fetch variants for a given product from Shopify Admin API and store into local DB
+     * requires: SHOPIFY_SHOP and SHOPIFY_ADMIN_TOKEN in env
+     */
+    protected function fetchShopifyVariantsAndStore(Product $product)
+    {
+        // Need product->shopify_product_id
+        $shopifyProductId = $product->shopify_product_id ?? null;
+        if (!$shopifyProductId) {
+            // nothing to fetch
+            Log::info("designer: no shopify_product_id for product {$product->id}");
+            return;
+        }
+
+        $shop = env('SHOPIFY_SHOP');
+        $token = env('SHOPIFY_ADMIN_TOKEN');
+        if (!$shop || !$token) {
+            throw new \RuntimeException("Shopify credentials not configured");
+        }
+
+        $client = new Client([
+            'base_uri' => "https://{$shop}/admin/api/2024-10/",
+            'timeout' => 15,
+            'headers' => [
+                'X-Shopify-Access-Token' => $token,
+                'Accept' => 'application/json',
+            ],
+        ]);
+
+        $resp = $client->get("products/{$shopifyProductId}.json");
+        if ($resp->getStatusCode() !== 200) {
+            throw new \RuntimeException("Shopify product fetch failed: {$resp->getStatusCode()}");
+        }
+        $json = json_decode((string)$resp->getBody(), true);
+        $shopifyProduct = $json['product'] ?? null;
+        if (!$shopifyProduct) {
+            throw new \RuntimeException("Shopify returned no product");
+        }
+
+        $variants = $shopifyProduct['variants'] ?? [];
+        if (!is_array($variants) || count($variants) === 0) {
+            Log::info("designer: shopify product has no variants shopify_id={$shopifyProductId}");
+            return;
+        }
+
+        // store each variant into product->variants() relation
+        foreach ($variants as $v) {
+            // map fields - adapt to your variants table columns
+            $variantShopifyId = (string)($v['id'] ?? '');
+            $title = trim((string)($v['title'] ?? ''));
+            // If your variant option label is like "S" in option1:
+            $optionLabel = '';
+            if (!empty($v['option1'])) $optionLabel = $v['option1'];
+            // price
+            $price = isset($v['price']) ? $v['price'] : null;
+
+            // Upsert: assumes your variants relation has columns: shopify_variant_id, option_value, price, variant_id
+            // adjust the keys according to your DB schema, e.g. variant_id / id column
+            $product->variants()->updateOrCreate(
+                ['shopify_variant_id' => $variantShopifyId],
+                [
+                    'title' => $title,
+                    'option_value' => $optionLabel,
+                    'price' => $price,
+                    // add other fields mapping if needed
+                ]
+            );
+        }
+        Log::info("designer: fetched and stored " . count($variants) . " variants for product {$product->id}");
     }
 }

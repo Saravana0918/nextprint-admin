@@ -185,19 +185,15 @@
 
       <div class="mb-2">
         <select id="np-size" name="size" class="form-select" required>
-            <option value="">Select Size</option>
-            @if(!empty($sizeOptions) && is_array($sizeOptions))
-              @foreach($sizeOptions as $opt)
-                {{-- support either array or object --}}
-                @php
-                  $vid = is_array($opt) ? ($opt['variant_id'] ?? '') : ($opt->variant_id ?? ($opt->variantId ?? '') );
-                  $label = is_array($opt) ? ($opt['label'] ?? ($opt['title'] ?? $vid)) : ($opt->label ?? ($opt->title ?? $vid));
-                @endphp
-                <option value="{{ $vid }}">{{ $label }}</option>
-              @endforeach
-            @endif
-          </select>
-        </div>
+          <option value="">Select Size</option>
+          @if(!empty($sizeOptions) && is_array($sizeOptions))
+            @foreach($sizeOptions as $opt)
+              {{-- $opt = ['label' => 'XL', 'variant_id' => '45229...'] --}}
+              <option value="{{ $opt['variant_id'] }}">{{ $opt['label'] }}</option>
+            @endforeach
+          @endif
+        </select>
+      </div>
 
         <div class="mb-2">
           <input id="np-qty" name="quantity" type="number" min="1" value="1" class="form-control">
@@ -642,18 +638,19 @@ altNumEls.forEach(el => {
 
   if (sizeEl) {
   sizeEl.addEventListener('change', function(){
-    // Our <option>.value is already variant id (set by blade)
+    // value already variant id (because blade set option.value = variant_id)
     const selectedVariantId = (sizeEl.value || '').toString().trim();
     const vInput = document.getElementById('np-variant-id');
     if (vInput) vInput.value = selectedVariantId;
-    // keep sync functions consistent
+
+    // optional: enable ATC if saved & valid
     syncHidden();
     syncPreview();
     updateATCState();
   });
+  // trigger once to initialize
   try { sizeEl.dispatchEvent(new Event('change')); } catch(e) {}
 }
-
 
   if (addTeam) addTeam.addEventListener('click', function(e) {
   e.preventDefault();
@@ -705,7 +702,10 @@ window.location.href = base + (params.toString() ? ('?' + params.toString()) : '
   }
     syncHidden();
     const variantId = (document.getElementById('np-variant-id') || { value: '' }).value;
-    if (!variantId) { alert('Variant not selected or invalid. Please re-select size.'); return; }
+    if (!variantId || !/^\d+$/.test(variantId.toString())) {
+      alert('Variant not selected or invalid. Please re-select size.');
+      return;
+    }
     if (btn) { btn.disabled = true; btn.textContent = 'Adding...'; }
     try {
       try {
