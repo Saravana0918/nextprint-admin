@@ -15,39 +15,40 @@ class PublicDesignerController extends Controller
         $viewId    = $request->query('view_id');
 
         // ----------------------------
-        // Product lookup (ALWAYS eager-load variants + views/areas)
+        // Product lookup
         // ----------------------------
         $product = null;
 
-        // helper: base query with relations
-        $baseQuery = Product::with(['views','views.areas','variants']);
-
         if ($productId) {
-            // if looks like a shopify product id (long numeric) try by shopify_product_id first
-            if (ctype_digit((string)$productId) && strlen((string)$productId) >= 6) {
-                $product = (clone $baseQuery)->where('shopify_product_id', $productId)->first();
+            // Prefer shopify_product_id when long numeric id
+            if (ctype_digit((string)$productId) && strlen((string)$productId) >= 8) {
+                $product = Product::with(['views', 'views.areas', 'variants'])
+                                  ->where('shopify_product_id', $productId)
+                                  ->first();
+
+                if (!$product) {
+                    $product = Product::with(['views', 'views.areas', 'variants'])->find((int)$productId);
+                }
+            } else {
+                if (ctype_digit((string)$productId)) {
+                    $product = Product::with(['views', 'views.areas', 'variants'])->find((int)$productId);
+                }
             }
 
-            // fallback by primary id
-            if (!$product && ctype_digit((string)$productId)) {
-                $product = (clone $baseQuery)->find((int)$productId);
-            }
-
-            // fallback: search common columns
             if (!$product) {
+                $query = Product::with(['views', 'views.areas', 'variants']);
                 $cols = [];
                 if (Schema::hasColumn('products','shopify_product_id')) $cols[] = 'shopify_product_id';
                 if (Schema::hasColumn('products','name')) $cols[] = 'name';
                 if (Schema::hasColumn('products','sku')) $cols[] = 'sku';
 
                 if (count($cols)) {
-                    $q = clone $baseQuery;
-                    $q->where(function($qq) use ($cols, $productId) {
+                    $query->where(function($q) use ($productId, $cols) {
                         foreach ($cols as $c) {
-                            $qq->orWhere($c, $productId);
+                            $q->orWhere($c, $productId);
                         }
                     });
-                    $product = $q->first();
+                    $product = $query->first();
                 }
             }
         }
@@ -58,6 +59,11 @@ class PublicDesignerController extends Controller
         }
 
         // ----------------------------
+        // Ensure variants are loaded (robust)
+        // ----------------------------
+        $product->loadMissing('variants');
+
+        // ----------------------------
         // Resolve view
         // ----------------------------
         $view = null;
@@ -65,7 +71,6 @@ class PublicDesignerController extends Controller
             $view = ProductView::with('areas')->find($viewId);
         }
         if (!$view) {
-            // product has views relation loaded because we eager-loaded above
             if ($product->relationLoaded('views') && $product->views->count()) {
                 $view = $product->views->first();
             } else {
@@ -79,6 +84,7 @@ class PublicDesignerController extends Controller
         // Build layout slots
         // ----------------------------
         $layoutSlots = [];
+
         foreach ($areas as $a) {
             $left  = (float)($a->left_pct ?? $a->x_mm ?? 0);
             $top   = (float)($a->top_pct ?? $a->y_mm ?? 0);
@@ -124,39 +130,46 @@ class PublicDesignerController extends Controller
             ];
         }
 
+        // Keep original layout for debug or artwork detection
         $originalLayoutSlots = $layoutSlots;
 
         // ----------------------------
         // Detect artwork/logo slot
         // ----------------------------
         $hasArtworkSlot = false;
+
         foreach ($originalLayoutSlots as $slotKey => $slot) {
             $k = strtolower((string)$slotKey);
+
             if (in_array($k, ['logo','artwork','team_logo','graphic','image','art','badge','patch','patches'])) {
                 $hasArtworkSlot = true; break;
             }
+
             if (!empty($slot['mask']) || !empty($slot['mask_url'])) {
                 $hasArtworkSlot = true; break;
             }
+
             if (!in_array($k, ['name','number']) && !empty($slot['width_pct']) && !empty($slot['height_pct'])) {
                 if ($slot['width_pct'] > 2 || $slot['height_pct'] > 2) {
                     $hasArtworkSlot = true; break;
                 }
             }
         }
+
         $showUpload = (bool)$hasArtworkSlot;
         Log::info("designer: product_id={$product->id} showUpload=" . (int)$showUpload . " hasArtworkSlot=" . (int)$hasArtworkSlot);
 
         // ----------------------------
-        // Filter only real areas (existing IDs) - keep same logic you had
+        // Filter only real areas (existing IDs) & candidate mapping
         // ----------------------------
         $filteredLayoutSlots = [];
         if (!empty($layoutSlots) && is_array($layoutSlots)) {
-            foreach (['name','number'] as $k) {
+            foreach (['name', 'number'] as $k) {
                 if (isset($layoutSlots[$k]) && !empty($layoutSlots[$k]['id'])) {
                     $filteredLayoutSlots[$k] = $layoutSlots[$k];
                 }
             }
+
             if (empty($filteredLayoutSlots['name'])) {
                 $candidates = [];
                 foreach ($layoutSlots as $key => $slot) {
@@ -172,6 +185,7 @@ class PublicDesignerController extends Controller
                         }
                     }
                 }
+
                 if (count($candidates) === 1) {
                     $firstKey = array_keys($candidates)[0];
                     $filteredLayoutSlots['name'] = $candidates[$firstKey];
@@ -181,7 +195,7 @@ class PublicDesignerController extends Controller
         }
 
         // ----------------------------
-        // Compute display price (keep your existing logic)
+        // Compute display price
         // ----------------------------
         $displayPrice = 0.00;
         try {
@@ -205,20 +219,68 @@ class PublicDesignerController extends Controller
         }
 
         // ----------------------------
-        // Build sizeOptions and variantMap
+        // Build sizeOptions and variantMap for blade/js (robust)
         // ----------------------------
         $sizeOptions = [];
         $variantMap = [];
+
         if ($product->relationLoaded('variants')) {
             foreach ($product->variants as $v) {
-                $label = trim((string)($v->option_value ?? $v->option_name ?? $v->title ?? ''));
+                // try various fields that might contain the human label
+                $label = trim((string)(
+                    $v->option_value ??
+                    $v->option_name ??
+                    $v->option1 ??
+                    $v->option_1 ??
+                    $v->title ??
+                    $v->name ?? ''
+                ));
+
+                // variant id: try known id fields
                 $variantId = (string)($v->shopify_variant_id ?? $v->variant_id ?? $v->id ?? '');
-                if ($label === '' || $variantId === '') continue;
+
+                if ($variantId === '') {
+                    // skip invalid
+                    continue;
+                }
+
+                if ($label === '') {
+                    // if no label, fallback to option combination or the id itself
+                    // try building from option columns if available
+                    $parts = [];
+                    foreach (['option1','option2','option3','option_1','option_2','option_3'] as $optField) {
+                        if (isset($v->$optField) && $v->$optField) $parts[] = trim((string)$v->$optField);
+                    }
+                    $label = $parts ? implode(' / ', $parts) : $variantId;
+                }
+
+                // push only once
                 $sizeOptions[] = ['label' => $label, 'variant_id' => $variantId];
+
+                // store mappings for multiple key forms
+                $variantMap[$label] = $variantId;
                 $variantMap[strtoupper($label)] = $variantId;
+                $variantMap[strtolower($label)] = $variantId;
             }
         }
 
+        // If still empty, expose generic fallback (variant ids only)
+        if (empty($sizeOptions) && $product->variants && $product->variants->count()) {
+            foreach ($product->variants as $v) {
+                $variantId = (string)($v->shopify_variant_id ?? $v->variant_id ?? $v->id ?? '');
+                if ($variantId === '') continue;
+                $sizeOptions[] = ['label' => $variantId, 'variant_id' => $variantId];
+                $variantMap[$variantId] = $variantId;
+            }
+        }
+
+        if (empty($sizeOptions)) {
+            Log::warning("designer: no sizeOptions built for product {$product->id}; variants_count=" . ($product->variants ? $product->variants->count() : 0));
+        }
+
+        // ----------------------------
+        // Return view
+        // ----------------------------
         return view('public.designer', [
             'product' => $product,
             'view'    => $view,

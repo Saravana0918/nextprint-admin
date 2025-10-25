@@ -184,16 +184,20 @@
       @endphp
 
       <div class="mb-2">
-  <select id="np-size" name="size" class="form-select" required>
-    <option value="">Select Size</option>
-    @if(!empty($sizeOptions) && is_array($sizeOptions))
-      @foreach($sizeOptions as $opt)
-        <!-- value MUST be variant id so JS can set np-variant-id -->
-        <option value="{{ $opt['variant_id'] }}">{{ $opt['label'] }}</option>
-      @endforeach
-    @endif
-  </select>
-</div>
+        <select id="np-size" name="size" class="form-select" required>
+            <option value="">Select Size</option>
+            @if(!empty($sizeOptions) && is_array($sizeOptions))
+              @foreach($sizeOptions as $opt)
+                {{-- support either array or object --}}
+                @php
+                  $vid = is_array($opt) ? ($opt['variant_id'] ?? '') : ($opt->variant_id ?? ($opt->variantId ?? '') );
+                  $label = is_array($opt) ? ($opt['label'] ?? ($opt['title'] ?? $vid)) : ($opt->label ?? ($opt->title ?? $vid));
+                @endphp
+                <option value="{{ $vid }}">{{ $label }}</option>
+              @endforeach
+            @endif
+          </select>
+        </div>
 
         <div class="mb-2">
           <input id="np-qty" name="quantity" type="number" min="1" value="1" class="form-control">
@@ -636,23 +640,19 @@ altNumEls.forEach(el => {
 
   function updateATCState(){ if (!btn) return; btn.disabled = false; }
 
-  // Only one place — inside your main IIFE that controls form behavior
-const sizeEl = document.getElementById('np-size');
-if (sizeEl) {
+  if (sizeEl) {
   sizeEl.addEventListener('change', function(){
-    // value already variant id
+    // Our <option>.value is already variant id (set by blade)
     const selectedVariantId = (sizeEl.value || '').toString().trim();
     const vInput = document.getElementById('np-variant-id');
     if (vInput) vInput.value = selectedVariantId;
-    // sync hidden + preview
+    // keep sync functions consistent
     syncHidden();
     syncPreview();
     updateATCState();
   });
-  // optionally fire change if initial value present
-  try { sizeEl.dispatchEvent(new Event('change')); } catch(e){}
+  try { sizeEl.dispatchEvent(new Event('change')); } catch(e) {}
 }
-
 
 
   if (addTeam) addTeam.addEventListener('click', function(e) {
