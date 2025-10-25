@@ -224,6 +224,18 @@ class PublicDesignerController extends Controller
         $sizeOptions = [];
         $variantMap = [];
 
+        \Log::info('designer: sizeOptions count=' . count($sizeOptions));
+        \Log::info('designer: sizeOptions=' . json_encode($sizeOptions));
+        \Log::info('designer: variants_count=' . ($product->variants ? $product->variants->count() : 0));
+        \Log::info('designer: variant raw sample=' . json_encode($product->variants->take(5)->map(function($v){
+            return [
+                'id' => ($v->shopify_variant_id ?? $v->variant_id ?? $v->id ?? null),
+                'title' => ($v->title ?? $v->name ?? null),
+                'option1' => ($v->option1 ?? ($v->option_1 ?? null)),
+                'option_value' => ($v->option_value ?? null),
+            ];
+        })));
+
         if ($product->relationLoaded('variants')) {
             foreach ($product->variants as $v) {
                 // try various fields that might contain the human label

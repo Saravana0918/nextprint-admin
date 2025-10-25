@@ -185,14 +185,20 @@
 
       <div class="mb-2">
         <select id="np-size" name="size" class="form-select" required>
-          <option value="">Select Size</option>
-          @if(!empty($sizeOptions) && is_array($sizeOptions))
-            @foreach($sizeOptions as $opt)
-              <option value="{{ $opt['variant_id'] }}">{{ $opt['label'] }}</option>
-            @endforeach
-          @endif
-        </select>
-      </div>
+          <pre id="dbg_sizes">@json($sizeOptions)</pre>
+            <option value="">Select Size</option>
+            @if(!empty($sizeOptions) && is_array($sizeOptions))
+              @foreach($sizeOptions as $opt)
+                {{-- support either array or object --}}
+                @php
+                  $vid = is_array($opt) ? ($opt['variant_id'] ?? '') : ($opt->variant_id ?? ($opt->variantId ?? '') );
+                  $label = is_array($opt) ? ($opt['label'] ?? ($opt['title'] ?? $vid)) : ($opt->label ?? ($opt->title ?? $vid));
+                @endphp
+                <option value="{{ $vid }}">{{ $label }}</option>
+              @endforeach
+            @endif
+          </select>
+        </div>
 
         <div class="mb-2">
           <input id="np-qty" name="quantity" type="number" min="1" value="1" class="form-control">
@@ -635,20 +641,22 @@ altNumEls.forEach(el => {
 
   function updateATCState(){ if (!btn) return; btn.disabled = false; }
 
-  if (sizeEl) {
-  sizeEl.addEventListener('change', function(){
-    // Our <option>.value is already variant id (set by blade)
+ const sizeEl = document.getElementById('np-size');
+if (sizeEl) {
+  sizeEl.addEventListener('change', function() {
     const selectedVariantId = (sizeEl.value || '').toString().trim();
     const vInput = document.getElementById('np-variant-id');
     if (vInput) vInput.value = selectedVariantId;
-    // keep sync functions consistent
-    syncHidden();
-    syncPreview();
-    updateATCState();
+    // optional: enable atc button
+    const atcBtn = document.getElementById('np-atc-btn');
+    if (atcBtn && selectedVariantId) {
+      atcBtn.disabled = false;
+      atcBtn.classList.remove('d-none');
+    }
   });
-  try { sizeEl.dispatchEvent(new Event('change')); } catch(e) {}
+  // trigger once to populate if server preselected
+  try { sizeEl.dispatchEvent(new Event('change')); } catch(e){}
 }
-
 
   if (addTeam) addTeam.addEventListener('click', function(e) {
   e.preventDefault();
