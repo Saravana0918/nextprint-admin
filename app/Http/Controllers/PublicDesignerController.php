@@ -60,7 +60,7 @@ class PublicDesignerController extends Controller
         if (!$product->relationLoaded('variants') || $product->variants->count() === 0) {
             try {
                 $this->fetchShopifyVariantsAndStore($product);
-                // reload relation
+                // reload relation after upsert
                 $product->load('variants');
             } catch (\Throwable $e) {
                 Log::warning("designer: fetchShopifyVariants failed product_id={$product->id} error=".$e->getMessage());
@@ -213,10 +213,12 @@ class PublicDesignerController extends Controller
         $variantMap = [];
         if ($product->relationLoaded('variants')) {
             foreach ($product->variants as $v) {
+                // prefer explicit option columns; fall back to title
                 $label = trim((string)($v->option_value ?? $v->option_name ?? $v->title ?? ''));
                 $variantId = (string)($v->shopify_variant_id ?? $v->variant_id ?? $v->id ?? '');
                 if ($label === '' || $variantId === '') continue;
                 $sizeOptions[] = ['label' => $label, 'variant_id' => $variantId];
+                // map uppercase label to variant id for convenience (used maybe in JS)
                 $variantMap[strtoupper($label)] = $variantId;
             }
         }
@@ -237,72 +239,92 @@ class PublicDesignerController extends Controller
 
     /**
      * Fetch variants for a given product from Shopify Admin API and store into local DB
-     * requires: SHOPIFY_SHOP and SHOPIFY_ADMIN_TOKEN in env
+     * Supports multiple env var names for compatibility:
+     * SHOPIFY_SHOP or SHOPIFY_STORE for shop domain (e.g. yourshop.myshopify.com)
+     * SHOPIFY_ADMIN_TOKEN or SHOPIFY_ADMIN_API_TOKEN for admin API token
      */
     protected function fetchShopifyVariantsAndStore(Product $product)
     {
-        // Need product->shopify_product_id
         $shopifyProductId = $product->shopify_product_id ?? null;
         if (!$shopifyProductId) {
-            // nothing to fetch
             Log::info("designer: no shopify_product_id for product {$product->id}");
             return;
         }
 
-        $shop = env('SHOPIFY_SHOP');
-        $token = env('SHOPIFY_ADMIN_TOKEN');
+        // Support common env names
+        $shop = env('SHOPIFY_SHOP') ?: env('SHOPIFY_STORE') ?: env('SHOPIFY_SHOP_DOMAIN');
+        $token = env('SHOPIFY_ADMIN_TOKEN') ?: env('SHOPIFY_ADMIN_API_TOKEN') ?: env('SHOPIFY_ADMIN_SECRET');
+
         if (!$shop || !$token) {
-            throw new \RuntimeException("Shopify credentials not configured");
+            throw new \RuntimeException("Shopify credentials not configured (expected SHOPIFY_SHOP/SHOPIFY_STORE and SHOPIFY_ADMIN_TOKEN/SHOPIFY_ADMIN_API_TOKEN).");
+        }
+
+        // sanitize product id if it's the global id (gid://...) or numeric, Shopify API expects numeric id in REST path
+        $cleanId = $shopifyProductId;
+        if (is_string($cleanId) && strpos($cleanId, 'gid://') === 0) {
+            // extract numeric id from gid if present
+            if (preg_match('/\/(\d+)$/', $cleanId, $m)) {
+                $cleanId = $m[1];
+            }
         }
 
         $client = new Client([
             'base_uri' => "https://{$shop}/admin/api/2024-10/",
-            'timeout' => 15,
+            'timeout' => 20,
             'headers' => [
                 'X-Shopify-Access-Token' => $token,
                 'Accept' => 'application/json',
             ],
         ]);
 
-        $resp = $client->get("products/{$shopifyProductId}.json");
+        $resp = $client->get("products/{$cleanId}.json");
         if ($resp->getStatusCode() !== 200) {
             throw new \RuntimeException("Shopify product fetch failed: {$resp->getStatusCode()}");
         }
         $json = json_decode((string)$resp->getBody(), true);
         $shopifyProduct = $json['product'] ?? null;
         if (!$shopifyProduct) {
-            throw new \RuntimeException("Shopify returned no product");
+            throw new \RuntimeException("Shopify returned no product for id={$cleanId}");
         }
 
         $variants = $shopifyProduct['variants'] ?? [];
         if (!is_array($variants) || count($variants) === 0) {
-            Log::info("designer: shopify product has no variants shopify_id={$shopifyProductId}");
+            Log::info("designer: shopify product has no variants shopify_id={$cleanId}");
             return;
         }
 
         // store each variant into product->variants() relation
         foreach ($variants as $v) {
-            // map fields - adapt to your variants table columns
             $variantShopifyId = (string)($v['id'] ?? '');
-            $title = trim((string)($v['title'] ?? ''));
-            // If your variant option label is like "S" in option1:
-            $optionLabel = '';
-            if (!empty($v['option1'])) $optionLabel = $v['option1'];
-            // price
-            $price = isset($v['price']) ? $v['price'] : null;
+            if (!$variantShopifyId) continue;
 
-            // Upsert: assumes your variants relation has columns: shopify_variant_id, option_value, price, variant_id
-            // adjust the keys according to your DB schema, e.g. variant_id / id column
-            $product->variants()->updateOrCreate(
-                ['shopify_variant_id' => $variantShopifyId],
-                [
-                    'title' => $title,
-                    'option_value' => $optionLabel,
-                    'price' => $price,
-                    // add other fields mapping if needed
-                ]
-            );
+            $title = trim((string)($v['title'] ?? ''));
+            $optionLabel = '';
+            // prefer option1 / option2 / option3 if present
+            if (!empty($v['option1'])) $optionLabel = $v['option1'];
+            elseif (!empty($v['option2'])) $optionLabel = $v['option2'];
+            elseif (!empty($v['option3'])) $optionLabel = $v['option3'];
+
+            $price = isset($v['price']) ? $v['price'] : null;
+            $sku = isset($v['sku']) ? $v['sku'] : null;
+
+            // Use updateOrCreate to upsert. Adjust column names to match your variants table.
+            try {
+                $product->variants()->updateOrCreate(
+                    ['shopify_variant_id' => $variantShopifyId],
+                    [
+                        'title' => $title,
+                        'option_value' => $optionLabel,
+                        'price' => $price,
+                        'sku' => $sku,
+                        // if your table has 'variant_id' or 'id' needs mapping, adjust here.
+                    ]
+                );
+            } catch (\Throwable $e) {
+                Log::warning("designer: variant upsert failed for shopify_variant_id={$variantShopifyId} error=" . $e->getMessage());
+            }
         }
-        Log::info("designer: fetched and stored " . count($variants) . " variants for product {$product->id}");
+
+        Log::info("designer: fetched and stored " . count($variants) . " variants for product {$product->id} (shopify_id={$cleanId})");
     }
 }

@@ -12,12 +12,16 @@ return new class extends Migration
     public function up()
 {
     Schema::create('product_variants', function (Blueprint $table) {
-        $table->id();
-        $table->unsignedBigInteger('product_id')->nullable()->index();
+        $table->bigIncrements('id');
+        $table->unsignedBigInteger('product_id')->index();
+        $table->string('shopify_variant_id')->nullable()->index();
         $table->string('option_name')->nullable();
         $table->string('option_value')->nullable();
-        $table->string('shopify_variant_id')->nullable()->unique();
+        $table->decimal('price', 10, 2)->nullable();
+        $table->string('sku')->nullable();
         $table->timestamps();
+
+        $table->foreign('product_id')->references('id')->on('products')->onDelete('cascade');
     });
 }
 
