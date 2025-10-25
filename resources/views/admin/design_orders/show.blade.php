@@ -61,7 +61,7 @@
             @if($orderColorHex)
               <span class="d-inline-flex align-items-center">
                 <span style="display:inline-block;width:18px;height:18px;border:1px solid #ccc;background:{{ $orderColorHex }};margin-right:6px;border-radius:3px;"></span>
-                <code style="font-size:11px;">{{ $orderColorHex }}</code>
+                <code style="font-size:15px;">{{ $orderColorHex }}</code>
               </span>
             @else
               <span class="text-muted">—</span>
