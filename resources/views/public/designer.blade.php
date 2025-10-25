@@ -205,7 +205,7 @@
         Add To Cart
       </button>
 
-      <button id="np-atc-btn" type="submit" class="btn btn-primary d-none" disabled>
+      <button id="np-atc-btn" type="submit" class="btn btn-primary d-none" style="margin: 2px;" disabled>
         Add to Cart
       </button>
     </div>

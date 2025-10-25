@@ -216,7 +216,7 @@
           <button type="button" id="save-team-btn" class="btn btn-outline-primary">Add To Cart</button>
 
           <!-- Add To Cart (submit) -> initially disabled -->
-          <button type="submit" id="team-addtocart-btn" class="btn btn-success d-none" disabled data-label="Add To Cart">Buy Now</button>
+          <button type="submit" id="team-addtocart-btn" class="btn btn-success d-none" disabled data-label="Buy Now">Buy Now</button>
 
           <!-- Back button placed at the end; on mobile this will be pushed to right -->
           <a href="{{ url()->previous() }}" class="btn btn-secondary back-btn">Back</a>
