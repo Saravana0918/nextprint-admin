@@ -728,7 +728,7 @@ window.location.href = base + (params.toString() ? ('?' + params.toString()) : '
       console.error('Add to cart error', err);
       alert('Something went wrong adding to cart.');
     } finally {
-      if (btn) { btn.disabled = false; btn.textContent = 'Buy Now'; }
+      if (btn) { btn.disabled = false; btn.textContent = 'Add to Cart'; }
     }
   });
 
@@ -1091,7 +1091,7 @@ async function doSave() {
         atcBtn.disabled = false;
         atcBtn.classList.remove('d-none'); // if you hid it with d-none earlier
         // optionally change text
-        atcBtn.textContent = 'Add to Cart';
+        atcBtn.textContent = 'Buy Now';
       }
 
       // Remove the Save button from UI (or hide it)
