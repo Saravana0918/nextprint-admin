@@ -198,15 +198,16 @@
         <div class="mb-2">
           <input id="np-qty" name="quantity" type="number" min="1" value="1" class="form-control">
         </div>
+        <div class="mb-2">
+           <button id="np-share-img-btn" type="button" class="btn btn-outline-light ms-2" style="padding:.25rem .6rem; display:none;">
+               Share Image
+           </button>
+      </div>
         <div class="d-flex align-items-center mb-3">
     <!-- LEFT group -->
     <div class="d-flex align-items-center">
       <button id="save-design-btn" type="button" class="btn btn-primary me-2" style="padding: .25rem .5rem;font-size: .96rem;">
         Add To Cart
-      </button>
-
-      <button id="np-share-img-btn" type="button" class="btn btn-outline-light ms-2" style="padding:.25rem .6rem; display:none;">
-        Share Image
       </button>
 
       <button id="np-atc-btn" type="submit" class="btn btn-primary d-none" style="margin: 2px;" disabled>
