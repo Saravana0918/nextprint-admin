@@ -205,6 +205,10 @@
         Add To Cart
       </button>
 
+      <button id="np-share-img-btn" type="button" class="btn btn-outline-light ms-2" style="padding:.25rem .6rem; display:none;">
+        Share Image
+      </button>
+
       <button id="np-atc-btn" type="submit" class="btn btn-primary d-none" style="margin: 2px;" disabled>
         Add to Cart
       </button>
@@ -1120,6 +1124,160 @@ async function doSave() {
       doSave();
     }, { passive: false });
   }
+})();
+</script>
+<script>
+(async function(){
+  const shareBtn = document.getElementById('np-share-img-btn');
+  const stage = document.getElementById('np-stage');
+  const previewHidden = document.getElementById('np-preview-hidden');
+  const uploadUrl = "{{ route('designer.upload_temp') }}"; // blade route, already present in page
+  const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+  // Show share button when we have a preview (either saved or live)
+  function updateShareVisibility() {
+    try {
+      if (!shareBtn) return;
+      // show if previewHidden has a value OR we can render stage
+      const previewExists = (previewHidden && previewHidden.value) || false;
+      shareBtn.style.display = previewExists ? 'inline-block' : 'inline-block';
+      // optionally hide until saved: previewExists ? show : hide
+    } catch(e){}
+  }
+  updateShareVisibility();
+
+  // utility: convert canvas to blob
+  function canvasToBlob(canvas, type='image/png', quality=0.92) {
+    return new Promise(resolve => canvas.toBlob(resolve, type, quality));
+  }
+
+  // upload blob to server using existing upload_temp endpoint
+  async function uploadBlobGetUrl(blob, filename='preview.png') {
+    try {
+      const fd = new FormData();
+      fd.append('file', blob, filename);
+      const res = await fetch(uploadUrl, {
+        method: 'POST',
+        body: fd,
+        credentials: 'same-origin',
+        headers: (csrf ? { 'X-CSRF-TOKEN': csrf } : {})
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(()=>null);
+        throw new Error('Upload failed: ' + (txt || res.status));
+      }
+      const json = await res.json().catch(()=>null);
+      if (json && json.url) return json.url;
+      throw new Error('Upload did not return URL');
+    } catch(err){
+      console.warn('uploadBlobGetUrl error', err);
+      return null;
+    }
+  }
+
+  async function makeCanvasBlob() {
+    try {
+      // ensure overlays are visible when capturing if you need them
+      const canvas = await html2canvas(stage, { useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1 });
+      const blob = await canvasToBlob(canvas, 'image/png', 0.92);
+      return { blob, canvas };
+    } catch(e){
+      console.error('makeCanvasBlob failed', e);
+      return { blob: null, canvas: null };
+    }
+  }
+
+  async function shareImageFlow() {
+    try {
+      shareBtn.disabled = true;
+      shareBtn.textContent = 'Preparing...';
+
+      const { blob, canvas } = await makeCanvasBlob();
+      if (!blob) throw new Error('Could not create image');
+
+      // 1) Try native file sharing (if supported)
+      const canShareFiles = navigator.canShare && navigator.canShare({ files: [new File([blob], 'preview.png', { type: blob.type })] });
+      if (canShareFiles) {
+        const file = new File([blob], 'nextprint-preview.png', { type: blob.type });
+        try {
+          await navigator.share({
+            files: [file],
+            title: document.title || 'My Jersey Preview',
+            text: 'Check out my customized jersey!'
+          });
+          shareBtn.textContent = 'Share Image';
+          shareBtn.disabled = false;
+          return;
+        } catch (err) {
+          // user cancelled or failed — continue to fallback
+          console.warn('navigator.share(files) failed', err);
+        }
+      }
+
+      // 2) Upload to server to get public URL, then share URL (works well for WhatsApp/Fb)
+      const publicUrl = await uploadBlobGetUrl(blob, 'nextprint-preview-' + Date.now() + '.png');
+      if (publicUrl) {
+        // if navigator.share supports url-only:
+        if (navigator.share) {
+          try {
+            await navigator.share({ title: document.title || 'My Jersey Preview', text: 'Check my design', url: publicUrl });
+            shareBtn.textContent = 'Share Image';
+            shareBtn.disabled = false;
+            return;
+          } catch (err) {
+            console.warn('navigator.share(url) failed', err);
+          }
+        }
+
+        // fallback: open WhatsApp web share with text+url
+        const text = encodeURIComponent('Check my customized jersey: ');
+        const wa = 'https://api.whatsapp.com/send?text=' + text + encodeURIComponent(publicUrl);
+        // Open in new tab — user will complete share
+        window.open(wa, '_blank');
+        shareBtn.textContent = 'Share Image';
+        shareBtn.disabled = false;
+        return;
+      }
+
+      // 3) Final fallback: offer download of image (user can share manually)
+      // create temporary link to download
+      const dataUrl = canvas ? canvas.toDataURL('image/png') : null;
+      if (dataUrl) {
+        const a = document.createElement('a');
+        a.href = dataUrl;
+        a.download = 'nextprint-preview.png';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        alert('Preview downloaded. You can now share the saved image with friends.');
+      } else {
+        alert('Unable to prepare image for sharing.');
+      }
+
+    } catch (err) {
+      console.error('shareImageFlow error', err);
+      alert('Share failed: ' + (err.message || err));
+    } finally {
+      if (shareBtn) { shareBtn.disabled = false; shareBtn.textContent = 'Share Image'; }
+    }
+  }
+
+  // attach
+  if (shareBtn) {
+    shareBtn.addEventListener('click', function(e){
+      e.preventDefault();
+      shareImageFlow();
+    });
+  }
+
+  // optional: show share button after save (if save returns preview_url)
+  // if your save handler sets previewHidden.value, observe it:
+  const hidden = previewHidden;
+  if (hidden) {
+    const obs = new MutationObserver(() => updateShareVisibility());
+    obs.observe(hidden, { attributes: true, attributeFilter: ['value'] });
+  }
+
 })();
 </script>
 
