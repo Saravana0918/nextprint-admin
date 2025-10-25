@@ -6,6 +6,7 @@
   <title>{{ $product->name ?? ($product->title ?? 'Product') }} – NextPrint</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Oswald:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 
   <style>
@@ -32,22 +33,18 @@
 
     .mobile-only { display: none; }
     .desktop-only { display: block; }
-    #np-share-img-btn {
-   
-    color: #fff;
-    border: 2px solid #fff;
-    background-color: transparent;
-  
+   #np-share-img-btn {
+    /* உங்கள் இமேஜுக்கு ஏற்ற தோற்றம் */
+    color: #fff; 
+    border: 2px solid #fff; 
+    background-color: transparent; 
     border-radius: 10px; 
     padding: .25rem 1rem; 
-    font-weight: 500;
-
-   
+    font-weight: 500; 
     transition: all 0.2s ease-in-out; 
 }
 
 #np-share-img-btn:hover {
-    
     background-color: rgba(255, 255, 255, 0.1); 
     cursor: pointer;
 }
@@ -55,6 +52,10 @@
 
 #np-share-img-btn i {
     margin-right: 0.5rem; 
+    
+   
+    font-family: 'Font Awesome 6 Free', 'Font Awesome 6 Brands', 'Font Awesome 5 Free', 'Font Awesome 5 Brands', 'Font Awesome';
+    font-weight: 900; 
 }
 
     @media (max-width: 767px) {
