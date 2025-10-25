@@ -23,40 +23,17 @@
     .np-overlay::before, .np-overlay::after { content: none; }
     .np-swatch { width:28px; height:28px; border-radius:50%; border:1px solid #ccc; cursor:pointer; display:inline-block; }
     .np-swatch.active { outline: 2px solid rgba(0,0,0,0.08); box-shadow: 0 2px 6px rgba(0,0,0,0.06); }
-
     body { background-color: #929292; }
     .body-padding{ padding-top: 100px; }
     .right-layout{ padding-top:350px; }
     .desktop-display{ color : white; }
-
     .np-user-image { position: absolute; pointer-events: auto; object-fit: cover; display: block; transform-origin: center center; z-index: 300; box-shadow: 0 6px 18px rgba(0,0,0,0.25); border-radius: 4px; }
-
     .mobile-only { display: none; }
     .desktop-only { display: block; }
-   #np-share-img-btn {
-    /* உங்கள் இமேஜுக்கு ஏற்ற தோற்றம் */
-    color: #fff; 
-    border: 2px solid #fff; 
-    background-color: transparent; 
-    border-radius: 10px; 
-    padding: .25rem 1rem; 
-    font-weight: 500; 
-    transition: all 0.2s ease-in-out; 
-}
-
-#np-share-img-btn:hover {
-    background-color: rgba(255, 255, 255, 0.1); 
-    cursor: pointer;
-}
-
-
-#np-share-img-btn i {
-    margin-right: 0.5rem; 
-    
-   
-    font-family: 'Font Awesome 6 Free', 'Font Awesome 6 Brands', 'Font Awesome 5 Free', 'Font Awesome 5 Brands', 'Font Awesome';
-    font-weight: 900; 
-}
+   #np-share-img-btn { color: #fff;  border: 2px solid #fff;  background-color: transparent;  border-radius: 10px;  padding: .25rem 1rem;  font-weight: 500;  transition: all 0.2s ease-in-out; }
+   #np-share-img-btn:hover { background-color: rgba(255, 255, 255, 0.1); cursor: pointer;}
+   #np-share-img-btn i { margin-right: 0.5rem; 
+   font-family: 'Font Awesome 6 Free', 'Font Awesome 6 Brands', 'Font Awesome 5 Free', 'Font Awesome 5 Brands', 'Font Awesome'; font-weight: 900; }
 
     @media (max-width: 767px) {
       body { background-image: url('/images/stadium-bg.jpg'); background-size: cover; background-position: center center; background-repeat: no-repeat; min-height: 100vh; margin-top: -70px; }
