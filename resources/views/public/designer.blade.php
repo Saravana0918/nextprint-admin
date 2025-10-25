@@ -206,7 +206,7 @@
       </button>
 
       <button id="np-atc-btn" type="submit" class="btn btn-primary d-none" disabled>
-        Buy Now
+        Add to Cart
       </button>
     </div>
 
@@ -728,7 +728,7 @@ window.location.href = base + (params.toString() ? ('?' + params.toString()) : '
       console.error('Add to cart error', err);
       alert('Something went wrong adding to cart.');
     } finally {
-      if (btn) { btn.disabled = false; btn.textContent = 'Add to Cart'; }
+      if (btn) { btn.disabled = false; btn.textContent = 'Buy Now'; }
     }
   });
 
