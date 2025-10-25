@@ -32,7 +32,30 @@
 
     .mobile-only { display: none; }
     .desktop-only { display: block; }
-    #np-share-img-btn i { margin-right: 0.5rem; }
+    #np-share-img-btn {
+   
+    color: #fff;
+    border: 2px solid #fff;
+    background-color: transparent;
+  
+    border-radius: 10px; 
+    padding: .25rem 1rem; 
+    font-weight: 500;
+
+   
+    transition: all 0.2s ease-in-out; 
+}
+
+#np-share-img-btn:hover {
+    
+    background-color: rgba(255, 255, 255, 0.1); 
+    cursor: pointer;
+}
+
+
+#np-share-img-btn i {
+    margin-right: 0.5rem; 
+}
 
     @media (max-width: 767px) {
       body { background-image: url('/images/stadium-bg.jpg'); background-size: cover; background-position: center center; background-repeat: no-repeat; min-height: 100vh; margin-top: -70px; }
