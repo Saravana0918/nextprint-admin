@@ -907,83 +907,113 @@ document.addEventListener('DOMContentLoaded', function(){
   }
 
    async function makePreviewDataURL() {
-    try {
-      await (document.fonts?.ready || Promise.resolve());
-      const canvas = await html2canvas(stage, { useCORS:true, backgroundColor: null, scale: window.devicePixelRatio || 1 });
-      return canvas.toDataURL('image/png');
-    } catch (err) {
-      console.warn('html2canvas failed:', err);
-      return null;
-    }
-  }
-
-  async function uploadBaseArtwork() {
-  // temporarily hide overlays
-  const nameOverlay = document.getElementById('np-prev-name');
-  const numOverlay = document.getElementById('np-prev-num');
-  const userImgs = document.querySelectorAll('.np-user-image');
-
-  const prevNameDisplay = nameOverlay ? nameOverlay.style.display : null;
-  const prevNumDisplay  = numOverlay  ? numOverlay.style.display : null;
-
-  if (nameOverlay) nameOverlay.style.display = 'none';
-  if (numOverlay) numOverlay.style.display = 'none';
-  userImgs.forEach(u => u.style.display = 'none');
-
-  // small delay then capture
-  await new Promise(r => setTimeout(r, 120));
-  let baseDataUrl = null;
   try {
-    const canvas = await html2canvas(document.getElementById('np-stage'), { useCORS:true, backgroundColor: null, scale: window.devicePixelRatio || 1 });
-    baseDataUrl = canvas.toDataURL('image/png');
-  } catch(e) {
-    console.warn('base artwork capture failed', e);
-  }
-
-  // restore overlays
-  if (nameOverlay) nameOverlay.style.display = prevNameDisplay;
-  if (numOverlay) numOverlay.style.display = prevNumDisplay;
-  userImgs.forEach(u => u.style.display = '');
-
-  if (!baseDataUrl) return null;
-
-  // convert to blob and upload via existing route
-  const blob = await (await fetch(baseDataUrl)).blob();
-  const fd = new FormData();
-  fd.append('file', blob, 'base_preview.png');
-  const token = document.querySelector('meta[name="csrf-token"]').getAttribute('content') || '';
-  try {
-    const res = await fetch('{{ route("designer.upload_temp") }}', {
-      method:'POST',
-      body: fd,
-      credentials: 'same-origin',
-      headers: { 'X-CSRF-TOKEN': token }
+    // small quick compressed dataURL fallback (used only when server-side upload not required)
+    const { blob, canvas } = await makeCompressedBlobForTeam({ scale: 0.72, mime: 'image/png', quality: 0.9 });
+    if (!blob) return null;
+    // convert to dataURL
+    return await new Promise(resolve => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
     });
-    const json = await res.json().catch(()=>null);
-    if (res.ok && json && json.url) {
-      // json.url should be like '/storage/tmp/....png'
-      window.lastBasePreviewUrl = json.url;
-      return json.url;
-    } else {
-      console.warn('upload_temp returned no url', json);
-      return null;
-    }
-  } catch(e) {
-    console.warn('upload_temp error', e);
+  } catch (err) {
+    console.warn('makePreviewDataURL error', err);
     return null;
   }
 }
 
+  async function uploadBaseArtwork() {
+  // hide UI bits that shouldn't be in base if any (safe-guard)
+  const overlays = Array.from(document.querySelectorAll('.np-overlay, #overlay-name, #overlay-number, #player-logo'));
+  const prevStyles = overlays.map(el => el ? el.style.display || '' : '');
+  overlays.forEach(el => { if (el) el.style.display = 'none'; });
+
+  await new Promise(r => setTimeout(r, 80)); // allow reflow
+
+  try {
+    // prepare compressed blob (smaller target for base)
+    const blob = await prepareTeamUploadBlob(600 * 1024); // ~600KB target
+    if (!blob) throw new Error('Base blob creation failed');
+
+    // restore overlays
+    overlays.forEach((el, i) => { if (el) el.style.display = prevStyles[i] || ''; });
+
+    // upload and return public URL
+    const url = await uploadBlobViaTemp(blob, 'preview_base_' + Date.now() + '.jpg');
+    return url;
+  } catch (err) {
+    // restore overlays on error too
+    overlays.forEach((el, i) => { if (el) el.style.display = prevStyles[i] || ''; });
+    console.warn('uploadBaseArtwork error', err);
+    return null;
+  }
+}
+
+
+/* ---------- compressed image helpers (TEAM page) ---------- */
+async function makeCompressedBlobForTeam(opts = {}) {
+  // opts: { scale, mime, quality }
+  const scale = typeof opts.scale === 'number' ? opts.scale : 0.72;
+  const mime  = opts.mime || 'image/jpeg';
+  const quality = typeof opts.quality === 'number' ? opts.quality : 0.78;
+  const node = document.getElementById('player-stage') || document.getElementById('np-stage') || document.body;
+  const canvas = await html2canvas(node, { useCORS: true, backgroundColor: null, scale: (window.devicePixelRatio || 1) * scale });
+  return new Promise(resolve => canvas.toBlob(blob => resolve({ blob, canvas }), mime, quality));
+}
+
+async function prepareTeamUploadBlob(maxBytes = 900000) {
+  // try several compress levels until under size
+  const attempts = [
+    { scale: 0.9, quality: 0.85 },
+    { scale: 0.72, quality: 0.78 },
+    { scale: 0.6, quality: 0.72 },
+    { scale: 0.45, quality: 0.64 }
+  ];
+  for (const cfg of attempts) {
+    try {
+      const { blob } = await makeCompressedBlobForTeam(cfg);
+      if (!blob) continue;
+      if (blob.size <= maxBytes) return blob;
+    } catch(e) { /* ignore */ }
+  }
+  // fallback: return last attempt even if bigger
+  const last = await makeCompressedBlobForTeam(attempts[attempts.length - 1]);
+  return last.blob;
+}
+
+/* upload helper used here */
+async function uploadBlobViaTemp(blob, filename = null) {
+  if (!blob) return null;
+  const fd = new FormData();
+  const fname = filename || ('team_preview_' + Date.now() + '.jpg');
+  fd.append('file', blob, fname);
+  const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || document.querySelector('input[name="_token"]')?.value || '';
+  const res = await fetch('{{ route("designer.upload_temp") }}', {
+    method: 'POST',
+    body: fd,
+    credentials: 'same-origin',
+    headers: (token ? { 'X-CSRF-TOKEN': token } : {})
+  });
+  if (!res.ok) {
+    const txt = await res.text().catch(()=>null);
+    throw new Error('Upload failed: ' + (txt || res.status));
+  }
+  const json = await res.json().catch(()=>null);
+  if (json && json.url) return json.url;
+  throw new Error('Upload returned no url');
+}
+
+
   async function saveDesign() {
-  // assume these DOM refs exist in outer scope:
-  // saveBtn, atcBtn, previewInput, form, saveUrl, csrf, makePreviewDataURL
   if (!saveBtn) return;
   saveBtn.disabled = true;
-  const originalText = saveBtn.textContent || 'Save Design';
+  const originalText = saveBtn.textContent || 'Save';
   saveBtn.textContent = 'Saving...';
 
   try {
-    // collect players rows
+    // collect players similarly to existing logic
     const players = Array.from(document.querySelectorAll('#players-list .player-row')).map(r => {
       return {
         id: r.dataset.playerId ?? null,
@@ -991,8 +1021,7 @@ document.addEventListener('DOMContentLoaded', function(){
         number: (r.querySelector('.player-number')?.value || '').toString().replace(/\D/g,'').slice(0,3),
         size: r.querySelector('.player-size')?.value || '',
         font: r.querySelector('.player-font')?.value || '',
-        color: r.querySelector('.player-color')?.value || '',
-        preview_src: r.querySelector('.player-preview')?.value || null
+        color: r.querySelector('.player-color')?.value || ''
       };
     }).filter(p => (p.name && p.name.trim() !== '') || (p.number && p.number.trim() !== ''));
 
@@ -1003,88 +1032,88 @@ document.addEventListener('DOMContentLoaded', function(){
       return;
     }
 
-    // create preview (gracefully handle failure)
-    let dataUrl = null;
+    // 1) Create compressed blob (try to keep under ~1.2MB)
+    let previewUrl = '';
     try {
-      dataUrl = await makePreviewDataURL();
+      const blob = await prepareTeamUploadBlob(1200 * 1024); // 1.2MB target
+      if (blob) {
+        previewUrl = await uploadBlobViaTemp(blob, 'team_preview_' + Date.now() + '.jpg');
+      }
     } catch (err) {
-      console.warn('makePreviewDataURL error', err);
-      dataUrl = null;
+      console.warn('blob upload failed, falling back to dataURL', err);
+      // fallback: try dataURL route (smaller chance of 413 but better than nothing)
+      try {
+        const dataUrl = await makePreviewDataURL();
+        if (dataUrl) {
+          // upload dataURL as blob
+          const respBlob = await (await fetch(dataUrl)).blob();
+          previewUrl = await uploadBlobViaTemp(respBlob, 'team_preview_fallback_' + Date.now() + '.png');
+        }
+      } catch(e) { console.warn('fallback upload failed', e); }
     }
+
+    // 2) Optional: upload base artwork separately (small thumbnail)
+    let basePreviewUrl = null;
+    try {
+      basePreviewUrl = await uploadBaseArtwork();
+    } catch(e) { console.warn('base upload failed', e); basePreviewUrl = null; }
 
     const payload = {
       product_id: form.querySelector('input[name="product_id"]')?.value || null,
-      order_id: form.querySelector('input[name="order_id"]')?.value || null,
       players: players,
-      preview_src: dataUrl, // may be null
+      preview_src: previewUrl || null,
+      preview_base: basePreviewUrl || null,
       team_logo_url: document.getElementById('team-prefill-logo')?.value || ''
     };
 
-    console.info('Saving team payload', payload);
-
-    const resp = await fetch(saveUrl, {
+    // send to server
+    const token = document.querySelector('input[name="_token"]')?.value || '';
+    const res = await fetch(saveUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'X-CSRF-TOKEN': csrf
+        'X-CSRF-TOKEN': token || csrf
       },
       credentials: 'same-origin',
       body: JSON.stringify(payload)
     });
 
-    // try parse json safely
-    let json = null;
-    try { json = await resp.json(); } catch (e) { json = null; }
-
-    const ok = resp.ok && json && (json.success === true || json.success == 1 || json.status === 'ok');
-
-    if (!ok) {
-      const msg = (json && (json.message || json.error)) || ('HTTP ' + resp.status);
+    const json = await res.json().catch(()=>null);
+    if (!res.ok || !(json && (json.success === true || json.status === 'ok' || json.team_id))) {
+      const msg = (json && (json.message || json.error)) || ('HTTP ' + res.status);
       alert('Save failed: ' + msg);
       saveBtn.disabled = false;
       saveBtn.textContent = originalText;
       return;
     }
 
-    // success handling
-    const previewUrl = (json.preview_url || json.preview || '') || '';
-    const teamId = (json.team_id || '') || '';
+    // success: set hidden inputs, enable add-to-cart
+    const previewInput = document.getElementById('team-preview-url');
+    if (previewInput && (json.preview_url || previewUrl)) previewInput.value = json.preview_url || previewUrl;
 
-    try {
-      if (previewInput) previewInput.value = previewUrl;
-    } catch(e){ console.warn('set preview hidden failed', e); }
+    const teamIdHidden = document.getElementById('team-id-hidden');
+    if (teamIdHidden && json.team_id) teamIdHidden.value = json.team_id;
 
-    try {
-      const hid = document.getElementById('team-id-hidden') || document.querySelector('input[name="team_id"]');
-      if (hid && teamId) hid.value = teamId;
-    } catch(e){ console.warn('set team id hidden failed', e); }
+    if (atcBtn) {
+      atcBtn.disabled = false;
+      atcBtn.classList.remove('d-none');
+      if (atcBtn.getAttribute('data-label')) atcBtn.textContent = atcBtn.getAttribute('data-label');
+    }
 
-    // enable & show Add To Cart
-    try {
-      if (atcBtn) {
-        atcBtn.disabled = false;
-        atcBtn.classList.remove('d-none');
-        // optionally restore label
-        if (atcBtn.getAttribute('data-label')) atcBtn.textContent = atcBtn.getAttribute('data-label');
-      }
-    } catch(e){ console.warn('enable atc failed', e); }
-
-    // remove Save button to prevent duplicate saves
-    try { saveBtn.remove(); } catch(e){ saveBtn.style.display = 'none'; }
+    try { saveBtn.remove(); } catch(e) { saveBtn.style.display = 'none'; }
 
     alert(json.message || 'Design saved ✔ You can now click Add To Cart.');
-    return;
+    return json;
 
   } catch (err) {
-    console.error('Save error', err);
-    alert('Save failed — network/server error. See console.');
+    console.error('SaveDesign fatal', err);
+    alert('Save failed — see console for details.');
     saveBtn.disabled = false;
-    saveBtn.textContent = originalText;
+    saveBtn.textContent = 'Save';
     return;
   }
 }
-
 
   saveBtn.addEventListener('click', function(e){
     e.preventDefault();
