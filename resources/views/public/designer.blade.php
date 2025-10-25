@@ -940,15 +940,39 @@ async function handleFile(file) {
     // hide visually if you prefer: atcBtn.classList.add('d-none');
   }
 
-  async function makePreviewDataURL(){
+  // ---------- START: compressed image helpers ----------
+async function makeCompressedBlob(opts = {}) {
+  // opts: { scale: 0.7, mime: 'image/jpeg', quality: 0.78 }
+  const scale = typeof opts.scale === 'number' ? opts.scale : 0.72;
+  const mime = opts.mime || 'image/jpeg';
+  const quality = typeof opts.quality === 'number' ? opts.quality : 0.78;
+  const node = document.getElementById('np-stage');
+  // use a reduced scale to shrink raster size drastically
+  const canvas = await html2canvas(node, { useCORS: true, backgroundColor: null, scale: (window.devicePixelRatio || 1) * scale });
+  return new Promise(resolve => canvas.toBlob(blob => resolve({ blob, canvas }), mime, quality));
+}
+
+// tries different compress levels until under maxBytes (fallback)
+async function prepareUploadBlob(maxBytes = 900000) { // ~900 KB default
+  const attempts = [
+    { scale: 0.9, quality: 0.85 },
+    { scale: 0.72, quality: 0.78 },
+    { scale: 0.6, quality: 0.72 },
+    { scale: 0.45, quality: 0.65 }
+  ];
+  for (const cfg of attempts) {
     try {
-      const canvas = await html2canvas(stage, { useCORS:true, backgroundColor:null, scale: window.devicePixelRatio || 1 });
-      return canvas.toDataURL('image/png');
-    } catch (err) {
-      console.warn('html2canvas failed', err);
-      return null;
-    }
+      const { blob } = await makeCompressedBlob(cfg);
+      if (!blob) continue;
+      if (blob.size <= maxBytes) return blob;
+    } catch(e){ /* ignore and continue */ }
   }
+  // last-resort: return last attempt even if large
+  const last = await makeCompressedBlob(attempts[attempts.length-1]);
+  return last.blob;
+}
+// ---------- END helpers ----------
+
 
   // helper: normalize color
 function normalizeColorHex(c) {
@@ -959,49 +983,70 @@ function normalizeColorHex(c) {
 }
 
 async function uploadBaseArtwork() {
-  const nameEl = document.getElementById('np-prev-name');
-  const numEl = document.getElementById('np-prev-num');
-  const overlays = [nameEl, numEl];
-  const originalDisplay = overlays.map(el => el ? el.style.display || '' : null);
-  overlays.forEach(el => { if (el) el.style.display = 'none'; });
+  try {
+    const nameEl = document.getElementById('np-prev-name');
+    const numEl = document.getElementById('np-prev-num');
+    const overlays = [nameEl, numEl];
+    const originalDisplay = overlays.map(el => el ? el.style.display || '' : null);
+    overlays.forEach(el => { if (el) el.style.display = 'none'; });
 
-  await new Promise(r => setTimeout(r, 80));
+    await new Promise(r => setTimeout(r, 80));
 
-  const previewNode = document.getElementById('np-stage');
-  const canvas = await html2canvas(previewNode, {useCORS: true, scale: 2, backgroundColor: null});
-  const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png', 0.92));
+    // prepare compressed blob smaller for 'base' preview
+    const maxBytes = 600 * 1024; // ~600KB for base
+    const blob = await prepareUploadBlob(maxBytes);
+    if (!blob) throw new Error('Base preview blob creation failed');
 
-  overlays.forEach((el, idx) => { if (el && originalDisplay[idx] !== null) el.style.display = originalDisplay[idx]; });
+    overlays.forEach((el, idx) => { if (el && originalDisplay[idx] !== null) el.style.display = originalDisplay[idx]; });
 
-  const form = new FormData();
-  form.append('file', blob, 'preview_base_' + Date.now() + '.png');
+    const form = new FormData();
+    form.append('file', blob, 'preview_base_' + Date.now() + '.jpg');
 
-  const res = await fetch('{{ route("designer.upload_temp") }}', { method: 'POST', body: form, credentials: 'same-origin', headers: { 'X-CSRF-TOKEN': csrf } });
-  if (!res.ok) {
-    const txt = await res.text().catch(()=>null);
-    throw new Error('Base upload failed: ' + (txt || res.status));
+    const res = await fetch('{{ route("designer.upload_temp") }}', { method: 'POST', body: form, credentials: 'same-origin', headers: { 'X-CSRF-TOKEN': csrf } });
+    if (!res.ok) {
+      const txt = await res.text().catch(()=>null);
+      throw new Error('Base upload failed: ' + (txt || res.status));
+    }
+    const data = await res.json().catch(()=>null);
+    if (!data || !data.url) throw new Error('upload-temp did not return url');
+    return data.url;
+  } catch (err) {
+    console.warn('uploadBaseArtwork error', err);
+    throw err;
   }
-  const data = await res.json().catch(()=>null);
-  if (!data || !data.url) throw new Error('upload-temp did not return url');
-  return data.url;
 }
+
 
 async function generateFullPreview() {
-  const previewNode = document.getElementById('np-stage');
-  const canvas = await html2canvas(previewNode, {useCORS: true, scale: 2, backgroundColor: null});
-  const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png', 0.92));
-  const form = new FormData();
-  form.append('file', blob, 'preview_full_' + Date.now() + '.png');
+  // create compressed blob then upload to server (FormData)
+  try {
+    const maxBytes = 1200 * 1024; // 1.2 MB allowed client target (adjust)
+    const blob = await prepareUploadBlob(maxBytes);
+    if (!blob) throw new Error('Could not create preview blob');
 
-  const res = await fetch('{{ route("designer.upload_temp") }}', { method: 'POST', body: form, credentials: 'same-origin', headers: { 'X-CSRF-TOKEN': csrf } });
-  if (!res.ok) {
-    const txt = await res.text().catch(()=>null);
-    throw new Error('Full preview upload failed: ' + (txt || res.status));
+    const form = new FormData();
+    const filename = 'preview_full_' + Date.now() + '.jpg';
+    form.append('file', blob, filename);
+
+    const res = await fetch('{{ route("designer.upload_temp") }}', {
+      method: 'POST',
+      body: form,
+      credentials: 'same-origin',
+      headers: (csrf ? { 'X-CSRF-TOKEN': csrf } : {})
+    });
+    if (!res.ok) {
+      const txt = await res.text().catch(()=>null);
+      throw new Error('Full preview upload failed: ' + (txt || res.status));
+    }
+    const data = await res.json().catch(()=>null);
+    if (!data || !data.url) throw new Error('upload-temp did not return url');
+    return data.url;
+  } catch (err) {
+    console.error('generateFullPreview error', err);
+    throw err;
   }
-  const data = await res.json().catch(()=>null);
-  if (!data || !data.url) throw new Error('upload-temp did not return url');
-  return data.url;
 }
+
 
 async function doSave() {
   try {
@@ -1046,80 +1091,79 @@ async function doSave() {
 
 
   async function doSave() {
-    if (!saveBtn) return;
-    saveBtn.disabled = true;
-    saveBtn.textContent = 'Saving...';
+  if (!saveBtn) return;
+  saveBtn.disabled = true;
+  saveBtn.textContent = 'Saving...';
 
-    // optional: ensure hidden fields are in sync before sending (your other JS should do this too)
-    // document.getElementById('np-name-hidden').value = document.getElementById('np-name').value.toUpperCase();
+  try {
+    const fullPreviewUrl = await generateFullPreview(); // returns public URL
+    let previewBaseUrl = null;
+    try {
+      previewBaseUrl = await uploadBaseArtwork();
+    } catch (err) {
+      console.warn('uploadBaseArtwork failed, continuing with full preview only', err);
+      previewBaseUrl = null;
+    }
 
-    const previewDataUrl = await makePreviewDataURL();
+    const selectedFontFamily = window.selectedFontName || 'Bebas Neue';
+    const selectedColor = normalizeColorHex(window.selectedColor || '#000000');
 
     const payload = {
+      preview_src: fullPreviewUrl,
+      preview_base: previewBaseUrl,
+      name_text: document.getElementById('np-name-hidden')?.value || '',
+      number_text: document.getElementById('np-num-hidden')?.value || '',
+      font: selectedFontFamily,
+      color: selectedColor,
       product_id: document.getElementById('np-product-id')?.value || null,
       shopify_product_id: document.getElementById('np-shopify-product-id')?.value || null,
       variant_id: document.getElementById('np-variant-id')?.value || null,
-      name: document.getElementById('np-name-hidden')?.value || null,
-      number: document.getElementById('np-num-hidden')?.value || null,
-      font: document.getElementById('np-font-hidden')?.value || null,
-      color: document.getElementById('np-color-hidden')?.value || null,
       size: document.getElementById('np-size')?.value || null,
-      quantity: parseInt(document.getElementById('np-qty')?.value || '1', 10),
-      preview_src: previewDataUrl // send dataURL, server should save and return public URL
+      quantity: parseInt(document.getElementById('np-qty')?.value || '1', 10)
     };
 
-    try {
-      const res = await fetch('{{ route("admin.design.order.store") }}', {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'X-CSRF-TOKEN': csrf
-        },
-        credentials: 'same-origin',
-        body: JSON.stringify(payload)
-      });
+    const res = await fetch('{{ route("admin.design.order.store") }}', {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': csrf
+      },
+      credentials: 'same-origin',
+      body: JSON.stringify(payload)
+    });
 
-      const data = await res.json().catch(()=>({}));
+    const data = await res.json().catch(()=>({}));
 
-      if (!res.ok || !data || data.success !== true) {
-        console.error('Save failed', data);
-        alert('Save failed: ' + (data.message || res.status || 'Unknown'));
-        saveBtn.disabled = false;
-        saveBtn.textContent = 'Save Design (Save)';
-        return;
-      }
-
-      // success
-      const previewUrl = data.preview_url || data.preview_src || previewDataUrl || null;
-      if (previewUrl && previewHidden) previewHidden.value = previewUrl;
-
-      // enable and show Add-to-cart
-      if (atcBtn) {
-        atcBtn.disabled = false;
-        atcBtn.classList.remove('d-none'); // if you hid it with d-none earlier
-        // optionally change text
-        atcBtn.textContent = 'Buy Now';
-      }
-
-      // Remove the Save button from UI (or hide it)
-      // Option A (remove completely):
-      saveBtn.remove();
-
-      // Option B (if you prefer hide): use this instead of remove()
-      // saveBtn.style.display = 'none';
-      // or saveBtn.classList.add('d-none');
-
-      // Inform user
-      alert('Design saved ✔ — you can now Add to Cart.');
-
-    } catch (err) {
-      console.error('Save error', err);
-      alert('Save failed — check console.');
+    if (!res.ok || !data || data.success !== true) {
+      console.error('Save failed', data);
+      alert('Save failed: ' + (data.message || res.status || 'Unknown'));
       saveBtn.disabled = false;
       saveBtn.textContent = 'Save Design (Save)';
+      return;
     }
+
+    const previewUrl = data.preview_url || data.preview_src || fullPreviewUrl || null;
+    if (previewUrl && previewHidden) previewHidden.value = previewUrl;
+
+    if (atcBtn) {
+      atcBtn.disabled = false;
+      atcBtn.classList.remove('d-none');
+      atcBtn.textContent = 'Buy Now';
+    }
+
+    saveBtn.remove();
+    alert('Design saved ✔ — you can now Add to Cart.');
+    return data;
+  } catch (err) {
+    console.error('doSave error', err);
+    alert('Save failed: ' + (err.message || err));
+    saveBtn.disabled = false;
+    saveBtn.textContent = 'Save Design (Save)';
+    throw err;
   }
+}
+
 
   // Attach listener
   if (saveBtn) {
