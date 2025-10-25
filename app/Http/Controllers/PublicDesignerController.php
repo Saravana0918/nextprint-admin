@@ -315,8 +315,6 @@ class PublicDesignerController extends Controller
                     [
                         'title' => $title,
                         'option_value' => $optionLabel,
-                        'price' => $price,
-                        'sku' => $sku,
                         // if your table has 'variant_id' or 'id' needs mapping, adjust here.
                     ]
                 );
