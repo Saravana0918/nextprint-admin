@@ -156,47 +156,40 @@ class PublicDesignerController extends Controller
         // ----------------------------
         // Filter only real areas (existing IDs)
         // ----------------------------
-        // ----------------------------
-// Filter only real areas (existing IDs)
-// and fallback: if no explicit "name" but there is exactly one
-// non-name/number slot defined, map it to "name" so designer shows NAME.
-// ----------------------------
-$filteredLayoutSlots = [];
-if (!empty($layoutSlots) && is_array($layoutSlots)) {
-    // include explicit name/number only when they originate from DB (have id)
-    foreach (['name', 'number'] as $k) {
-        if (isset($layoutSlots[$k]) && !empty($layoutSlots[$k]['id'])) {
-            $filteredLayoutSlots[$k] = $layoutSlots[$k];
-        }
-    }
+        $filteredLayoutSlots = [];
+        if (!empty($layoutSlots) && is_array($layoutSlots)) {
+            // include explicit name/number only when they originate from DB (have id)
+            foreach (['name', 'number'] as $k) {
+                if (isset($layoutSlots[$k]) && !empty($layoutSlots[$k]['id'])) {
+                    $filteredLayoutSlots[$k] = $layoutSlots[$k];
+                }
+            }
 
-    // If name missing, try to detect a single meaningful artwork slot and map it to name.
-    if (empty($filteredLayoutSlots['name'])) {
-        // find candidate slots that are NOT named 'number' and have an id
-        $candidates = [];
-        foreach ($layoutSlots as $key => $slot) {
-            $kl = strtolower((string)$key);
-            if ($kl === 'number' || $kl === 'name') continue;
-            if (!empty($slot['id'])) {
-                // require a minimal sensible size to avoid tiny artifacts
-                $w = isset($slot['width_pct']) ? (float)$slot['width_pct'] : 0;
-                $h = isset($slot['height_pct']) ? (float)$slot['height_pct'] : 0;
-                if ($w <= 1) $w *= 100;
-                if ($h <= 1) $h *= 100;
-                if ($w > 2 || $h > 2) { // modest size threshold
-                    $candidates[$key] = $slot;
+            // If name missing, try to detect a single meaningful artwork slot and map it to name.
+            if (empty($filteredLayoutSlots['name'])) {
+                // find candidate slots that are NOT named 'number' and have an id
+                $candidates = [];
+                foreach ($layoutSlots as $key => $slot) {
+                    $kl = strtolower((string)$key);
+                    if ($kl === 'number' || $kl === 'name') continue;
+                    if (!empty($slot['id'])) {
+                        $w = isset($slot['width_pct']) ? (float)$slot['width_pct'] : 0;
+                        $h = isset($slot['height_pct']) ? (float)$slot['height_pct'] : 0;
+                        if ($w <= 1) $w *= 100;
+                        if ($h <= 1) $h *= 100;
+                        if ($w > 2 || $h > 2) {
+                            $candidates[$key] = $slot;
+                        }
+                    }
+                }
+
+                if (count($candidates) === 1) {
+                    $firstKey = array_keys($candidates)[0];
+                    $filteredLayoutSlots['name'] = $candidates[$firstKey];
+                    \Log::info("designer: mapped single generic slot '{$firstKey}' -> name for product_id={$product->id}");
                 }
             }
         }
-
-        // If exactly one candidate, map it to 'name'
-        if (count($candidates) === 1) {
-            $firstKey = array_keys($candidates)[0];
-            $filteredLayoutSlots['name'] = $candidates[$firstKey];
-            \Log::info("designer: mapped single generic slot '{$firstKey}' -> name for product_id={$product->id}");
-        }
-    }
-}
 
         // ----------------------------
         // Compute display price
@@ -223,6 +216,22 @@ if (!empty($layoutSlots) && is_array($layoutSlots)) {
         }
 
         // ----------------------------
+        // NEW: Build sizeOptions and variantMap for blade/js
+        // ----------------------------
+        $sizeOptions = [];
+        $variantMap = [];
+
+        if ($product->relationLoaded('variants')) {
+            foreach ($product->variants as $v) {
+                $label = trim((string)($v->option_value ?? $v->option_name ?? $v->title ?? ''));
+                $variantId = (string)($v->shopify_variant_id ?? $v->variant_id ?? $v->id ?? '');
+                if ($label === '' || $variantId === '') continue;
+                $sizeOptions[] = ['label' => $label, 'variant_id' => $variantId];
+                $variantMap[strtoupper($label)] = $variantId;
+            }
+        }
+
+        // ----------------------------
         // Return view
         // ----------------------------
         return view('public.designer', [
@@ -234,6 +243,9 @@ if (!empty($layoutSlots) && is_array($layoutSlots)) {
             'showUpload' => $showUpload,
             'hasArtworkSlot' => $hasArtworkSlot,
             'displayPrice' => (float)$displayPrice,
+            // new:
+            'sizeOptions' => $sizeOptions,
+            'variantMap' => $variantMap,
         ]);
     }
 }

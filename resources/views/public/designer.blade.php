@@ -170,27 +170,29 @@
         <input type="hidden" name="variant_id" id="np-variant-id" value="">
 
         @php
-          $sizeOptions = [];
-          if (!empty($product) && $product->relationLoaded('variants') && $product->variants->count()) {
-              $sizeOptions = $product->variants->pluck('option_value')->map(fn($x)=>trim((string)$x))->unique()->values()->all();
-          }
-        @endphp
+        // sizeOptions and variantMap come from controller now
+        // fallback: if not provided, build from product just-in-time
+        if (empty($sizeOptions) && !empty($product) && $product->relationLoaded('variants') && $product->variants->count()) {
+            $sizeOptions = [];
+            foreach ($product->variants as $v) {
+                $label = trim((string)($v->option_value ?? $v->option_name ?? $v->title ?? ''));
+                $variantId = (string)($v->shopify_variant_id ?? $v->variant_id ?? $v->id ?? '');
+                if ($label === '' || $variantId === '') continue;
+                $sizeOptions[] = ['label' => $label, 'variant_id' => $variantId];
+            }
+        }
+      @endphp
 
-        <div class="mb-2">
-          <select id="np-size" name="size" class="form-select" required>
-            <option value="">Select Size</option>
-            @if(!empty($product) && $product->relationLoaded('variants'))
-              @foreach($product->variants as $v)
-                @php
-                  $optLabel = trim((string)($v->option_value ?? $v->option_name ?? $v->title ?? ''));
-                  // prefer shopify_variant_id or fallback to internal id
-                  $variantId = (string)($v->shopify_variant_id ?? $v->variant_id ?? $v->id ?? '');
-                @endphp
-                <option value="{{ $variantId }}">{{ $optLabel }}</option>
-              @endforeach
-            @endif
-          </select>
-        </div>
+      <div class="mb-2">
+        <select id="np-size" name="size" class="form-select" required>
+          <option value="">Select Size</option>
+          @if(!empty($sizeOptions) && is_array($sizeOptions))
+            @foreach($sizeOptions as $opt)
+              <option value="{{ $opt['variant_id'] }}">{{ $opt['label'] }}</option>
+            @endforeach
+          @endif
+        </select>
+      </div>
 
         <div class="mb-2">
           <input id="np-qty" name="quantity" type="number" min="1" value="1" class="form-control">
@@ -615,16 +617,18 @@ altNumEls.forEach(el => {
 
   if (sizeEl) {
   sizeEl.addEventListener('change', function(){
-    // sizeEl.value is now the variant id (because option.value = variant id)
+    // Our <option>.value is already variant id (set by blade)
     const selectedVariantId = (sizeEl.value || '').toString().trim();
-    if (document.getElementById('np-variant-id')) {
-      document.getElementById('np-variant-id').value = selectedVariantId;
-    }
+    const vInput = document.getElementById('np-variant-id');
+    if (vInput) vInput.value = selectedVariantId;
+    // keep sync functions consistent
     syncHidden();
     syncPreview();
+    updateATCState();
   });
   try { sizeEl.dispatchEvent(new Event('change')); } catch(e) {}
 }
+
 
   if (addTeam) addTeam.addEventListener('click', function(e) {
   e.preventDefault();
@@ -676,7 +680,7 @@ window.location.href = base + (params.toString() ? ('?' + params.toString()) : '
   }
     syncHidden();
     const variantId = (document.getElementById('np-variant-id') || { value: '' }).value;
-    if (!variantId || !/^\d+$/.test(variantId)) { alert('Variant not selected or invalid. Please re-select size.'); return; }
+    if (!variantId) { alert('Variant not selected or invalid. Please re-select size.'); return; }
     if (btn) { btn.disabled = true; btn.textContent = 'Adding...'; }
     try {
       try {
