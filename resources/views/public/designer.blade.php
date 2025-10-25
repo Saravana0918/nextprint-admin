@@ -32,6 +32,7 @@
 
     .mobile-only { display: none; }
     .desktop-only { display: block; }
+    #np-share-img-btn i { margin-right: 0.5rem; }
 
     @media (max-width: 767px) {
       body { background-image: url('/images/stadium-bg.jpg'); background-size: cover; background-position: center center; background-repeat: no-repeat; min-height: 100vh; margin-top: -70px; }
@@ -218,9 +219,9 @@
   </div>
       </form>
       <div class="mb-2">
-           <button id="np-share-img-btn" type="button" class="btn btn-outline-light ms-2" style="padding:.25rem .6rem; display:none;">
-               Share Image
-           </button>
+           <button id="np-share-img-btn" type="button" class="btn btn-outline-light ms-2">
+            <i class="fas fa-share-alt"></i> Share Image
+        </button>
       </div>
     </div>
   </div>
