@@ -740,8 +740,8 @@ window.location.href = base + (params.toString() ? ('?' + params.toString()) : '
   const scaleRange = document.getElementById('np-user-image-scale');
   const scaleLabel = document.getElementById('np-user-image-scale-label');
 
-  let userImg = null;
-  let userImgScale = 1.0;
+  window.userImg = window.userImg || null;
+window.userImgScale = (typeof window.userImgScale !== 'undefined') ? window.userImgScale : 1.0;
 
   function computeStageSizeLocal(){
     if (!baseImg || !stage) return null;
@@ -851,27 +851,30 @@ async function handleFile(file) {
     const dataUrl = ev.target.result;
 
     // create userImg on stage (same as before)
-    if (userImg && userImg.parentNode) userImg.parentNode.removeChild(userImg);
-    userImg = document.createElement('img');
-    userImg.className = 'np-user-image';
-    userImg.src = dataUrl; // display immediately from dataURL
-    userImg.alt = 'User artwork';
-    userImg.style.position = 'absolute';
-    userImg.style.left = '50%';
-    userImg.style.top = '50%';
-    userImg.style.width = '100px';
-    userImg.style.height = '100px';
-    userImg.style.transform = 'translate(-50%,-50%)';
-    userImg.style.objectFit = 'cover';
-    userImg.style.pointerEvents = 'none';
-    stage.appendChild(userImg);
+    // updated: use global window.userImg & window.userImgScale
+if (window.userImg && window.userImg.parentNode) window.userImg.parentNode.removeChild(window.userImg);
+window.userImg = document.createElement('img');
+window.userImg.className = 'np-user-image';
+window.userImg.src = dataUrl;
+window.userImg.alt = 'User artwork';
+window.userImg.style.position = 'absolute';
+window.userImg.style.left = '50%';
+window.userImg.style.top = '50%';
+window.userImg.style.width = '100px';
+window.userImg.style.height = '100px';
+window.userImg.style.transform = 'translate(-50%,-50%)';
+window.userImg.style.objectFit = 'cover';
+window.userImg.style.pointerEvents = 'none';
+stage.appendChild(window.userImg);
 
-    if (removeBtn) removeBtn.style.display = 'inline-block';
-    if (scaleRange) { scaleRange.style.display = 'inline-block'; scaleLabel.style.display = 'inline-block'; scaleRange.value = 100; userImgScale = 1.0; }
+if (removeBtn) removeBtn.style.display = 'inline-block';
+if (scaleRange) { scaleRange.style.display = 'inline-block'; scaleLabel.style.display = 'inline-block'; scaleRange.value = 100; }
+window.userImgScale = 1.0;
 
-    const slot = findPreferredSlot();
-    placeUserImage(slot);
-    userImg.onload = function(){ placeUserImage(slot); };
+const slot = findPreferredSlot();
+placeUserImage(slot);
+window.userImg.onload = function(){ placeUserImage(slot); };
+
 
     // 3) If we have publicUrl, store it on window for add-team link
     if (publicUrl) {
@@ -1520,6 +1523,18 @@ async function doSave() {
   }, 120);
 
 })();
+</script>
+<script>
+  // ----- DEBUG / GLOBALS -----
+  window.userImg = window.userImg || null;
+  window.userImgScale = (typeof window.userImgScale !== 'undefined') ? window.userImgScale : 1.0;
+
+  // placeholders — functions other scripts call; will be overwritten when real functions defined
+  window.syncHidden = window.syncHidden || function(){ console.warn('syncHidden placeholder called'); };
+  window.syncPreview = window.syncPreview || function(){ console.warn('syncPreview placeholder called'); };
+  window.renderMasks = window.renderMasks || function(){ console.warn('renderMasks placeholder called'); };
+
+  console.info('Globals initialized: userImg?', !!window.userImg, 'userImgScale', window.userImgScale);
 </script>
 
 </body>
