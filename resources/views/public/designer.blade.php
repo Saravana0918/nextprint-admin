@@ -24,7 +24,7 @@
     .np-swatch { width:28px; height:28px; border-radius:50%; border:1px solid #ccc; cursor:pointer; display:inline-block; }
     .np-swatch.active { outline: 2px solid rgba(0,0,0,0.08); box-shadow: 0 2px 6px rgba(0,0,0,0.06); }
     body { background-color: #929292; }
-    .body-padding{ padding-top: 100px; }
+    .body-padding{ padding-top: 100px; background-color: #929292;}
     .right-layout{ padding-top:350px; }
     .desktop-display{ color : white; }
     .np-user-image { position: absolute; pointer-events: auto; object-fit: cover; display: block; transform-origin: center center; z-index: 300; box-shadow: 0 6px 18px rgba(0,0,0,0.25); border-radius: 4px; }
@@ -36,8 +36,7 @@
    font-family: 'Font Awesome 6 Free', 'Font Awesome 6 Brands', 'Font Awesome 5 Free', 'Font Awesome 5 Brands', 'Font Awesome'; font-weight: 900; }
 
     @media (max-width: 767px) {
-      body { background-image: url('/images/stadium-bg.jpg'); background-size: cover; background-position: center center; background-repeat: no-repeat; min-height: 100vh; margin-top: -70px; }
-      body::before { content: ""; position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 5; pointer-events: none; }
+      body { margin-top: -70px; }
       .container, .row, .np-stage, header, main, footer { position: relative; z-index: 10; }
       .np-col input.form-control, .np-col select.form-select { z-index: 100020; position: relative; }
       .np-stage::after { content: ""; position: absolute; left: 12px; right: 12px; top: 12px; bottom: 12px; border-radius: 8px; background: rgba(0,0,0,0.06); z-index: 15; pointer-events: none; }
@@ -1326,6 +1325,62 @@ async function doSave() {
     obs.observe(hidden, { attributes: true, attributeFilter: ['value'] });
   }
 
+})();
+</script>
+<script>
+// MOBILE-FRIENDLY .np-swatch handler: supports click + touch + keyboard
+(function(){
+  const swatches = Array.from(document.querySelectorAll('.np-swatch'));
+  if (!swatches.length) return;
+
+  // bring swatches above overlays & ensure clickable
+  swatches.forEach(s => {
+    s.style.zIndex = s.style.zIndex || '10050';
+    s.style.pointerEvents = 'auto';
+    s.setAttribute('role','button');
+    s.setAttribute('tabindex','0');
+  });
+
+  const colorInput = document.getElementById('np-color') || null;
+  const pvName = document.getElementById('np-prev-name') || null;
+  const pvNum  = document.getElementById('np-prev-num')  || null;
+
+  function applySwatchColor(el, ev) {
+    try {
+      if (ev && ev.preventDefault) ev.preventDefault();
+      const color = el.dataset && el.dataset.color ? el.dataset.color : window.getComputedStyle(el).backgroundColor;
+
+      // active class
+      swatches.forEach(x => x.classList.remove('active'));
+      el.classList.add('active');
+
+      // set color input (convert rgb->hex if needed)
+      if (colorInput) {
+        let hex = color;
+        const m = (''+color).match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/);
+        if (m) {
+          const r = parseInt(m[1],10).toString(16).padStart(2,'0');
+          const g = parseInt(m[2],10).toString(16).padStart(2,'0');
+          const b = parseInt(m[3],10).toString(16).padStart(2,'0');
+          hex = '#'+r+g+b;
+        }
+        try { colorInput.value = hex; colorInput.dispatchEvent(new Event('input',{bubbles:true})); } catch(e){}
+      }
+
+      if (pvName) pvName.style.color = color;
+      if (pvNum) pvNum.style.color = color;
+
+      window.selectedColor = color;
+      if (typeof syncHidden === 'function') { try{ syncHidden(); } catch(e){} }
+    } catch(err){ console.warn('swatch handler error', err); }
+  }
+
+  swatches.forEach(s => {
+    const handler = (ev) => applySwatchColor(s, ev);
+    s.addEventListener('click', handler, { passive: true });
+    s.addEventListener('touchstart', handler, { passive: false });
+    s.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); applySwatchColor(s, ev); } });
+  });
 })();
 </script>
 
