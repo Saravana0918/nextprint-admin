@@ -1356,7 +1356,7 @@ async function doSave() {
       s.style.touchAction = s.style.touchAction || 'manipulation';
       // mobile-friendly hit area
       if (window.innerWidth <= 767) {
-        s.style.padding = s.style.padding || '10px';
+        s.style.padding = s.style.padding || '1px';
         s.style.margin  = s.style.margin  || '6px';
       } else {
         s.style.padding = s.style.padding || '6px';
