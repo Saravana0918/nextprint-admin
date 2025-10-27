@@ -1328,61 +1328,120 @@ async function doSave() {
 })();
 </script>
 <script>
-// MOBILE-FRIENDLY .np-swatch handler: supports click + touch + keyboard
+/*
+  Mobile-friendly .np-swatch handler.
+  Paste this just before </body>.
+*/
 (function(){
   const swatches = Array.from(document.querySelectorAll('.np-swatch'));
-  if (!swatches.length) return;
+  if (!swatches.length) {
+    console.info('swatch-handler: no .np-swatch found');
+    return;
+  }
 
-  // bring swatches above overlays & ensure clickable
+  // Ensure swatches are clickable on top of overlays
   swatches.forEach(s => {
-    s.style.zIndex = s.style.zIndex || '10050';
+    // only set style if not already set (keeps your theme)
+    if (!s.style.zIndex) s.style.zIndex = '10050';
     s.style.pointerEvents = 'auto';
     s.setAttribute('role','button');
-    s.setAttribute('tabindex','0');
+    if (!s.hasAttribute('tabindex')) s.setAttribute('tabindex','0');
   });
 
   const colorInput = document.getElementById('np-color') || null;
   const pvName = document.getElementById('np-prev-name') || null;
   const pvNum  = document.getElementById('np-prev-num')  || null;
 
+  function toHexIfRgb(value){
+    if (!value) return value;
+    // match rgb( r, g, b )
+    const m = (''+value).match(/^rgb\(\s*(\d+),\s*(\d+),\s*(\d+)\s*\)$/i);
+    if (!m) return value;
+    const r = parseInt(m[1],10).toString(16).padStart(2,'0');
+    const g = parseInt(m[2],10).toString(16).padStart(2,'0');
+    const b = parseInt(m[3],10).toString(16).padStart(2,'0');
+    return '#' + r + g + b;
+  }
+
   function applySwatchColor(el, ev) {
     try {
       if (ev && ev.preventDefault) ev.preventDefault();
-      const color = el.dataset && el.dataset.color ? el.dataset.color : window.getComputedStyle(el).backgroundColor;
 
-      // active class
+      // choose dataset color first, fallback to computed background
+      let color = (el.dataset && el.dataset.color) ? el.dataset.color : null;
+      if (!color) {
+        const cs = window.getComputedStyle(el);
+        color = cs && (cs.backgroundColor || cs.color) ? (cs.backgroundColor || cs.color) : null;
+      }
+      if (!color) return;
+
+      // mark active
       swatches.forEach(x => x.classList.remove('active'));
       el.classList.add('active');
 
-      // set color input (convert rgb->hex if needed)
+      // set native color input (if present) with hex
       if (colorInput) {
-        let hex = color;
-        const m = (''+color).match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/);
-        if (m) {
-          const r = parseInt(m[1],10).toString(16).padStart(2,'0');
-          const g = parseInt(m[2],10).toString(16).padStart(2,'0');
-          const b = parseInt(m[3],10).toString(16).padStart(2,'0');
-          hex = '#'+r+g+b;
-        }
-        try { colorInput.value = hex; colorInput.dispatchEvent(new Event('input',{bubbles:true})); } catch(e){}
+        const hex = toHexIfRgb(color);
+        try {
+          colorInput.value = hex;
+          colorInput.dispatchEvent(new Event('input', { bubbles:true }));
+          colorInput.dispatchEvent(new Event('change', { bubbles:true }));
+        } catch(e){ /* ignore */ }
       }
 
+      // apply to preview overlays immediately
       if (pvName) pvName.style.color = color;
       if (pvNum) pvNum.style.color = color;
 
+      // sync with your existing state if available
       window.selectedColor = color;
       if (typeof syncHidden === 'function') { try{ syncHidden(); } catch(e){} }
-    } catch(err){ console.warn('swatch handler error', err); }
+    } catch(err){
+      console.warn('applySwatchColor error', err);
+    }
   }
 
-  swatches.forEach(s => {
-    const handler = (ev) => applySwatchColor(s, ev);
-    s.addEventListener('click', handler, { passive: true });
-    s.addEventListener('touchstart', handler, { passive: false });
-    s.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); applySwatchColor(s, ev); } });
+  // attach handlers (click + touchstart + keyboard)
+  swatches.forEach((s, idx) => {
+    const onClick = (ev) => applySwatchColor(s, ev);
+    s.addEventListener('click', onClick, { passive: true });
+
+    // touchstart helps on some Android browsers where click is delayed or blocked by overlays
+    s.addEventListener('touchstart', function(ev){
+      // prevent scrolling if user intends to tap
+      if (ev.touches && ev.touches.length === 1) ev.preventDefault();
+      applySwatchColor(s, ev);
+    }, { passive: false });
+
+    s.addEventListener('keydown', function(ev){
+      if (ev.key === 'Enter' || ev.key === ' ' || ev.key === 'Spacebar') {
+        ev.preventDefault();
+        applySwatchColor(s, ev);
+      }
+    });
+
+    // optionally auto-activate first swatch if none active
+    if (idx === 0 && !document.querySelector('.np-swatch.active')) {
+      // do not auto-change if user already has a color input set
+      // small timeout ensures initial layout & computed styles available
+      setTimeout(()=> {
+        // do not override if input has some value
+        if (colorInput && colorInput.value && colorInput.value !== '') return;
+        applySwatchColor(s, null);
+      }, 120);
+    }
   });
+
+  // debug helper (run in console for quick test)
+  window._np_swatch_test = function(){
+    console.log('swatches:', swatches.length);
+    swatches.forEach((s,i)=>{
+      console.log(i, s.dataset.color || window.getComputedStyle(s).backgroundColor);
+    });
+  };
+
+  console.info('swatch-handler initialized, swatches=', swatches.length);
 })();
 </script>
-
 </body>
 </html>
