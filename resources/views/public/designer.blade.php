@@ -17,11 +17,26 @@
     .np-stage { position: relative; width: 100%; max-width: 534px; margin: 0 auto; border-radius:8px; padding:8px; box-sizing: border-box; overflow: visible; }
     .np-stage img { width:100%; height:auto; border-radius:6px; display:block; }
     .np-mask { position:absolute; pointer-events:none; z-index:40; transform-origin:center center; image-rendering:optimizeQuality; }
-    .np-overlay { position: absolute;   color: inherit !important; font-weight: 700; text-transform: uppercase; -webkit-text-fill-color: inherit !important; text-shadow: 0 3px 10px rgba(0,0,0,0.65);
+    .np-overlay { position: absolute; color: #D4AF37; font-weight: 700; text-transform: uppercase;
       letter-spacing: 1.5px; text-align: center; text-shadow: 0 3px 10px rgba(0,0,0,0.65);  pointer-events: none; white-space: nowrap; line-height: 1; transform-origin: center center;
       z-index: 9999; }
     .np-overlay::before, .np-overlay::after { content: none; }
-    .np-swatch { width:28px; height:28px; border-radius:50%; border:1px solid #ccc; cursor:pointer; display:inline-block; }
+    .np-swatch {
+  width:28px;
+  height:28px;
+  border-radius:50%;
+  border:1px solid #ccc;
+  cursor:pointer;
+  display:inline-block;
+
+  /* ADDED */
+  position: relative;        /* enable z-index to work */
+  z-index: 10060;            /* above the stage and overlays */
+  touch-action: manipulation;/* improve touch responsiveness */
+  padding: 6px;              /* larger touch area without changing circle visual size */
+  box-sizing: content-box;
+  pointer-events: auto;
+}
     .np-swatch.active { outline: 2px solid rgba(0,0,0,0.08); box-shadow: 0 2px 6px rgba(0,0,0,0.06); }
     body { background-color: #929292; }
     .body-padding{ padding-top: 100px; background-color: #929292;}
@@ -42,6 +57,7 @@
       .np-stage::after { content: ""; position: absolute; left: 12px; right: 12px; top: 12px; bottom: 12px; border-radius: 8px; background: rgba(0,0,0,0.06); z-index: 15; pointer-events: none; }
       #np-atc-btn { position: fixed !important; top: 12px !important; right: 12px !important; z-index: 100050 !important; border-radius: 28px !important; box-shadow: 0 6px 18px rgba(0,0,0,0.25) !important; font-weight: 700 !important; }
       .mobile-layout{ margin-top : -330px; }
+       .np-swatch { padding: 10px; margin: 6px; } 
     }
     @media (min-width: 768px) { .vt-icons { display: none !important; } }
     input:focus, select:focus { outline: 3px solid rgba(13,110,253,0.12); }
@@ -628,6 +644,18 @@ altNumEls.forEach(el => {
   window.selectedFontName = fontEl.options[fontEl.selectedIndex]?.text || fontEl.value;
   syncHidden(); syncPreview(); 
 });
+  if (colorEl) colorEl.addEventListener('input', ()=>{ if(pvName) pvName.style.color = colorEl.value; if(pvNum) pvNum.style.color = colorEl.value; syncHidden(); });
+
+  document.querySelectorAll('.np-swatch').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      document.querySelectorAll('.np-swatch').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active');
+      if (colorEl) colorEl.value = b.dataset.color;
+      if (pvName) pvName.style.color = b.dataset.color;
+      if (pvNum) pvNum.style.color = b.dataset.color;
+      syncHidden();
+    });
+  });
 
   function updateATCState(){ if (!btn) return; btn.disabled = false; }
 
@@ -740,8 +768,8 @@ window.location.href = base + (params.toString() ? ('?' + params.toString()) : '
   const scaleRange = document.getElementById('np-user-image-scale');
   const scaleLabel = document.getElementById('np-user-image-scale-label');
 
-  window.userImg = window.userImg || null;
-window.userImgScale = (typeof window.userImgScale !== 'undefined') ? window.userImgScale : 1.0;
+  let userImg = null;
+  let userImgScale = 1.0;
 
   function computeStageSizeLocal(){
     if (!baseImg || !stage) return null;
@@ -851,30 +879,27 @@ async function handleFile(file) {
     const dataUrl = ev.target.result;
 
     // create userImg on stage (same as before)
-    // updated: use global window.userImg & window.userImgScale
-if (window.userImg && window.userImg.parentNode) window.userImg.parentNode.removeChild(window.userImg);
-window.userImg = document.createElement('img');
-window.userImg.className = 'np-user-image';
-window.userImg.src = dataUrl;
-window.userImg.alt = 'User artwork';
-window.userImg.style.position = 'absolute';
-window.userImg.style.left = '50%';
-window.userImg.style.top = '50%';
-window.userImg.style.width = '100px';
-window.userImg.style.height = '100px';
-window.userImg.style.transform = 'translate(-50%,-50%)';
-window.userImg.style.objectFit = 'cover';
-window.userImg.style.pointerEvents = 'none';
-stage.appendChild(window.userImg);
+    if (userImg && userImg.parentNode) userImg.parentNode.removeChild(userImg);
+    userImg = document.createElement('img');
+    userImg.className = 'np-user-image';
+    userImg.src = dataUrl; // display immediately from dataURL
+    userImg.alt = 'User artwork';
+    userImg.style.position = 'absolute';
+    userImg.style.left = '50%';
+    userImg.style.top = '50%';
+    userImg.style.width = '100px';
+    userImg.style.height = '100px';
+    userImg.style.transform = 'translate(-50%,-50%)';
+    userImg.style.objectFit = 'cover';
+    userImg.style.pointerEvents = 'none';
+    stage.appendChild(userImg);
 
-if (removeBtn) removeBtn.style.display = 'inline-block';
-if (scaleRange) { scaleRange.style.display = 'inline-block'; scaleLabel.style.display = 'inline-block'; scaleRange.value = 100; }
-window.userImgScale = 1.0;
+    if (removeBtn) removeBtn.style.display = 'inline-block';
+    if (scaleRange) { scaleRange.style.display = 'inline-block'; scaleLabel.style.display = 'inline-block'; scaleRange.value = 100; userImgScale = 1.0; }
 
-const slot = findPreferredSlot();
-placeUserImage(slot);
-window.userImg.onload = function(){ placeUserImage(slot); };
-
+    const slot = findPreferredSlot();
+    placeUserImage(slot);
+    userImg.onload = function(){ placeUserImage(slot); };
 
     // 3) If we have publicUrl, store it on window for add-team link
     if (publicUrl) {
@@ -1319,223 +1344,153 @@ async function doSave() {
 })();
 </script>
 <script>
+/*
+  Mobile-friendly .np-swatch handler
+  - Ensures swatches sit above overlays (position + z-index)
+  - Enlarges touch hit area on small screens
+  - Handles click, touch and keyboard activation
+  - Keeps color input & preview overlays in sync
+*/
 (function(){
-  // small guard to avoid re-entrant calls
-  let _np_applyingColor = false;
-  let _np_lastAppliedColor = null;
+  const swatches = Array.from(document.querySelectorAll('.np-swatch'));
+  if (!swatches.length) return;
 
-  function toHexIfRgb(value){
-    if (!value) return value;
-    const m = (''+value).match(/^rgb\(\s*(\d+),\s*(\d+),\s*(\d+)\s*\)$/i);
-    if (!m) return value;
-    const r = parseInt(m[1],10).toString(16).padStart(2,'0');
-    const g = parseInt(m[2],10).toString(16).padStart(2,'0');
-    const b = parseInt(m[3],10).toString(16).padStart(2,'0');
-    return '#' + r + g + b;
-  }
-
-  function getOverlays(){
-    return Array.from(document.querySelectorAll('.np-overlay, #np-prev-name, #np-prev-num')).filter(Boolean);
-  }
-
-  function applyColorToOverlays(color){
-  if (!color) return;
-  if (_np_applyingColor) return;
-  _np_applyingColor = true;
-
-  try {
-    const hex = toHexIfRgb(color);
-    // still continue even if same color — but short-circuit only if no overlays found
-    const els = getOverlays();
-    if (!els.length) {
-      console.warn('applyColorToOverlays: no overlay elements found yet — will retry soon', hex);
-      // schedule a short retry in case overlays are added shortly
-      setTimeout(() => {
-        try { applyColorToOverlays(color); } catch(e){ console.warn(e); }
-      }, 120);
-      return;
-    }
-
-    // If color already applied previously, still ensure styles exist on elements (covers edge cases)
-    if (hex === _np_lastAppliedColor) {
-      els.forEach(el => {
-        try {
-          el.style.setProperty('color', hex, 'important');
-          el.style.setProperty('-webkit-text-fill-color', hex, 'important');
-        } catch(e){ /* ignore per-element errors */ }
-      });
-      return;
-    }
-
-    // apply robustly to each overlay element
-    els.forEach(el => {
-      try {
-        // inline important styles — these win over stylesheet !important
-        el.style.setProperty('color', hex, 'important');
-        el.style.setProperty('-webkit-text-fill-color', hex, 'important');
-        el.style.setProperty('background-clip', 'initial', 'important');
-        el.style.setProperty('-webkit-background-clip', 'initial', 'important');
-        el.style.setProperty('text-shadow', '0 3px 10px rgba(0,0,0,0.65)', 'important');
-        // Force a reflow which sometimes helps browsers to honor inline changes immediately
-        el.getBoundingClientRect();
-      } catch(e){ console.warn('applyColor per-el err', e); }
-    });
-
-    // Also set the preview nodes (explicit references) in case they are separate
+  // ensure swatches are clickable and above stage/masks
+  swatches.forEach(s => {
     try {
-      const pvn = document.getElementById('np-prev-name');
-      const pvnum = document.getElementById('np-prev-num');
-      [pvn, pvnum].forEach(x=>{
-        if (x) {
-          x.style.setProperty('color', hex, 'important');
-          x.style.setProperty('-webkit-text-fill-color', hex, 'important');
-          x.getBoundingClientRect();
-        }
-      });
-    } catch(e){}
-
-    // update color input & hidden
-    const colorInput = document.getElementById('np-color');
-    const hidden = document.getElementById('np-color-hidden');
-    if (colorInput) try { colorInput.value = hex; } catch(e){}
-    if (hidden) try { hidden.value = hex; } catch(e){}
-
-    _np_lastAppliedColor = hex;
-    window.selectedColor = hex;
-
-    // sync hidden values if function exists (safe call)
-    if (typeof syncHidden === 'function') {
-      try { syncHidden(); } catch(e){ console.warn('syncHidden failed after color apply', e); }
-    }
-
-    console.info('applyColorToOverlays applied', hex, 'els:', els.length);
-  } finally {
-    _np_applyingColor = false;
-  }
-}
-
-
-  // swatch init
-  function initSwatches(){
-    const swatches = Array.from(document.querySelectorAll('.np-swatch'));
-    if (!swatches.length) return console.info('swatch: none found');
-
-    swatches.forEach((s, idx) => {
+      const cs = window.getComputedStyle(s);
+      if (cs.position === 'static' || !cs.position) s.style.position = 'relative';
+      // ensure visual circle remains same size: use padding to increase hit area
+      if (!s.style.width) s.style.width = cs.width || '28px';
+      if (!s.style.height) s.style.height = cs.height || '28px';
+      s.style.boxSizing = 'content-box';
+      s.style.zIndex = s.style.zIndex || '10060';
       s.style.pointerEvents = 'auto';
+      s.style.touchAction = s.style.touchAction || 'manipulation';
+      // mobile-friendly hit area
+      if (window.innerWidth <= 767) {
+        s.style.padding = s.style.padding || '10px';
+        s.style.margin  = s.style.margin  || '6px';
+      } else {
+        s.style.padding = s.style.padding || '6px';
+      }
       s.setAttribute('role','button');
-      if (!s.hasAttribute('tabindex')) s.setAttribute('tabindex','0');
+      s.setAttribute('tabindex','0');
+    } catch (e) { /* ignore per-element error */ }
+  });
 
-      const handler = (ev) => {
-        if (ev && ev.preventDefault) ev.preventDefault();
-        let color = s.dataset && s.dataset.color ? s.dataset.color : null;
-        if (!color) {
-          const cs = window.getComputedStyle(s);
-          color = cs && (cs.backgroundColor || cs.color) ? (cs.backgroundColor || cs.color) : null;
-        }
-        if (!color) return;
-        swatches.forEach(x => x.classList.remove('active'));
-        s.classList.add('active');
-        applyColorToOverlays(color);
-      };
+  const colorInput = document.getElementById('np-color') || null;
+  const pvName = document.getElementById('np-prev-name') || null;
+  const pvNum  = document.getElementById('np-prev-num')  || null;
 
-      s.removeEventListener('click', s._np_handler);
-      s.addEventListener('click', handler, { passive: true });
-      s._np_handler = handler;
-
-      s.removeEventListener('touchstart', s._np_ts);
-      s.addEventListener('touchstart', function(ev){ if (ev.touches && ev.touches.length===1) ev.preventDefault(); handler(ev); }, { passive: false });
-      s._np_ts = handler;
-
-      s.removeEventListener('keydown', s._np_kd);
-      s.addEventListener('keydown', function(ev){ if (ev.key==='Enter' || ev.key===' ' || ev.key==='Spacebar'){ ev.preventDefault(); handler(ev); } });
-      s._np_kd = handler;
-    });
-
-    // auto-apply first swatch if nothing set
-    if (!document.querySelector('.np-swatch.active')) {
-      const first = swatches[0];
-      if (first) setTimeout(()=> {
-        const color = first.dataset?.color || window.getComputedStyle(first).backgroundColor;
-        if (color) applyColorToOverlays(color);
-      }, 80);
+  // convert rgb(r,g,b) or rgba(...) to hex
+  function rgbToHex(colorStr) {
+    if (!colorStr) return null;
+    colorStr = colorStr.trim();
+    // already hex?
+    if (colorStr[0] === '#') return colorStr;
+    const m = colorStr.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+    if (m) {
+      const r = parseInt(m[1],10).toString(16).padStart(2,'0');
+      const g = parseInt(m[2],10).toString(16).padStart(2,'0');
+      const b = parseInt(m[3],10).toString(16).padStart(2,'0');
+      return '#' + r + g + b;
     }
-    console.info('swatch init done', swatches.length);
+    return colorStr; // fallback
   }
 
-  // observe overlays but avoid infinite loops: only re-apply when computed color != last applied
-  function attachOverlayObserver(){
+  function applySwatchColor(el, ev) {
     try {
-      const observer = new MutationObserver((mutations) => {
-        // small debounce
-        clearTimeout(window._np_reapply_timer);
-        window._np_reapply_timer = setTimeout(() => {
-          const current = (getOverlays()[0] && window.getComputedStyle(getOverlays()[0]).color) || null;
-          const hex = toHexIfRgb(current);
-          if (hex && hex !== _np_lastAppliedColor) {
-            // reapply the last selectedColor if it exists, else apply computed
-            if (window.selectedColor) applyColorToOverlays(window.selectedColor);
-            else applyColorToOverlays(hex);
-          }
-        }, 60);
-      });
+      if (ev && ev.preventDefault) ev.preventDefault();
 
-      // observe currently present overlays
-      const overlays = getOverlays();
-      overlays.forEach(el => observer.observe(el, { attributes: true, attributeFilter: ['style','class'] }));
+      // prefer dataset.color else computed background-color
+      let color = (el.dataset && el.dataset.color) ? el.dataset.color : window.getComputedStyle(el).backgroundColor || null;
+      if (!color) return;
 
-      // watch stage for new overlays added later and re-bind
-      const stage = document.getElementById('np-stage') || document.body;
-      const stageObs = new MutationObserver((muts) => {
-        // re-init overlay observer when overlays change
-        setTimeout(()=> {
-          try { observer.disconnect(); } catch(e){}
-          const newEls = getOverlays();
-          newEls.forEach(el => observer.observe(el, { attributes: true, attributeFilter: ['style','class'] }));
-          // reapply our color to new elements
-          if (window.selectedColor) applyColorToOverlays(window.selectedColor);
-        }, 40);
-      });
-      stageObs.observe(stage, { childList: true, subtree: true });
+      // normalize color -> hex where possible
+      const hex = rgbToHex(color) || color;
 
-    } catch(e){ console.warn('attachOverlayObserver failed', e); }
+      // active class
+      swatches.forEach(x => x.classList.remove('active'));
+      el.classList.add('active');
+
+      // set color input (and trigger input event)
+      if (colorInput) {
+        try {
+          colorInput.value = hex;
+          colorInput.dispatchEvent(new Event('input', { bubbles: true }));
+        } catch(e){}
+      }
+
+      // update preview overlays
+      if (pvName) pvName.style.color = hex;
+      if (pvNum) pvNum.style.color = hex;
+
+      // store for other logic
+      window.selectedColor = hex;
+
+      // keep hidden fields in sync if function exists
+      if (typeof syncHidden === 'function') {
+        try { syncHidden(); } catch(e) {}
+      }
+    } catch (err) {
+      console.warn('swatch handler error', err);
+    }
   }
 
-  // bind native color input (only set window.selectedColor, don't cause recursion)
-  const nativeColor = document.getElementById('np-color');
-  if (nativeColor) {
-    nativeColor.addEventListener('input', (e) => {
-      const c = e.target.value;
-      // don't call applyColorToOverlays if same
-      if (toHexIfRgb(c) === _np_lastAppliedColor) return;
-      applyColorToOverlays(c);
-    }, { passive: true });
+  // unified handler wrapper to avoid duplicate calls on touch+click
+  function makeHandler(el) {
+    let touched = false;
+    return {
+      touchstart(ev) {
+        touched = true;
+        // prevent mouse events following touch
+        if (ev && ev.preventDefault) ev.preventDefault();
+        applySwatchColor(el, ev);
+      },
+      click(ev) {
+        if (touched) { touched = false; return; } // ignore synthetic click after touch
+        applySwatchColor(el, ev);
+      },
+      keydown(ev) {
+        if (ev.key === 'Enter' || ev.key === ' ') {
+          ev.preventDefault();
+          applySwatchColor(el, ev);
+        }
+      }
+    };
   }
 
-  // run init
-  setTimeout(()=> {
-    initSwatches();
-    attachOverlayObserver();
-    // initial apply from existing input value
-    const initial = (document.getElementById('np-color') && document.getElementById('np-color').value) || window.selectedColor || null;
-    if (initial) applyColorToOverlays(initial);
-    // expose helper for debugging
-    window._np_reapplyColor = applyColorToOverlays;
-  }, 120);
+  swatches.forEach(s => {
+    try {
+      const h = makeHandler(s);
+      // touchstart (non-passive so preventDefault works)
+      s.addEventListener('touchstart', h.touchstart, { passive: false });
+      // click (for mouse and keyboard activation)
+      s.addEventListener('click', h.click, { passive: true });
+      // keyboard
+      s.addEventListener('keydown', h.keydown);
+    } catch(e){ console.warn('swatch attach error', e); }
+  });
+
+  // ensure initial active swatch matches color input (if any)
+  try {
+    if (colorInput && colorInput.value) {
+      const hexVal = rgbToHex(colorInput.value) || colorInput.value;
+      const match = swatches.find(s => (s.dataset && s.dataset.color && (rgbToHex(s.dataset.color) === hexVal || s.dataset.color === hexVal)) || (rgbToHex(window.getComputedStyle(s).backgroundColor) === hexVal));
+      if (match) {
+        match.classList.add('active');
+        // also set preview color
+        if (pvName) pvName.style.color = hexVal;
+        if (pvNum) pvNum.style.color = hexVal;
+        window.selectedColor = hexVal;
+      }
+    }
+  } catch(e){ /* ignore */ }
 
 })();
 </script>
-<script>
-  // ----- DEBUG / GLOBALS -----
-  window.userImg = window.userImg || null;
-  window.userImgScale = (typeof window.userImgScale !== 'undefined') ? window.userImgScale : 1.0;
 
-  // placeholders — functions other scripts call; will be overwritten when real functions defined
-  window.syncHidden = window.syncHidden || function(){ console.warn('syncHidden placeholder called'); };
-  window.syncPreview = window.syncPreview || function(){ console.warn('syncPreview placeholder called'); };
-  window.renderMasks = window.renderMasks || function(){ console.warn('renderMasks placeholder called'); };
-
-  console.info('Globals initialized: userImg?', !!window.userImg, 'userImgScale', window.userImgScale);
-</script>
 
 </body>
 </html>
