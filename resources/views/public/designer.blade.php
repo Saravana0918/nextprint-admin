@@ -17,7 +17,7 @@
     .np-stage { position: relative; width: 100%; max-width: 534px; margin: 0 auto; border-radius:8px; padding:8px; box-sizing: border-box; overflow: visible; }
     .np-stage img { width:100%; height:auto; border-radius:6px; display:block; }
     .np-mask { position:absolute; pointer-events:none; z-index:40; transform-origin:center center; image-rendering:optimizeQuality; }
-    .np-overlay { position: absolute; color: #D4AF37; font-weight: 700; text-transform: uppercase;
+    .np-overlay { position: absolute;   color: inherit !important; font-weight: 700; text-transform: uppercase; -webkit-text-fill-color: inherit !important; text-shadow: 0 3px 10px rgba(0,0,0,0.65);
       letter-spacing: 1.5px; text-align: center; text-shadow: 0 3px 10px rgba(0,0,0,0.65);  pointer-events: none; white-space: nowrap; line-height: 1; transform-origin: center center;
       z-index: 9999; }
     .np-overlay::before, .np-overlay::after { content: none; }
@@ -1347,31 +1347,20 @@ async function doSave() {
     return '#' + r + g + b;
   }
 
-  function applyColorToOverlays(color){
-    if (!color) return;
-    const hex = toHexIfRgb(color);
-    overlays.forEach(el => {
-      try {
-        // set inline color and enforce importance (handles some CSS overrides)
-        el.style.setProperty('color', hex, 'important');
-        // also handle WebKit text fill if used
-        el.style.setProperty('-webkit-text-fill-color', hex, 'important');
-      } catch(e){}
-    });
-    // update native color input + hidden field
-    if (colorInput) {
-      try { colorInput.value = toHexIfRgb(color); colorInput.dispatchEvent(new Event('input',{bubbles:true})); } catch(e){}
-    }
-    if (hiddenColor) {
-      try { hiddenColor.value = toHexIfRgb(color); } catch(e){}
-    }
-    // keep window state
-    window.selectedColor = hex;
-    // call syncHidden if exists
-    if (typeof syncHidden === 'function') {
-      try { syncHidden(); } catch(e){ console.warn('syncHidden failed', e); }
-    }
-  }
+ function applyColorToOverlays(color){
+  if (!color) return;
+  const hex = toHexIfRgb(color);
+  overlays.forEach(el => {
+    el.style.setProperty('color', hex, 'important');
+    el.style.setProperty('-webkit-text-fill-color', hex, 'important');
+    el.style.setProperty('text-shadow', '0 3px 10px rgba(0,0,0,0.65)', 'important');
+  });
+  if (colorInput) colorInput.value = hex;
+  if (hiddenColor) hiddenColor.value = hex;
+  window.selectedColor = hex;
+  if (typeof syncHidden === 'function') syncHidden();
+}
+
 
   function getColorFromSwatch(el){
     if (!el) return null;
