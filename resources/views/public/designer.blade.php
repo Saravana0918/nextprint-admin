@@ -628,18 +628,6 @@ altNumEls.forEach(el => {
   window.selectedFontName = fontEl.options[fontEl.selectedIndex]?.text || fontEl.value;
   syncHidden(); syncPreview(); 
 });
-  if (colorEl) colorEl.addEventListener('input', ()=>{ if(pvName) pvName.style.color = colorEl.value; if(pvNum) pvNum.style.color = colorEl.value; syncHidden(); });
-
-  document.querySelectorAll('.np-swatch').forEach(b=>{
-    b.addEventListener('click', ()=>{
-      document.querySelectorAll('.np-swatch').forEach(x=>x.classList.remove('active'));
-      b.classList.add('active');
-      if (colorEl) colorEl.value = b.dataset.color;
-      if (pvName) pvName.style.color = b.dataset.color;
-      if (pvNum) pvNum.style.color = b.dataset.color;
-      syncHidden();
-    });
-  });
 
   function updateATCState(){ if (!btn) return; btn.disabled = false; }
 
@@ -1501,7 +1489,6 @@ async function doSave() {
 
 })();
 </script>
-
 
 </body>
 </html>
