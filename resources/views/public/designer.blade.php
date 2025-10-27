@@ -49,7 +49,7 @@
     @media (min-width: 768px) { .vt-icons { display: none !important; } }
     input:focus, select:focus { outline: 3px solid rgba(13,110,253,0.12); }
     @media (max-width: 767px) {
-  .np-input-group { display: flex; flex-direction: column; align-items: center; font-family: 'Arial', sans-serif; padding: 6px 12px; margin-bottom: 20px; }
+  .np-input-group { display: flex; flex-direction: column; align-items: center; font-family: 'Arial', sans-serif; padding: 0px 12px; margin-bottom: 20px; }
  .np-field { position: relative; width: 86%; max-width: 360px; min-width: 200px; }
  .np-input { width: 100%; background: transparent;  border: none; border-bottom: 2px solid #fff; color: #fff; text-align: center; font-size: 20px; font-weight: 800; outline: none; padding: 8px 0 12px 0;
     text-transform: uppercase; letter-spacing: 1px; } .np-input::placeholder { color: #fff;
