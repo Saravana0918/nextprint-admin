@@ -1329,17 +1329,13 @@ async function doSave() {
 </script>
 <script>
 (function(){
-  // CSS fallback ensure
-  const style = document.createElement('style');
-  style.innerHTML = `
-    .np-overlay { color: inherit !important; -webkit-text-fill-color: inherit !important; }
-  `;
-  document.head.appendChild(style);
+  // small guard to avoid re-entrant calls
+  let _np_applyingColor = false;
+  let _np_lastAppliedColor = null;
 
-  // helpers
   function toHexIfRgb(value){
     if (!value) return value;
-    const m = (''+value).match(/^rgb\\(\\s*(\\d+),\\s*(\\d+),\\s*(\\d+)\\s*\\)$/i);
+    const m = (''+value).match(/^rgb\(\s*(\d+),\s*(\d+),\s*(\d+)\s*\)$/i);
     if (!m) return value;
     const r = parseInt(m[1],10).toString(16).padStart(2,'0');
     const g = parseInt(m[2],10).toString(16).padStart(2,'0');
@@ -1348,53 +1344,72 @@ async function doSave() {
   }
 
   function getOverlays(){
-    // collect likely overlays
     return Array.from(document.querySelectorAll('.np-overlay, #np-prev-name, #np-prev-num')).filter(Boolean);
   }
 
   function applyColorToOverlays(color){
     if (!color) return;
-    const hex = toHexIfRgb(color);
-    const els = getOverlays();
-    els.forEach(el => {
-      try {
-        // apply both color and webkit text fill
-        el.style.setProperty('color', hex, 'important');
-        el.style.setProperty('-webkit-text-fill-color', hex, 'important');
-        // some themes use background-clip text trick — remove that if present
-        el.style.setProperty('-webkit-background-clip', 'initial', 'important');
-        el.style.setProperty('background-clip', 'initial', 'important');
-        el.style.setProperty('text-shadow', '0 3px 10px rgba(0,0,0,0.65)', 'important');
-      } catch(e){ console.warn('applyColor err', e); }
-    });
-    window.selectedColor = hex;
-    // keep hidden input in sync if exists
-    const colorInput = document.getElementById('np-color');
-    const hidden = document.getElementById('np-color-hidden');
-    if (colorInput) try { colorInput.value = hex; colorInput.dispatchEvent(new Event('input',{bubbles:true})); } catch(e){}
-    if (hidden) try { hidden.value = hex; } catch(e){}
+    // prevent recursion / re-entrancy
+    if (_np_applyingColor) return;
+    _np_applyingColor = true;
+
+    try {
+      const hex = toHexIfRgb(color);
+      // avoid doing work if same color already applied
+      if (hex === _np_lastAppliedColor) return;
+      const els = getOverlays();
+      els.forEach(el => {
+        try {
+          el.style.setProperty('color', hex, 'important');
+          el.style.setProperty('-webkit-text-fill-color', hex, 'important');
+          el.style.setProperty('-webkit-background-clip', 'initial', 'important');
+          el.style.setProperty('background-clip', 'initial', 'important');
+          // preserve your text-shadow if you want:
+          el.style.setProperty('text-shadow', '0 3px 10px rgba(0,0,0,0.65)', 'important');
+        } catch(e){ console.warn('applyColor err', e); }
+      });
+
+      // update native color input + hidden field, but DON'T dispatch 'input' event (avoids recursion)
+      const colorInput = document.getElementById('np-color');
+      const hidden = document.getElementById('np-color-hidden');
+      if (colorInput) {
+        try { colorInput.value = hex; } catch(e){}
+      }
+      if (hidden) {
+        try { hidden.value = hex; } catch(e){}
+      }
+
+      // remember last applied
+      _np_lastAppliedColor = hex;
+      // also keep global var
+      window.selectedColor = hex;
+      // call syncHidden if exists (but guard inside it should be ok)
+      if (typeof syncHidden === 'function') {
+        try { syncHidden(); } catch(e){ console.warn('syncHidden failed', e); }
+      }
+    } finally {
+      _np_applyingColor = false;
+    }
   }
 
-  // swatch click binding (robust: rebinds)
+  // swatch init
   function initSwatches(){
     const swatches = Array.from(document.querySelectorAll('.np-swatch'));
     if (!swatches.length) return console.info('swatch: none found');
 
     swatches.forEach((s, idx) => {
-      // ensure clickable
       s.style.pointerEvents = 'auto';
       s.setAttribute('role','button');
       if (!s.hasAttribute('tabindex')) s.setAttribute('tabindex','0');
 
       const handler = (ev) => {
-        ev && ev.preventDefault && ev.preventDefault();
+        if (ev && ev.preventDefault) ev.preventDefault();
         let color = s.dataset && s.dataset.color ? s.dataset.color : null;
         if (!color) {
           const cs = window.getComputedStyle(s);
           color = cs && (cs.backgroundColor || cs.color) ? (cs.backgroundColor || cs.color) : null;
         }
         if (!color) return;
-        // mark active
         swatches.forEach(x => x.classList.remove('active'));
         s.classList.add('active');
         applyColorToOverlays(color);
@@ -1424,46 +1439,69 @@ async function doSave() {
     console.info('swatch init done', swatches.length);
   }
 
-  // watch overlays if something else overrides style - reapply our color
+  // observe overlays but avoid infinite loops: only re-apply when computed color != last applied
   function attachOverlayObserver(){
     try {
-      const obs = new MutationObserver((mutations) => {
-        if (!window.selectedColor) return;
+      const observer = new MutationObserver((mutations) => {
         // small debounce
         clearTimeout(window._np_reapply_timer);
         window._np_reapply_timer = setTimeout(() => {
-          applyColorToOverlays(window.selectedColor);
+          const current = (getOverlays()[0] && window.getComputedStyle(getOverlays()[0]).color) || null;
+          const hex = toHexIfRgb(current);
+          if (hex && hex !== _np_lastAppliedColor) {
+            // reapply the last selectedColor if it exists, else apply computed
+            if (window.selectedColor) applyColorToOverlays(window.selectedColor);
+            else applyColorToOverlays(hex);
+          }
         }, 60);
       });
-      getOverlays().forEach(el => obs.observe(el, { attributes: true, attributeFilter: ['style','class'] }));
-      // also re-observe when overlays are (re)added
-      const stage = document.getElementById('np-stage');
-      if (stage) {
-        const stageObs = new MutationObserver(() => {
-          // re-init overlay observer and reapply
-          setTimeout(()=> { applyColorToOverlays(window.selectedColor || (document.getElementById('np-color')?.value || null)); }, 40);
-        });
-        stageObs.observe(stage, { childList: true, subtree: true });
-      }
+
+      // observe currently present overlays
+      const overlays = getOverlays();
+      overlays.forEach(el => observer.observe(el, { attributes: true, attributeFilter: ['style','class'] }));
+
+      // watch stage for new overlays added later and re-bind
+      const stage = document.getElementById('np-stage') || document.body;
+      const stageObs = new MutationObserver((muts) => {
+        // re-init overlay observer when overlays change
+        setTimeout(()=> {
+          try { observer.disconnect(); } catch(e){}
+          const newEls = getOverlays();
+          newEls.forEach(el => observer.observe(el, { attributes: true, attributeFilter: ['style','class'] }));
+          // reapply our color to new elements
+          if (window.selectedColor) applyColorToOverlays(window.selectedColor);
+        }, 40);
+      });
+      stageObs.observe(stage, { childList: true, subtree: true });
+
     } catch(e){ console.warn('attachOverlayObserver failed', e); }
   }
 
-  // init everything
+  // bind native color input (only set window.selectedColor, don't cause recursion)
+  const nativeColor = document.getElementById('np-color');
+  if (nativeColor) {
+    nativeColor.addEventListener('input', (e) => {
+      const c = e.target.value;
+      // don't call applyColorToOverlays if same
+      if (toHexIfRgb(c) === _np_lastAppliedColor) return;
+      applyColorToOverlays(c);
+    }, { passive: true });
+  }
+
+  // run init
   setTimeout(()=> {
     initSwatches();
     attachOverlayObserver();
-    // also bind native color input to apply to overlays
-    const colorInput = document.getElementById('np-color');
-    if (colorInput) colorInput.addEventListener('input', (e) => applyColorToOverlays(e.target.value));
     // initial apply from existing input value
-    const initial = document.getElementById('np-color')?.value || window.selectedColor || null;
+    const initial = (document.getElementById('np-color') && document.getElementById('np-color').value) || window.selectedColor || null;
     if (initial) applyColorToOverlays(initial);
+    // expose helper for debugging
+    window._np_reapplyColor = applyColorToOverlays;
   }, 120);
 
-  // expose for debug
-  window._np_reapplyColor = applyColorToOverlays;
 })();
 </script>
+
 
 </body>
 </html>
