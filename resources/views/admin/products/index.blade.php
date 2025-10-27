@@ -140,7 +140,8 @@ document.addEventListener('DOMContentLoaded', function(){
       document.getElementById('preview-alert').style.display = 'none';
       const thumb = document.getElementById('preview-thumb');
       if(preview){
-        thumb.src = preview;
+        // show a versioned url to avoid cached old preview
+        thumb.src = preview + '?v=' + Date.now();
         thumb.style.display = 'block';
       } else {
         thumb.style.display = 'none';
@@ -190,14 +191,18 @@ document.addEventListener('DOMContentLoaded', function(){
         showError(msg);
         return;
       }
-      // success: update thumbnail in row
+      // success: update thumbnail in row (with cache-bust)
       const newUrl = json.url || '';
+      const newVersioned = newUrl ? (newUrl + '?v=' + Date.now()) : '';
       const settingBtn = document.querySelector('.btn-settings[data-product-id="'+currentProductId+'"]');
       if (settingBtn) {
-        settingBtn.dataset.productPreview = newUrl;
+        settingBtn.dataset.productPreview = newUrl; // store raw URL (no ?v) if you prefer
         const tr = settingBtn.closest('tr');
         const rowImg = tr ? tr.querySelector('td:nth-child(2) img') : null;
-        if (rowImg) rowImg.src = newUrl;
+        if (rowImg) {
+          rowImg.src = newVersioned;
+          rowImg.removeAttribute('srcset');
+        }
       }
       bsModal.hide();
     } catch (err) {
@@ -220,8 +225,11 @@ document.addEventListener('DOMContentLoaded', function(){
       // clear local
       const settingBtn = document.querySelector('.btn-settings[data-product-id="'+currentProductId+'"]');
       if(settingBtn) settingBtn.dataset.productPreview = '';
-      const rowImg = document.querySelector('button[data-product-id="'+currentProductId+'"]').closest('td').parentNode.querySelector('td img');
-      if(rowImg) rowImg.src = '{{ asset("images/placeholder.png") }}';
+      if (settingBtn) {
+        const tr = settingBtn.closest('tr');
+        const rowImg = tr ? tr.querySelector('td:nth-child(2) img') : null;
+        if (rowImg) rowImg.src = '{{ asset("images/placeholder.png") }}';
+      }
       bsModal.hide();
     } catch(e){
       showError('Delete failed');

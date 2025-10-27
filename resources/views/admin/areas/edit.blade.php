@@ -22,7 +22,7 @@ public function edit(Product $product, ProductView $view){
     $existing = $view->printAreas()
         ->select('id','template_id','mask_svg_path','x_mm','y_mm','width_mm','height_mm','dpi','rotation')
         ->get();
-    return view('admin.areas.edit', compact('product','view','area','existing'));
+    return view('admin.areas.edit', compact('product','view','area','existing','bgUrl'));
 }
 --}}
 
@@ -367,6 +367,7 @@ document.addEventListener('click', function(e){
 
   if (bgUrl) {
     const preload = new Image();
+    // crossOrigin can be removed if you see CORS/taint issues
     preload.crossOrigin = 'anonymous';
     preload.onload = function () {
       let scale = 1;
@@ -389,7 +390,10 @@ document.addEventListener('click', function(e){
       canvas.setBackgroundColor('#f6f7fb', canvas.renderAll.bind(canvas));
       ready();
     };
-    preload.src = bgUrl + '?v=' + Date.now();
+
+    // Use server-side version based on view.updated_at or product.updated_at
+    const bgVersion = {{ isset($view) && $view->updated_at ? strtotime($view->updated_at) : (isset($product) && $product->updated_at ? strtotime($product->updated_at) : time()) }};
+    preload.src = bgUrl ? (bgUrl + '?v=' + bgVersion) : '';
   } else {
     canvas.setWidth(wrapW);
     canvas.setHeight(Math.round(wrapW*0.7));
