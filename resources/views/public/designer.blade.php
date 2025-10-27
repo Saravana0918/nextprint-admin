@@ -1359,7 +1359,7 @@ async function doSave() {
         s.style.padding = s.style.padding || '1px';
         s.style.margin  = s.style.margin  || '6px';
       } else {
-        s.style.padding = s.style.padding || '6px';
+        s.style.padding = s.style.padding || '1px';
       }
       s.setAttribute('role','button');
       s.setAttribute('tabindex','0');
