@@ -21,22 +21,8 @@
       letter-spacing: 1.5px; text-align: center; text-shadow: 0 3px 10px rgba(0,0,0,0.65);  pointer-events: none; white-space: nowrap; line-height: 1; transform-origin: center center;
       z-index: 9999; }
     .np-overlay::before, .np-overlay::after { content: none; }
-    .np-swatch {
-  width:28px;
-  height:28px;
-  border-radius:50%;
-  border:1px solid #ccc;
-  cursor:pointer;
-  display:inline-block;
-
-  /* ADDED */
-  position: relative;        /* enable z-index to work */
-  z-index: 10060;            /* above the stage and overlays */
-  touch-action: manipulation;/* improve touch responsiveness */
-  padding: 6px;              /* larger touch area without changing circle visual size */
-  box-sizing: content-box;
-  pointer-events: auto;
-}
+    .np-swatch { position: relative; width: 28px; height: 28px; border-radius: 50%; border: 1px solid #ccc; cursor: pointer; display: inline-block; padding: 0; box-sizing: border-box; background-clip: padding-box; z-index: 10060; pointer-events: auto;}
+    .np-swatch::after{ content: ""; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 44px; height: 44px; border-radius: 50%; background: transparent;     pointer-events: auto;}
     .np-swatch.active { outline: 2px solid rgba(0,0,0,0.08); box-shadow: 0 2px 6px rgba(0,0,0,0.06); }
     body { background-color: #929292; }
     .body-padding{ padding-top: 100px; background-color: #929292;}
@@ -57,7 +43,8 @@
       .np-stage::after { content: ""; position: absolute; left: 12px; right: 12px; top: 12px; bottom: 12px; border-radius: 8px; background: rgba(0,0,0,0.06); z-index: 15; pointer-events: none; }
       #np-atc-btn { position: fixed !important; top: 12px !important; right: 12px !important; z-index: 100050 !important; border-radius: 28px !important; box-shadow: 0 6px 18px rgba(0,0,0,0.25) !important; font-weight: 700 !important; }
       .mobile-layout{ margin-top : -330px; }
-       .np-swatch { padding: 10px; margin: 6px; } 
+      .np-swatch::after { width: 56px; height: 56px; }
+      .np-swatch { margin: 6px 8px 6px 0; } 
     }
     @media (min-width: 768px) { .vt-icons { display: none !important; } }
     input:focus, select:focus { outline: 3px solid rgba(13,110,253,0.12); }
