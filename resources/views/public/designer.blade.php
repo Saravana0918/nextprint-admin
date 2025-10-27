@@ -1336,49 +1336,81 @@ async function doSave() {
   }
 
   function applyColorToOverlays(color){
-    if (!color) return;
-    // prevent recursion / re-entrancy
-    if (_np_applyingColor) return;
-    _np_applyingColor = true;
+  if (!color) return;
+  if (_np_applyingColor) return;
+  _np_applyingColor = true;
 
-    try {
-      const hex = toHexIfRgb(color);
-      // avoid doing work if same color already applied
-      if (hex === _np_lastAppliedColor) return;
-      const els = getOverlays();
+  try {
+    const hex = toHexIfRgb(color);
+    // still continue even if same color — but short-circuit only if no overlays found
+    const els = getOverlays();
+    if (!els.length) {
+      console.warn('applyColorToOverlays: no overlay elements found yet — will retry soon', hex);
+      // schedule a short retry in case overlays are added shortly
+      setTimeout(() => {
+        try { applyColorToOverlays(color); } catch(e){ console.warn(e); }
+      }, 120);
+      return;
+    }
+
+    // If color already applied previously, still ensure styles exist on elements (covers edge cases)
+    if (hex === _np_lastAppliedColor) {
       els.forEach(el => {
         try {
           el.style.setProperty('color', hex, 'important');
           el.style.setProperty('-webkit-text-fill-color', hex, 'important');
-          el.style.setProperty('-webkit-background-clip', 'initial', 'important');
-          el.style.setProperty('background-clip', 'initial', 'important');
-          // preserve your text-shadow if you want:
-          el.style.setProperty('text-shadow', '0 3px 10px rgba(0,0,0,0.65)', 'important');
-        } catch(e){ console.warn('applyColor err', e); }
+        } catch(e){ /* ignore per-element errors */ }
       });
-
-      // update native color input + hidden field, but DON'T dispatch 'input' event (avoids recursion)
-      const colorInput = document.getElementById('np-color');
-      const hidden = document.getElementById('np-color-hidden');
-      if (colorInput) {
-        try { colorInput.value = hex; } catch(e){}
-      }
-      if (hidden) {
-        try { hidden.value = hex; } catch(e){}
-      }
-
-      // remember last applied
-      _np_lastAppliedColor = hex;
-      // also keep global var
-      window.selectedColor = hex;
-      // call syncHidden if exists (but guard inside it should be ok)
-      if (typeof syncHidden === 'function') {
-        try { syncHidden(); } catch(e){ console.warn('syncHidden failed', e); }
-      }
-    } finally {
-      _np_applyingColor = false;
+      return;
     }
+
+    // apply robustly to each overlay element
+    els.forEach(el => {
+      try {
+        // inline important styles — these win over stylesheet !important
+        el.style.setProperty('color', hex, 'important');
+        el.style.setProperty('-webkit-text-fill-color', hex, 'important');
+        el.style.setProperty('background-clip', 'initial', 'important');
+        el.style.setProperty('-webkit-background-clip', 'initial', 'important');
+        el.style.setProperty('text-shadow', '0 3px 10px rgba(0,0,0,0.65)', 'important');
+        // Force a reflow which sometimes helps browsers to honor inline changes immediately
+        el.getBoundingClientRect();
+      } catch(e){ console.warn('applyColor per-el err', e); }
+    });
+
+    // Also set the preview nodes (explicit references) in case they are separate
+    try {
+      const pvn = document.getElementById('np-prev-name');
+      const pvnum = document.getElementById('np-prev-num');
+      [pvn, pvnum].forEach(x=>{
+        if (x) {
+          x.style.setProperty('color', hex, 'important');
+          x.style.setProperty('-webkit-text-fill-color', hex, 'important');
+          x.getBoundingClientRect();
+        }
+      });
+    } catch(e){}
+
+    // update color input & hidden
+    const colorInput = document.getElementById('np-color');
+    const hidden = document.getElementById('np-color-hidden');
+    if (colorInput) try { colorInput.value = hex; } catch(e){}
+    if (hidden) try { hidden.value = hex; } catch(e){}
+
+    _np_lastAppliedColor = hex;
+    window.selectedColor = hex;
+
+    // sync hidden values if function exists (safe call)
+    if (typeof syncHidden === 'function') {
+      try { syncHidden(); } catch(e){ console.warn('syncHidden failed after color apply', e); }
+    }
+
+    console.info('applyColorToOverlays applied', hex, 'els:', els.length);
+  } finally {
+    _np_applyingColor = false;
   }
+}
+
 
   // swatch init
   function initSwatches(){
