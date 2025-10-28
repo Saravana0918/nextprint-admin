@@ -1,58 +1,53 @@
 <?php
+
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
 use App\Models\Product;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class ProductPreviewController extends Controller
 {
     // POST /admin/products/{product}/preview
     public function upload(Request $request, Product $product)
     {
-        if (!$request->hasFile('preview_image')) {
-            return response()->json(['message' => 'No file uploaded'], 422);
-        }
-
         $request->validate([
-            'preview_image' => 'image|mimes:jpeg,jpg,png,webp|max:5120'
+            'preview_image' => ['required','image','max:5120'], // 5MB
         ]);
 
         $file = $request->file('preview_image');
-        $path = $file->store('public/product-previews'); // storage/app/public/product-previews/...
-        $publicUrl = Storage::url($path); // -> /storage/product-previews/xxx.jpg
+        $name = time().'_'.Str::random(12).'.'.$file->getClientOriginalExtension();
 
-        $product->preview_src = $publicUrl;
-        $product->touch();
+        // store under storage/app/public/product-previews/...
+        $path = $file->storeAs('product-previews', $name, 'public'); // returns "product-previews/xxx.jpg"
+
+        // persist only the relative path in DB
+        $product->thumbnail = $path;
         $product->save();
 
-        Log::info('Product preview uploaded', ['product_id'=>$product->id, 'path'=>$path]);
+        // Always return a /files/... url (avoids /storage symlink issues)
+        $url = url('/files/'.ltrim($path,'/'));
 
-        return response()->json(['url' => $publicUrl], 200);
+        return response()->json([
+            'ok'   => true,
+            'path' => $path,
+            'url'  => $url,
+        ]);
     }
 
     // DELETE /admin/products/{product}/preview
     public function destroy(Product $product)
     {
-        // try delete file if it exists under /storage
-        if (!empty($product->preview_src)) {
-            // expected format: /storage/your/path.jpg or https://...
-            if (preg_match('~/storage/(.+)$~', $product->preview_src, $m)) {
-                $rel = $m[1];
-                if (Storage::disk('public')->exists($rel)) {
-                    Storage::disk('public')->delete($rel);
-                }
+        if ($product->thumbnail) {
+            $old = $product->thumbnail;
+            if (Storage::disk('public')->exists($old)) {
+                Storage::disk('public')->delete($old);
             }
+            $product->thumbnail = null;
+            $product->save();
         }
-
-        $product->preview_src = null;
-        $product->touch();
-        $product->save();
-
-        Log::info('Product preview deleted', ['product_id'=>$product->id]);
-
-        return response()->json(['ok' => true], 200);
+        return response()->json(['ok' => true]);
     }
 }
