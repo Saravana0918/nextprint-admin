@@ -134,31 +134,29 @@ class ProductController extends Controller
      * Upload preview image for product (XHR)
      * POST /admin/products/{product}/preview
      */
-    public function uploadPreview(Request $req, Product $product)
+    public function uploadPreview(Request $r, $productId)
 {
-    $v = Validator::make($req->all(), [
-        'preview_image' => 'required|image|max:5120'
-    ]);
+    $r->validate(['view_image' => 'required|image|max:8192']); // 8MB
+    $product = Product::findOrFail($productId);
 
-    if ($v->fails()) {
-        return response()->json(['ok'=>false,'message'=>$v->errors()->first()], 422);
-    }
+    $file = $r->file('view_image');
+    $filename = 'preview_' . $product->id . '_' . time() . '.' . $file->getClientOriginalExtension();
 
-    $file = $req->file('preview_image');
-    $path = $file->store('product-previews', 'public'); // -> "product-previews/abc.jpg"
+    // store into storage/app/public/product-previews
+    $path = $file->storeAs('product-previews', $filename, 'public'); // disk 'public' => storage/app/public
 
-    if (!$path) {
-        return response()->json(['ok'=>false,'message'=>'store_failed'], 500);
-    }
+    // public path for blade: /storage/product-previews/filename
+    $publicPath = '/storage/' . ltrim($path, '/');
 
-    // Save as relative path (no leading /storage)
-    $product->thumbnail = ltrim(str_replace('\\','/',$path), '/');
+    // update DB
+    $product->preview_src = $publicPath;
+    $product->updated_at = now();
     $product->save();
 
-    $url = Storage::disk('public')->url($path);
-    Log::info('Product preview uploaded', ['product_id'=>$product->id, 'path'=>$path, 'url'=>$url]);
+    // optionally queue any image processing, thumbnails, or log
+    \Log::info("admin: uploaded preview for product {$product->id} -> {$publicPath}");
 
-    return response()->json(['ok'=>true,'url'=>$url,'path'=>$path,'product_id'=>$product->id]);
+    return back()->with('ok', 'Preview uploaded.');
 }
 
     /**

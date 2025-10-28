@@ -6,9 +6,6 @@ use App\Models\Product;
 use App\Models\ProductView;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\File;
-use Illuminate\Support\Str;
 use GuzzleHttp\Client;
 
 class PublicDesignerController extends Controller
@@ -18,16 +15,16 @@ class PublicDesignerController extends Controller
         $productId = $request->query('product_id');
         $viewId    = $request->query('view_id');
 
-        // Product lookup (your existing logic)...
         $product = null;
-
         if ($productId) {
+            // If productId looks like a long numeric (Shopify ID) try shopify_product_id first
             if (ctype_digit((string)$productId) && strlen((string)$productId) >= 8) {
                 $product = Product::with(['views','views.areas','variants'])
-                            ->where('shopify_product_id', $productId)
-                            ->first();
+                    ->where('shopify_product_id', $productId)
+                    ->first();
 
                 if (!$product) {
+                    // fallback to local id
                     $product = Product::with(['views','views.areas','variants'])->find((int)$productId);
                 }
             } else {
@@ -37,6 +34,7 @@ class PublicDesignerController extends Controller
             }
 
             if (!$product) {
+                // fallback: search across common columns
                 $query = Product::with(['views','views.areas','variants']);
                 $cols = [];
                 if (Schema::hasColumn('products','shopify_product_id')) $cols[] = 'shopify_product_id';
@@ -59,37 +57,30 @@ class PublicDesignerController extends Controller
             abort(404, 'Product not found');
         }
 
-        // --- NEW: If no variants loaded or variants count 0, try fetch from Shopify and save locally
+        // If variants are missing, try fetch from Shopify
         if (!$product->relationLoaded('variants') || $product->variants->count() === 0) {
             try {
                 $this->fetchShopifyVariantsAndStore($product);
-                // reload relation after upsert
                 $product->load('variants');
             } catch (\Throwable $e) {
                 Log::warning("designer: fetchShopifyVariants failed product_id={$product->id} error=".$e->getMessage());
             }
         }
 
-        // ----------------------------
-        // Resolve view (same as before)
-        // ----------------------------
+        // Resolve view (prefer requested view)
         $view = null;
         if ($viewId) {
             $view = ProductView::with('areas')->find($viewId);
         }
         if (!$view) {
-            if ($product->relationLoaded('views') && $product->views->count()) {
-                $view = $product->views->first();
-            } else {
-                $view = $product->views()->with('areas')->first();
-            }
+            $view = $product->relationLoaded('views') && $product->views->count()
+                ? $product->views->first()
+                : $product->views()->with('areas')->first();
         }
 
         $areas = $view ? ($view->relationLoaded('areas') ? $view->areas : $view->areas()->get()) : collect([]);
 
-        // ----------------------------
-        // Build layout slots (same as your code)
-        // ----------------------------
+        // Build layoutSlots (same logic as your code)
         $layoutSlots = [];
         foreach ($areas as $a) {
             $left  = (float)($a->left_pct ?? $a->x_mm ?? 0);
@@ -135,10 +126,9 @@ class PublicDesignerController extends Controller
                 'mask'      => $mask,
             ];
         }
-
         $originalLayoutSlots = $layoutSlots;
 
-        // artwork detection and filtering --- keep your existing logic
+        // artwork detection
         $hasArtworkSlot = false;
         foreach ($originalLayoutSlots as $slotKey => $slot) {
             $k = strtolower((string)$slotKey);
@@ -157,7 +147,7 @@ class PublicDesignerController extends Controller
         $showUpload = (bool)$hasArtworkSlot;
         \Log::info("designer: product_id={$product->id} showUpload=" . (int)$showUpload . " hasArtworkSlot=" . (int)$hasArtworkSlot);
 
-        // filteredLayoutSlots (same as your code)...
+        // filtered layout slots for name/number (your logic)
         $filteredLayoutSlots = [];
         if (!empty($layoutSlots) && is_array($layoutSlots)) {
             foreach (['name', 'number'] as $k) {
@@ -189,7 +179,7 @@ class PublicDesignerController extends Controller
             }
         }
 
-        // displayPrice compute (same as your code)
+        // compute display price (same as your code)
         $displayPrice = 0.00;
         try {
             if (isset($product->min_price) && is_numeric($product->min_price) && (float)$product->min_price > 0) {
@@ -216,95 +206,61 @@ class PublicDesignerController extends Controller
         $variantMap = [];
         if ($product->relationLoaded('variants')) {
             foreach ($product->variants as $v) {
-                // prefer explicit option columns; fall back to title
                 $label = trim((string)($v->option_value ?? $v->option_name ?? $v->title ?? ''));
                 $variantId = (string)($v->shopify_variant_id ?? $v->variant_id ?? $v->id ?? '');
                 if ($label === '' || $variantId === '') continue;
                 $sizeOptions[] = ['label' => $label, 'variant_id' => $variantId];
-                // map uppercase label to variant id for convenience (used maybe in JS)
                 $variantMap[strtoupper($label)] = $variantId;
             }
         }
 
-        // ----- BEGIN bgUrl resolution (added) -----
-        $bgUrl = null;
-
-        // helper normalizer
-        $normalize = function($p){
-            if (!$p) return null;
-            $p = (string)$p;
-            $p = str_replace('\\','/',$p);
-            $p = preg_replace('~^//+~','',$p);                 // remove leading double-slash
-            $p = preg_replace('~^/?(storage|public)/~','',$p);
-            return ltrim($p,'/');
+        // ======= NORMALIZE image URLs for blade and add cache-buster =======
+        $makePublicUrl = function($path) use ($product) {
+            if (!$path) return null;
+            // If already absolute (http) keep
+            if (preg_match('#^https?://#i', $path)) {
+                return $path . (isset($product->updated_at) ? ('?v=' . strtotime($product->updated_at)) : '');
+            }
+            // if path starts with '/storage' or 'storage', build asset
+            $clean = ltrim($path, '/');
+            if (strpos($clean, 'storage/') === 0) {
+                return asset($clean) . (isset($product->updated_at) ? ('?v=' . strtotime($product->updated_at)) : '');
+            }
+            // if path already is 'product-previews/...' or 'files/...' assume public storage
+            if (strpos($clean, 'product-previews/') === 0 || strpos($clean, 'files/') === 0) {
+                return asset('storage/' . $clean) . (isset($product->updated_at) ? ('?v=' . strtotime($product->updated_at)) : '');
+            }
+            // fallback: try as asset(path)
+            return asset($clean) . (isset($product->updated_at) ? ('?v=' . strtotime($product->updated_at)) : '');
         };
 
-        // 1) prefer product->thumbnail (admin uploaded)
-        if (!empty($product->thumbnail)) {
-            $rel = $normalize($product->thumbnail);
-            if ($rel && Storage::disk('public')->exists($rel)) {
-                $bgUrl = url('/files/'.$rel);
-            } elseif ($rel && file_exists(public_path('storage/'.$rel))) {
-                $bgUrl = asset('storage/'.$rel);
-            } elseif (preg_match('~^https?://~i', $product->thumbnail)) {
-                $bgUrl = $product->thumbnail;
-            }
+        // Normalize preview_src and image_url
+        if (!empty($product->preview_src)) {
+            $product->preview_src = $makePublicUrl($product->preview_src);
+        }
+        if (!empty($product->image_url)) {
+            $product->image_url = $makePublicUrl($product->image_url);
         }
 
-        // 2) then check view->image_path (explicit uploaded view image)
-        if (!$bgUrl && !empty($view->image_path)) {
-            $rel = $normalize($view->image_path);
-            if ($rel && Storage::disk('public')->exists($rel)) {
-                $bgUrl = url('/files/'.$rel);
-            } elseif ($rel && file_exists(public_path('storage/'.$rel))) {
-                $bgUrl = asset('storage/'.$rel);
-            }
-        }
-
-        // 3) then view->bg_image_url
-        if (!$bgUrl && !empty($view->bg_image_url)) {
-            $vbg = $view->bg_image_url;
-            if (preg_match('~^https?://~i', $vbg)) {
-                $bgUrl = $vbg;
-            } else {
-                $rel = $normalize($vbg);
-                if ($rel && Storage::disk('public')->exists($rel)) $bgUrl = url('/files/'.$rel);
-                elseif ($rel && file_exists(public_path('storage/'.$rel))) $bgUrl = asset('storage/'.$rel);
-            }
-        }
-
-        // 4) fallback to Shopify product image
-        if (!$bgUrl) {
-            $shopImg = optional($product->shopifyProduct)->image_url;
-            if ($shopImg) $bgUrl = $shopImg;
-        }
-
-        // 5) FINAL fallback: older preview folder used by designer (if you use /files/previews/preview_{productId}_*.jpg)
-        if (!$bgUrl) {
-            $previewsDir = storage_path('app/public/previews');
-            if (is_dir($previewsDir)) {
-                // glob for preview_{productId}_*.jpg|png
-                $pattern = $previewsDir . '/preview_' . ($product->id ?? '0') . '_*.*';
-                $matches = glob($pattern);
-                if (!empty($matches)) {
-                    // pick newest
-                    usort($matches, function($a,$b){ return filemtime($b) - filemtime($a); });
-                    // convert to /files/... path
-                    $file = str_replace(storage_path('app/public/'), '', $matches[0]);
-                    $bgUrl = url('/files/' . ltrim($file,'/'));
+        // If preview missing AND product has attachments or preview candidates on disk, try to pick candidate(s)
+        // (optional: helpful when admin uploaded but DB column not set)
+        if (empty($product->preview_src)) {
+            // try common storage path
+            $candidate = '/storage/product-previews/preview_' . $product->id . '.jpg';
+            // only use candidate if file exists publicly (cheap curl check)
+            try {
+                $url = asset(ltrim($candidate, '/'));
+                $h = @get_headers($url);
+                if ($h && strpos($h[0], '200') !== false) {
+                    $product->preview_src = $url . (isset($product->updated_at) ? ('?v=' . strtotime($product->updated_at)) : '');
+                    Log::info("designer: auto-detected preview candidate for product {$product->id}");
                 }
+            } catch (\Throwable $e) {
+                // ignore
             }
         }
 
-        // Add cache-buster version param based on product/view update time
-        if ($bgUrl) {
-            $ver = isset($view->updated_at) ? strtotime($view->updated_at) : (isset($product->updated_at) ? strtotime($product->updated_at) : time());
-            // if bgUrl already has query, append
-            $bgUrl = $bgUrl . (strpos($bgUrl,'?') === false ? '?v=' . $ver : '&v=' . $ver);
-        }
-        // ----- END bgUrl resolution -----
-
-        $viewData = [
+        return view('public.designer', [
             'product' => $product,
             'view'    => $view,
             'areas'   => $areas,
@@ -315,18 +271,9 @@ class PublicDesignerController extends Controller
             'displayPrice' => (float)$displayPrice,
             'sizeOptions' => $sizeOptions,
             'variantMap' => $variantMap,
-            'bgUrl' => $bgUrl,
-        ];
-
-        return view('public.designer', $viewData);
+        ]);
     }
 
-    /**
-     * Fetch variants for a given product from Shopify Admin API and store into local DB
-     * Supports multiple env var names for compatibility:
-     * SHOPIFY_SHOP or SHOPIFY_STORE for shop domain (e.g. yourshop.myshopify.com)
-     * SHOPIFY_ADMIN_TOKEN or SHOPIFY_ADMIN_API_TOKEN for admin API token
-     */
     protected function fetchShopifyVariantsAndStore(Product $product)
     {
         $shopifyProductId = $product->shopify_product_id ?? null;
@@ -335,7 +282,6 @@ class PublicDesignerController extends Controller
             return;
         }
 
-        // Support common env names
         $shop = env('SHOPIFY_SHOP') ?: env('SHOPIFY_STORE') ?: env('SHOPIFY_SHOP_DOMAIN');
         $token = env('SHOPIFY_ADMIN_TOKEN') ?: env('SHOPIFY_ADMIN_API_TOKEN') ?: env('SHOPIFY_ADMIN_SECRET');
 
@@ -343,10 +289,8 @@ class PublicDesignerController extends Controller
             throw new \RuntimeException("Shopify credentials not configured (expected SHOPIFY_SHOP/SHOPIFY_STORE and SHOPIFY_ADMIN_TOKEN/SHOPIFY_ADMIN_API_TOKEN).");
         }
 
-        // sanitize product id if it's the global id (gid://...) or numeric, Shopify API expects numeric id in REST path
         $cleanId = $shopifyProductId;
         if (is_string($cleanId) && strpos($cleanId, 'gid://') === 0) {
-            // extract numeric id from gid if present
             if (preg_match('/\/(\d+)$/', $cleanId, $m)) {
                 $cleanId = $m[1];
             }
@@ -377,29 +321,22 @@ class PublicDesignerController extends Controller
             return;
         }
 
-        // store each variant into product->variants() relation
         foreach ($variants as $v) {
             $variantShopifyId = (string)($v['id'] ?? '');
             if (!$variantShopifyId) continue;
 
             $title = trim((string)($v['title'] ?? ''));
             $optionLabel = '';
-            // prefer option1 / option2 / option3 if present
             if (!empty($v['option1'])) $optionLabel = $v['option1'];
             elseif (!empty($v['option2'])) $optionLabel = $v['option2'];
             elseif (!empty($v['option3'])) $optionLabel = $v['option3'];
 
-            $price = isset($v['price']) ? $v['price'] : null;
-            $sku = isset($v['sku']) ? $v['sku'] : null;
-
-            // Use updateOrCreate to upsert. Adjust column names to match your variants table.
             try {
                 $product->variants()->updateOrCreate(
                     ['shopify_variant_id' => $variantShopifyId],
                     [
                         'title' => $title,
                         'option_value' => $optionLabel,
-                        // if your table has 'variant_id' or 'id' needs mapping, adjust here.
                     ]
                 );
             } catch (\Throwable $e) {
