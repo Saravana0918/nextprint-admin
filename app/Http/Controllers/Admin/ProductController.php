@@ -9,13 +9,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Http\Response;
 
 class ProductController extends Controller
 {
-    /**
-     * Product listing for admin (with preview_src build)
-     */
     public function index()
     {
         Log::info('ADMIN CHECK - products in DB flagged', ['count' => DB::table('products')->where('is_in_nextprint',1)->count()]);
@@ -51,10 +47,9 @@ class ProductController extends Controller
                 DB::raw('sp.image_url   as shop_image'),
                 DB::raw('p.thumbnail    as legacy_image'),
                 DB::raw('COALESCE(m.methods, "") as methods'),
-                'p.preview_src' // include direct preview_src from products table
+                'p.preview_src'
             ])
 
-            // Ensure priority: product.preview_src -> pv.image_path -> sp.image_url -> p.thumbnail
             ->selectRaw("
                 COALESCE(
                   NULLIF(p.preview_src, ''),
@@ -64,13 +59,9 @@ class ProductController extends Controller
                 ) as preview_image
             ")
             ->orderBy('p.id', 'desc')
-
-            // <-- filter by Shopify "Show in NextPrint" collection/tag
             ->where('p.is_in_nextprint', 1)
-
             ->paginate(30);
 
-        // build preview_src absolute URL for each row
         foreach ($rows as $r) {
             $raw = $r->preview_image;
             if (!$raw) { $r->preview_src = null; continue; }
@@ -79,7 +70,6 @@ class ProductController extends Controller
                 $r->preview_src = $raw;
                 continue;
             }
-            // remove leading storage/public
             $raw = preg_replace('~^/?(storage|public)/~','', $raw);
             $raw = ltrim($raw,'/');
             $r->preview_src = Storage::disk('public')->url($raw);
@@ -88,18 +78,12 @@ class ProductController extends Controller
         return view('admin.products.index', compact('rows'));
     }
 
-    /**
-     * Edit product page
-     */
     public function edit(Product $product)
     {
-        $methods = PrintMethod::all();  // fetch all print methods
+        $methods = PrintMethod::all();
         return view('admin.products.edit', compact('product', 'methods'));
     }
 
-    /**
-     * Update product (basic fields + print methods)
-     */
     public function update(Request $request, Product $product)
     {
         $data = $request->validate([
@@ -112,35 +96,21 @@ class ProductController extends Controller
         ]);
 
         $product->update($data);
-
-        // write print methods to pivot
         $ids = $request->input('print_method_ids', []);
         $product->printMethods()->sync($ids);
 
         return redirect()->route('admin.products')->with('success','Product updated.');
     }
 
-    /**
-     * Delete product (hard delete here)
-     */
     public function destroy(Product $product)
     {
         $product->delete();
-
-        return redirect()
-            ->route('admin.products')
-            ->with('success', 'Product deleted.');
+        return redirect()->route('admin.products')->with('success', 'Product deleted.');
     }
 
-    /**
-     * Navigate to Decoration (areas) editor for a product
-     * Ensures the view has a sensible bg image (preview_src preferred)
-     */
     public function goToDecoration(Product $product)
     {
-        // find existing first view or create default "Front"
         $view = $product->views()->first();
-
         if (!$view) {
             $view = $product->views()->create([
                 'name'         => 'Front',
@@ -151,20 +121,15 @@ class ProductController extends Controller
             ]);
         }
 
-        // prefer preview_src, then thumbnail
         $bg = $product->preview_src ?? $product->thumbnail ?? null;
         if ((empty($view->bg_image_url) || is_null($view->bg_image_url)) && !empty($bg)) {
             $view->bg_image_url = $bg;
             $view->save();
         }
 
-        // redirect to areas editor
         return redirect()->route('admin.areas.edit', [$product->id, $view->id]);
     }
 
-    /**
-     * Return product print methods JSON (used elsewhere)
-     */
     public function methodsJson(Product $product)
     {
         $methods = $product->printMethods()->select('id','name','code','status')->orderBy('sort')->get();
@@ -175,47 +140,38 @@ class ProductController extends Controller
         ]);
     }
 
-    /**
-     * Upload preview image for a product (AJAX)
-     * POST /admin/products/{product}/preview
-     */
+    // ---------------- Upload / Delete preview (model-binding)
     public function uploadPreview(Request $request, Product $product)
-{
-    try {
-        if (!$request->hasFile('preview_image')) {
-            return response()->json(['message' => 'No file uploaded'], 422);
-        }
-
-        $request->validate(['preview_image' => 'image|max:5120']);
-
-        $file = $request->file('preview_image');
-        $path = $file->store('public/product-previews');
-        $publicUrl = Storage::url($path); // /storage/product-previews/xxx.jpg
-
-        $product->preview_src = $publicUrl;
-        $product->touch();
-        $product->save();
-
-        Log::info('Product preview uploaded', ['product_id' => $product->id, 'path' => $path]);
-
-        return response()->json(['url' => $publicUrl], 200);
-    } catch (\Throwable $e) {
-        Log::error("uploadPreview error: " . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
-        return response()->json(['message' => 'Upload failed'], 500);
-    }
-}
-
-    /**
-     * Delete preview image for a product (AJAX)
-     * DELETE /admin/products/{product}/preview
-     */
-    public function deletePreview($productId)
     {
         try {
-            $product = Product::findOrFail($productId);
+            if (!$request->hasFile('preview_image')) {
+                return response()->json(['message' => 'No file uploaded'], 422);
+            }
 
+            $request->validate(['preview_image' => 'image|max:5120']);
+
+            $file = $request->file('preview_image');
+            $path = $file->store('public/product-previews');
+            $publicUrl = Storage::url($path);
+
+            $product->preview_src = $publicUrl;
+            $product->touch();
+            $product->save();
+
+            Log::info('Product preview uploaded', ['product_id' => $product->id, 'path' => $path]);
+
+            return response()->json(['url' => $publicUrl], 200);
+        } catch (\Throwable $e) {
+            Log::error("uploadPreview error: " . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
+            return response()->json(['message' => 'Upload failed'], 500);
+        }
+    }
+
+    public function deletePreview(Product $product)
+    {
+        try {
             if (!empty($product->preview_src) && preg_match('~^/storage/(.+)$~', $product->preview_src, $m)) {
-                $relative = $m[1]; // product-previews/xxx.jpg
+                $relative = $m[1];
                 if (Storage::disk('public')->exists($relative)) {
                     Storage::disk('public')->delete($relative);
                     Log::info('Deleted preview file', ['file' => $relative]);
