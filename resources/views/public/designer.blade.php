@@ -360,6 +360,30 @@ window.findPreferredSlot = function(){
     return null;
   }
 };
+
+// ---- paste anywhere inside designer blade <script> block ----
+function openTeamCreateWithPreview(productId, previewUrl, extraPrefill = {}) {
+  if (!productId) return;
+  const params = new URLSearchParams();
+  params.set('product_id', productId);
+  if (previewUrl) params.set('preview_url', previewUrl);
+
+  if (extraPrefill.prefill_font) params.set('prefill_font', extraPrefill.prefill_font);
+  if (extraPrefill.prefill_color) params.set('prefill_color', extraPrefill.prefill_color);
+  if (extraPrefill.prefill_name) params.set('prefill_name', extraPrefill.prefill_name);
+  if (extraPrefill.prefill_number) params.set('prefill_number', extraPrefill.prefill_number);
+
+  if (extraPrefill.layoutSlots) {
+    try {
+      // layoutSlots might be an object; JSON encode then URL-encode
+      params.set('layoutSlots', encodeURIComponent(JSON.stringify(extraPrefill.layoutSlots)));
+    } catch(e) { /* ignore */ }
+  }
+
+  const url = '/team/create?' + params.toString();
+  window.location.href = url;
+}
+
 </script>
 
 

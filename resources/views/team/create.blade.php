@@ -3,21 +3,12 @@
 @section('hide_header', '1')
 
 @section('content')
-
-  // pick preview image — prefer explicit query param 'preview_url'
-  $img = null;
-  if (request()->query('preview_url')) {
-      $img = request()->query('preview_url');
-  } elseif (!empty($product->preview_url)) {
-      $img = $product->preview_url;
-  } elseif (!empty($product->preview_src)) {
-      $img = $product->preview_src;
-  } elseif (!empty($product->image_url)) {
-      $img = $product->image_url;
-  } else {
-      $img = asset('images/placeholder.png');
-  }
-
+@php
+   $img = request()->query('preview_url')
+         ?? ($product->preview_url ?? null)
+         ?? ($product->preview_src ?? null)
+         ?? ($product->image_url ?? null)
+         ?? asset('images/placeholder.png');
 
   // Start with any server-side $prefill passed by controller (if any)
    $prefill = $prefill ?? [];
@@ -244,11 +235,6 @@
   </div>
 </div>
 
-<script>
-  window.teamPreviewUrl = {!! json_encode(request()->query('preview_url') ?? ($product->preview_url ?? null)) !!};
-  console.info('teamPreviewUrl=', window.teamPreviewUrl);
-</script>
-
 {{-- expose server values to JS --}}
 <script>
   window.prefill = {!! json_encode($prefill ?? []) !!};
@@ -262,6 +248,11 @@
   // hide overlay number visually
   document.getElementById('overlay-number').style.display = 'none';
 }
+</script>
+<script>
+  // expose preview url to JS
+  window.teamPreviewUrl = {!! json_encode(request()->query('preview_url') ?? ($product->preview_url ?? null)) !!};
+  console.info('teamPreviewUrl=', window.teamPreviewUrl);
 </script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -362,7 +353,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   const stageEl = document.getElementById('player-stage');
   const imgEl = document.getElementById('player-base');
-  if (window.teamPreviewUrl) {
+  if (window.teamPreviewUrl && imgEl) {
   try { imgEl.src = window.teamPreviewUrl; } catch(e){ console.warn('set preview src failed', e); }
 }
   const ovName = document.getElementById('overlay-name');

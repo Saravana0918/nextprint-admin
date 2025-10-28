@@ -61,12 +61,10 @@ class TeamController extends Controller
     DB::beginTransaction();
     try {
         // --- Handle preview image (store base64 to storage/app/public/team_previews) ---
-        $previewPathRel = null;   // relative public path (like "team_previews/xxx.jpg") or full url
-        $previewLocal = null;     // server-local absolute path if we saved/resolved local file
-        $publicPreviewUrl = null; // final public URL we will return/store
+        $previewPathRel = null;   // e.g. storage/team_previews/xxx.png  (for asset())
+        $previewLocal = null;     // e.g. /home/forge/.../storage/app/public/team_previews/xxx.png
 
-        // 1) If frontend sent a data: URI -> save to public disk
-        if (!empty($data['preview_src']) && Str::startsWith($data['preview_src'], 'data:')) {
+        if (!empty($data['preview_src']) && \Illuminate\Support\Str::startsWith($data['preview_src'], 'data:')) {
             if (preg_match('/^data:(image\/[a-zA-Z]+);base64,(.+)$/', $data['preview_src'], $m)) {
                 $ext = explode('/', $m[1])[1] ?? 'png';
                 $bin = base64_decode($m[2]);
@@ -74,65 +72,31 @@ class TeamController extends Controller
                     $fname = 'team_preview_' . time() . '_' . Str::random(6) . '.' . $ext;
                     $storagePath = 'team_previews/' . $fname;
                     Storage::disk('public')->put($storagePath, $bin);
-                    $previewPathRel = $storagePath; // no leading "storage/" here (we keep canonical storage path)
+                    $previewPathRel = 'storage/' . $storagePath;
                     $previewLocal = storage_path('app/public/' . $storagePath);
-                    $publicPreviewUrl = Storage::disk('public')->url($storagePath);
                 }
             }
         } elseif (!empty($data['preview_src'])) {
-            // 2) Frontend supplied a path or URL
+            // frontend supplied a path or URL. Could be '/storage/..' or 'team_previews/..' or full URL
             $previewRaw = $data['preview_src'];
-
-            // strip potential "storage/" prefix to get canonical storage path
-            if (Str::startsWith($previewRaw, '/storage/')) {
-                $rel = preg_replace('#^/storage/#', '', $previewRaw);
-                if (Storage::disk('public')->exists($rel)) {
-                    $previewPathRel = $rel;
-                    $previewLocal = storage_path('app/public/' . $rel);
-                    $publicPreviewUrl = Storage::disk('public')->url($rel);
-                }
-            } elseif (Str::startsWith($previewRaw, 'storage/')) {
-                $rel = preg_replace('#^storage/#', '', $previewRaw);
-                if (Storage::disk('public')->exists($rel)) {
-                    $previewPathRel = $rel;
-                    $previewLocal = storage_path('app/public/' . $rel);
-                    $publicPreviewUrl = Storage::disk('public')->url($rel);
-                }
+            // if starts with /storage or storage/ -> treat as relative public path
+            if (Str::startsWith($previewRaw, '/storage') || Str::startsWith($previewRaw, 'storage/')) {
+                $previewPathRel = ltrim($previewRaw, '/');
+                // compute local candidate
+                $rel = preg_replace('#^storage/#', '', $previewPathRel);
+                $localCandidate = storage_path('app/public/' . $rel);
+                if (file_exists($localCandidate)) $previewLocal = $localCandidate;
             } elseif (Str::startsWith($previewRaw, 'http://') || Str::startsWith($previewRaw, 'https://')) {
-                // already a full public URL -> use as is
                 $previewPathRel = $previewRaw;
-                $publicPreviewUrl = $previewRaw;
             } else {
-                // maybe "team_previews/xxx.png" or other relative path
-                $candidate = ltrim($previewRaw, '/');
-                if (Storage::disk('public')->exists($candidate)) {
-                    $previewPathRel = $candidate;
-                    $previewLocal = storage_path('app/public/' . $candidate);
-                    $publicPreviewUrl = Storage::disk('public')->url($candidate);
+                // maybe plain "team_previews/xxx.png"
+                $localCandidate = storage_path('app/public/' . ltrim($previewRaw, '/'));
+                if (file_exists($localCandidate)) {
+                    $previewLocal = $localCandidate;
+                    $previewPathRel = 'storage/' . ltrim($previewRaw, '/');
                 } else {
-                    // unknown raw value: keep as-is in preview_path, and attempt to treat as public url if it's valid
+                    // fallback store raw value as preview_path
                     $previewPathRel = $previewRaw;
-                    if (filter_var($previewRaw, FILTER_VALIDATE_URL)) {
-                        $publicPreviewUrl = $previewRaw;
-                    } else {
-                        // last resort: try asset('storage/...')
-                        $publicPreviewUrl = null;
-                    }
-                }
-            }
-        }
-
-        // If we still don't have $publicPreviewUrl but have a previewPathRel present which is a storage path:
-        if (empty($publicPreviewUrl) && !empty($previewPathRel)) {
-            // if previewPathRel looks like a storage-relative path (no protocol)
-            if (!Str::startsWith($previewPathRel, 'http') && Storage::disk('public')->exists($previewPathRel)) {
-                $publicPreviewUrl = Storage::disk('public')->url($previewPathRel);
-            } else {
-                // fallback: use asset() but only when previewPathRel is a simple path (not a full URL)
-                if (!Str::startsWith($previewPathRel, 'http')) {
-                    $publicPreviewUrl = asset('storage/' . ltrim($previewPathRel, '/'));
-                } else {
-                    $publicPreviewUrl = $previewPathRel;
                 }
             }
         }
@@ -156,21 +120,19 @@ class TeamController extends Controller
             'product_id' => $data['product_id'] ?? null,
             'players' => json_encode($players, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE),
             'team_logo_url' => $data['team_logo_url'] ?? null,
-            // store preview_path as either storage relative path or raw url depending on input
-            'preview_path' => $previewPathRel ? (Str::startsWith($previewPathRel, 'http') ? $previewPathRel : $previewPathRel) : null,
-            'preview_url' => $publicPreviewUrl ?? null,
-            'preview_local_path' => $previewLocal ?? null,
+            'preview_url' => $previewPathRel ? asset($previewPathRel) : null,
+            'preview_path' => $previewPathRel ?? null,
             'created_by' => auth()->id() ?? null,
             'created_at' => now(),
             'updated_at' => now(),
         ];
-
         $teamCols = Schema::getColumnListing('teams');
         $teamPayload = array_intersect_key($teamPayload, array_flip($teamCols));
         $teamId = DB::table('teams')->insertGetId($teamPayload);
 
         // --- Insert/update design_orders ---
         $first = $players[0] ?? [];
+        // normalize order level font/color
         $orderFont = $first['font'] ?? null;
         $orderColor = $first['color'] ?? null;
         if ($orderColor) {
@@ -188,6 +150,7 @@ class TeamController extends Controller
             'color' => $orderColor,
             'preview_src' => $previewPathRel ?? null,
             'preview_path' => $previewPathRel ?? null,
+            // store local path if we resolved it (useful for DomPDF)
             'preview_local_path' => $previewLocal ?? null,
             'raw_payload' => json_encode(['team_id' => $teamId, 'players' => $players]),
             'status' => 'new',
@@ -211,8 +174,7 @@ class TeamController extends Controller
             'success' => true,
             'team_id' => $teamId,
             'order_id' => $linkedOrderId,
-            // return final public url (if available)
-            'preview_url' => $publicPreviewUrl ?? null,
+            'preview_url' => $previewPathRel ? asset($previewPathRel) : null,
             'message' => 'Design saved ✅ and linked to order #' . ($linkedOrderId ?? 'N/A'),
         ]);
     } catch (\Throwable $e) {
@@ -224,6 +186,7 @@ class TeamController extends Controller
         ], 500);
     }
 }
+
 
 public function store(Request $request)
 {
