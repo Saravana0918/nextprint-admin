@@ -1228,6 +1228,57 @@ document.addEventListener('DOMContentLoaded', function(){
   } catch(e) { console.warn('overlay quick patch failed', e); }
 });
 </script>
+<script>
+// === FORCE show initial NAME + 09 overlay and trigger layout ===
+(function showInitialNameAndNumber() {
+  try {
+    // run shortly after DOM ready & after rows created
+    setTimeout(() => {
+      const ovName = document.getElementById('overlay-name');
+      const ovNum  = document.getElementById('overlay-number');
+
+      // If prefills exist, use them; else defaults
+      const pf = window.prefill || {};
+      const defaultName = (pf.prefill_name || pf.name || 'NAME').toString().toUpperCase().slice(0,12);
+      const defaultNum  = (pf.prefill_number || pf.number || '09').toString().replace(/\D/g,'').slice(0,3);
+
+      // Force overlays to have text
+      if (ovName) {
+        ovName.textContent = defaultName || 'NAME';
+        ovName.style.display = 'flex';
+        ovName.style.visibility = 'visible';
+      }
+
+      // Ensure we show number overlay (override any earlier hide). If you do not want numbers, set hasNumberSlot=false
+      window.hasNumberSlot = true; // override — ensure number overlay allowed
+      if (ovNum) {
+        ovNum.textContent = (defaultNum || '09');
+        ovNum.style.display = 'flex';
+        ovNum.style.visibility = 'visible';
+      }
+
+      // make sure overlay visible in CSS (in case some earlier rule set display:none!important)
+      document.querySelectorAll('.np-overlay').forEach(el => {
+        el.style.setProperty('display', 'flex', 'important');
+        el.style.setProperty('visibility', 'visible', 'important');
+      });
+
+      // call applyLayout so it positions & sizes overlays correctly
+      try { if (typeof applyLayout === 'function') applyLayout(); } catch(e){ console.warn('applyLayout missing', e); }
+
+      // trigger an input event on first row so your existing listeners update overlays when user types
+      const firstRow = document.querySelector('#players-list .player-row');
+      if (firstRow) {
+        const ev = new Event('input', { bubbles: true });
+        const nameEl = firstRow.querySelector('.player-name');
+        const numEl  = firstRow.querySelector('.player-number');
+        if (nameEl) nameEl.dispatchEvent(ev);
+        if (numEl) numEl.dispatchEvent(ev);
+      }
+    }, 160); // small delay so createRow() already ran
+  } catch(err) { console.warn('showInitialNameAndNumber error', err); }
+})();
+</script>
 
 
 @endsection
