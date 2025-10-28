@@ -4,10 +4,8 @@
 
 @section('content')
 @php
-  // Prefer preview_url from query first (sent from Designer)
-$img = request()->query('preview_url')
-    ?? ($product->preview_url ?? $product->preview_src ?? $product->image_url ?? asset('images/placeholder.png'));
-
+   $img = request()->query('preview_url')
+      ?? ($product->preview_url ?? $product->preview_src ?? $product->image_url ?? asset('images/placeholder.png'));
 
   // Start with any server-side $prefill passed by controller (if any)
    $prefill = $prefill ?? [];

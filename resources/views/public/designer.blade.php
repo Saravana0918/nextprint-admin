@@ -688,7 +688,10 @@ const name = (document.querySelector('#np-name')?.value || '').toUpperCase();
 const number = (document.querySelector('#np-num')?.value || '').replace(/\D/g,'');
 const font = (document.getElementById('np-font')?.value || '');
 const color = (document.getElementById('np-color')?.value || '');
+const previewUrl = window.lastUploadedPreviewUrl || document.getElementById('np-preview-hidden')?.value || '';
+
 if (productId) params.set('product_id', productId);
+if (previewUrl) params.set('preview_url', encodeURIComponent(previewUrl));
 if (name) params.set('prefill_name', encodeURIComponent(name));
 if (number) params.set('prefill_number', encodeURIComponent(number));
 if (font) params.set('prefill_font', encodeURIComponent(font));
@@ -1116,6 +1119,7 @@ async function doSave() {
 
   try {
     const fullPreviewUrl = await generateFullPreview(); // returns public URL
+    window.lastUploadedPreviewUrl = fullPreviewUrl;
     let previewBaseUrl = null;
     try {
       previewBaseUrl = await uploadBaseArtwork();
