@@ -13,16 +13,13 @@ class PrintAreaController extends Controller
 {
     public function edit(Product $product, ProductView $view)
 {
-    $existing = $view->areas()
-        ->select(
-            'id','template_id','mask_svg_path',
-            'x_mm','y_mm','width_mm','height_mm','dpi','rotation',
-            'left_pct','top_pct','width_pct','height_pct',
-            'name','slot_key'
-        )
-        ->get();
+    $existing = $view->areas()->select(
+        'id','template_id','mask_svg_path',
+        'x_mm','y_mm','width_mm','height_mm','dpi','rotation',
+        'left_pct','top_pct','width_pct','height_pct',
+        'name','slot_key'
+    )->get();
 
-    // Helper to normalize saved path
     $normalize = function($path){
         if (!$path) return null;
         $p = str_replace('\\','/',$path);
@@ -30,26 +27,17 @@ class PrintAreaController extends Controller
         return ltrim($p, '/');
     };
 
-    // 1) uploaded local image (view->image_path) -> try to resolve
     $uploaded = null;
     if (!empty($view->image_path)) {
         $rel = $normalize($view->image_path);
-        if ($rel && \Illuminate\Support\Facades\Storage::disk('public')->exists($rel)) {
-            // Use the /files/ route (serves storage/app/public)
+        if ($rel && Storage::disk('public')->exists($rel)) {
             $uploaded = url('/files/'.$rel);
-        } else {
-            // fallback to storage url (may work if /storage symlink is present)
+        } elseif ($rel && file_exists(public_path('storage/'.$rel))) {
             $uploaded = asset('storage/'.$rel);
-            if (!@getimagesize(public_path('storage/'.$rel))) {
-                $uploaded = null;
-            }
         }
     }
 
-    // Shopify image (relation optional)
     $shopImage = optional($product->shopifyProduct)->image_url;
-
-    // Final fallback chain - prefer uploaded -> view.bg_image_url -> product.thumbnail -> shopImage
     $bgUrl = null;
 
     if ($uploaded) {
@@ -58,34 +46,28 @@ class PrintAreaController extends Controller
         $rel = $normalize($view->bg_image_url);
         if (preg_match('~^https?://~i', $view->bg_image_url)) {
             $bgUrl = $view->bg_image_url;
-        } elseif ($rel && \Illuminate\Support\Facades\Storage::disk('public')->exists($rel)) {
+        } elseif ($rel && Storage::disk('public')->exists($rel)) {
             $bgUrl = url('/files/'.$rel);
         } elseif ($rel && file_exists(public_path('storage/'.$rel))) {
             $bgUrl = asset('storage/'.$rel);
-        } else {
-            // if it's some relative path, still try to build a storage url (best-effort)
-            if ($rel) $bgUrl = asset('storage/'.$rel);
         }
     } elseif (!empty($product->thumbnail)) {
         $rel = $normalize($product->thumbnail);
-        if ($rel && \Illuminate\Support\Facades\Storage::disk('public')->exists($rel)) {
-            $bgUrl = url('/files/'.$rel);
+        if ($rel && Storage::disk('public')->exists($rel)) {
+            $bgUrl = url('/files/'.$rel);         // prefer /files/ route
         } elseif ($rel && file_exists(public_path('storage/'.$rel))) {
             $bgUrl = asset('storage/'.$rel);
-        } else {
-            if ($rel) $bgUrl = asset('storage/'.$rel);
+        } elseif (preg_match('~^https?://~i', $product->thumbnail)) {
+            $bgUrl = $product->thumbnail;
         }
     } elseif (!empty($shopImage)) {
         $bgUrl = $shopImage;
     }
 
-    \Log::info('PrintArea background resolved', [
-        'product_id' => $product->id,
-        'view_id'    => $view->id,
-        'view_image_path' => $view->image_path,
-        'view_bg_image_url'=> $view->bg_image_url,
-        'product_thumbnail' => $product->thumbnail,
-        'bgUrl' => $bgUrl
+    Log::info('PrintArea background resolved', [
+        'product_id'=>$product->id, 'view_id'=>$view->id,
+        'view_image_path'=>$view->image_path, 'view_bg_image_url'=>$view->bg_image_url,
+        'product_thumbnail'=>$product->thumbnail, 'bgUrl'=>$bgUrl
     ]);
 
     return view('admin.areas.edit', compact('product','view','existing','bgUrl'));

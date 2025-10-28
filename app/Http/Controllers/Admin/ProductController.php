@@ -135,35 +135,31 @@ class ProductController extends Controller
      * POST /admin/products/{product}/preview
      */
     public function uploadPreview(Request $req, Product $product)
-    {
-        // validate
-        $v = Validator::make($req->all(), [
-            'preview_image' => 'required|image|max:5120' // 5MB
-        ]);
+{
+    $v = Validator::make($req->all(), [
+        'preview_image' => 'required|image|max:5120'
+    ]);
 
-        if ($v->fails()) {
-            return response()->json(['ok'=>false,'message'=>$v->errors()->first()], 422);
-        }
-
-        $file = $req->file('preview_image');
-
-        // store under public/product-previews
-        $path = $file->store('product-previews', 'public'); // returns like "product-previews/abc.jpg"
-
-        if (!$path) {
-            return response()->json(['ok'=>false,'message'=>'store_failed'], 500);
-        }
-
-        // Option A: save into product->thumbnail (legacy). Adjust if you have dedicated column.
-        $product->thumbnail = $path;
-        $product->save();
-
-        $url = Storage::disk('public')->url($path);
-
-        Log::info('Product preview uploaded', ['product_id'=>$product->id, 'path'=>$path]);
-
-        return response()->json(['ok'=>true,'url'=>$url,'path'=>$path,'product_id'=>$product->id]);
+    if ($v->fails()) {
+        return response()->json(['ok'=>false,'message'=>$v->errors()->first()], 422);
     }
+
+    $file = $req->file('preview_image');
+    $path = $file->store('product-previews', 'public'); // -> "product-previews/abc.jpg"
+
+    if (!$path) {
+        return response()->json(['ok'=>false,'message'=>'store_failed'], 500);
+    }
+
+    // Save as relative path (no leading /storage)
+    $product->thumbnail = ltrim(str_replace('\\','/',$path), '/');
+    $product->save();
+
+    $url = Storage::disk('public')->url($path);
+    Log::info('Product preview uploaded', ['product_id'=>$product->id, 'path'=>$path, 'url'=>$url]);
+
+    return response()->json(['ok'=>true,'url'=>$url,'path'=>$path,'product_id'=>$product->id]);
+}
 
     /**
      * Delete preview
