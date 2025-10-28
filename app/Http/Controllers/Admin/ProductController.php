@@ -109,26 +109,29 @@ class ProductController extends Controller
     }
 
     public function goToDecoration(Product $product)
-    {
-        $view = $product->views()->first();
-        if (!$view) {
-            $view = $product->views()->create([
-                'name'         => 'Front',
-                'dpi'          => 300,
-                'rotation'     => 0,
-                'image_path'   => null,
-                'bg_image_url' => $product->thumbnail ?? null,
-            ]);
-        }
-
-        $bg = $product->preview_src ?? $product->thumbnail ?? null;
-        if ((empty($view->bg_image_url) || is_null($view->bg_image_url)) && !empty($bg)) {
-            $view->bg_image_url = $bg;
-            $view->save();
-        }
-
-        return redirect()->route('admin.areas.edit', [$product->id, $view->id]);
+{
+    // 1) Find existing first view or create default “Front”
+    $view = $product->views()->first();
+    if (!$view) {
+        $view = $product->views()->create([
+            'name'         => 'Front',
+            'dpi'          => 300,
+            'rotation'     => 0,
+            'image_path'   => null,
+            'bg_image_url' => $product->thumbnail ?? null,
+        ]);
     }
+
+    // prefer view bg, then product preview_src, then thumbnail
+    $bg = $view->bg_image_url ?? $product->preview_src ?? $product->thumbnail ?? null;
+    if ((empty($view->bg_image_url) || is_null($view->bg_image_url)) && !empty($bg)) {
+        $view->bg_image_url = $bg;
+        $view->save();
+    }
+
+    return redirect()->route('admin.areas.edit', [$product->id, $view->id]);
+}
+
 
     public function methodsJson(Product $product)
     {

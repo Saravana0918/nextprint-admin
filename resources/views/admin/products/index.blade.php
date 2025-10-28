@@ -89,7 +89,8 @@
       </a>
       <button type="button" class="btn btn-secondary btn-sm ms-1 btn-settings"
         data-product-id="{{ $p->id }}"
-        data-product-preview="{{ $p->preview_src ?? '' }}">
+        data-product-preview="{{ $p->preview_src ?? '' }}"
+        data-upload-route="{{ route('admin.products.preview.upload', $p->id) }}">
         Settings
       </button>
     </td>
@@ -178,7 +179,10 @@ document.addEventListener('DOMContentLoaded', function(){
     fd.append('_token', '{{ csrf_token() }}');
     fd.append('preview_image', fileInput.files[0]);
 
-    const url = '/admin/products/' + currentProductId + '/preview';
+    // use the per-row upload-route attribute
+    const settingBtn = document.querySelector('.btn-settings[data-product-id="'+currentProductId+'"]');
+    const url = settingBtn ? (settingBtn.dataset.uploadRoute || ('/admin/products/' + currentProductId + '/preview')) : ('/admin/products/' + currentProductId + '/preview');
+
     try {
       const resp = await fetch(url, {
         method: 'POST',
@@ -214,7 +218,8 @@ document.addEventListener('DOMContentLoaded', function(){
   document.getElementById('delete-preview-btn').addEventListener('click', async function(){
     if(!currentProductId) return;
     if(!confirm('Delete preview for this product?')) return;
-    const url = '/admin/products/' + currentProductId + '/preview';
+    const settingBtn = document.querySelector('.btn-settings[data-product-id="'+currentProductId+'"]');
+    const url = settingBtn ? (settingBtn.dataset.uploadRoute || ('/admin/products/' + currentProductId + '/preview')) : ('/admin/products/' + currentProductId + '/preview');
     try {
       const resp = await fetch(url, {
         method: 'DELETE',
