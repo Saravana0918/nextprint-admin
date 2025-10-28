@@ -1,5 +1,4 @@
 <?php
-
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
@@ -20,7 +19,6 @@ class PublicDesignerController extends Controller
         $product = null;
 
         if ($productId) {
-            // prefer long numeric shopify ids (strings) else try id lookup
             if (ctype_digit((string)$productId) && strlen((string)$productId) >= 8) {
                 $product = Product::with(['views','views.areas','variants'])
                             ->where('shopify_product_id', $productId)
@@ -36,7 +34,6 @@ class PublicDesignerController extends Controller
             }
 
             if (!$product) {
-                // try matching against several columns if exact not found
                 $query = Product::with(['views','views.areas','variants']);
                 $cols = [];
                 if (Schema::hasColumn('products','shopify_product_id')) $cols[] = 'shopify_product_id';
@@ -59,17 +56,20 @@ class PublicDesignerController extends Controller
             abort(404, 'Product not found');
         }
 
-        // --- If no variants loaded or variants count 0, try fetch from Shopify and save locally
+        // --- NEW: If no variants loaded or variants count 0, try fetch from Shopify and save locally
         if (!$product->relationLoaded('variants') || $product->variants->count() === 0) {
             try {
                 $this->fetchShopifyVariantsAndStore($product);
+                // reload relation after upsert
                 $product->load('variants');
             } catch (\Throwable $e) {
                 Log::warning("designer: fetchShopifyVariants failed product_id={$product->id} error=".$e->getMessage());
             }
         }
 
-        // Resolve view
+        // ----------------------------
+        // Resolve view (same as before)
+        // ----------------------------
         $view = null;
         if ($viewId) {
             $view = ProductView::with('areas')->find($viewId);
@@ -84,7 +84,9 @@ class PublicDesignerController extends Controller
 
         $areas = $view ? ($view->relationLoaded('areas') ? $view->areas : $view->areas()->get()) : collect([]);
 
-        // Build layout slots
+        // ----------------------------
+        // Build layout slots (same as your code)
+        // ----------------------------
         $layoutSlots = [];
         foreach ($areas as $a) {
             $left  = (float)($a->left_pct ?? $a->x_mm ?? 0);
@@ -92,7 +94,6 @@ class PublicDesignerController extends Controller
             $w     = (float)($a->width_pct ?? $a->width_mm ?? 10);
             $h     = (float)($a->height_pct ?? $a->height_mm ?? 10);
 
-            // If values were stored as fractions (0-1), convert to %.
             if ($left <= 1) $left *= 100;
             if ($top  <= 1) $top  *= 100;
             if ($w    <= 1) $w    *= 100;
@@ -129,21 +130,19 @@ class PublicDesignerController extends Controller
                 'slot_key'  => $a->slot_key ?? null,
                 'template_id' => $a->template_id ?? null,
                 'mask'      => $mask,
-                // keep raw mask_svg_path for backward compatibility
-                'mask_svg_path' => $a->mask_svg_path ?? null,
             ];
         }
 
         $originalLayoutSlots = $layoutSlots;
 
-        // artwork detection and filtering
+        // artwork detection and filtering --- keep your existing logic
         $hasArtworkSlot = false;
         foreach ($originalLayoutSlots as $slotKey => $slot) {
             $k = strtolower((string)$slotKey);
             if (in_array($k, ['logo','artwork','team_logo','graphic','image','art','badge','patch','patches'])) {
                 $hasArtworkSlot = true; break;
             }
-            if (!empty($slot['mask']) || !empty($slot['mask_url']) || !empty($slot['mask_svg_path'])) {
+            if (!empty($slot['mask']) || !empty($slot['mask_url'])) {
                 $hasArtworkSlot = true; break;
             }
             if (!in_array($k, ['name','number']) && !empty($slot['width_pct']) && !empty($slot['height_pct'])) {
@@ -155,7 +154,7 @@ class PublicDesignerController extends Controller
         $showUpload = (bool)$hasArtworkSlot;
         \Log::info("designer: product_id={$product->id} showUpload=" . (int)$showUpload . " hasArtworkSlot=" . (int)$hasArtworkSlot);
 
-        // filteredLayoutSlots (attempt to map name/number)
+        // filteredLayoutSlots (same as your code)...
         $filteredLayoutSlots = [];
         if (!empty($layoutSlots) && is_array($layoutSlots)) {
             foreach (['name', 'number'] as $k) {
@@ -187,7 +186,7 @@ class PublicDesignerController extends Controller
             }
         }
 
-        // displayPrice compute
+        // displayPrice compute (same as your code)
         $displayPrice = 0.00;
         try {
             if (isset($product->min_price) && is_numeric($product->min_price) && (float)$product->min_price > 0) {
@@ -209,21 +208,20 @@ class PublicDesignerController extends Controller
             \Log::warning('designer: price compute failed: ' . $e->getMessage());
         }
 
-        // Build sizeOptions + variantMap
+        // Build sizeOptions + variantMap for blade
         $sizeOptions = [];
         $variantMap = [];
         if ($product->relationLoaded('variants')) {
             foreach ($product->variants as $v) {
+                // prefer explicit option columns; fall back to title
                 $label = trim((string)($v->option_value ?? $v->option_name ?? $v->title ?? ''));
                 $variantId = (string)($v->shopify_variant_id ?? $v->variant_id ?? $v->id ?? '');
                 if ($label === '' || $variantId === '') continue;
                 $sizeOptions[] = ['label' => $label, 'variant_id' => $variantId];
+                // map uppercase label to variant id for convenience (used maybe in JS)
                 $variantMap[strtoupper($label)] = $variantId;
             }
         }
-
-        // --- Resolve preview image URL (guaranteed to be present for blade)
-        $imgForBlade = $this->resolvePreviewUrl($product);
 
         return view('public.designer', [
             'product' => $product,
@@ -236,15 +234,13 @@ class PublicDesignerController extends Controller
             'displayPrice' => (float)$displayPrice,
             'sizeOptions' => $sizeOptions,
             'variantMap' => $variantMap,
-            // normalized preview image (use this in blade)
-            'img' => $imgForBlade,
         ]);
     }
 
     /**
      * Fetch variants for a given product from Shopify Admin API and store into local DB
      * Supports multiple env var names for compatibility:
-     * SHOPIFY_SHOP or SHOPIFY_STORE for shop domain
+     * SHOPIFY_SHOP or SHOPIFY_STORE for shop domain (e.g. yourshop.myshopify.com)
      * SHOPIFY_ADMIN_TOKEN or SHOPIFY_ADMIN_API_TOKEN for admin API token
      */
     protected function fetchShopifyVariantsAndStore(Product $product)
@@ -255,6 +251,7 @@ class PublicDesignerController extends Controller
             return;
         }
 
+        // Support common env names
         $shop = env('SHOPIFY_SHOP') ?: env('SHOPIFY_STORE') ?: env('SHOPIFY_SHOP_DOMAIN');
         $token = env('SHOPIFY_ADMIN_TOKEN') ?: env('SHOPIFY_ADMIN_API_TOKEN') ?: env('SHOPIFY_ADMIN_SECRET');
 
@@ -262,9 +259,10 @@ class PublicDesignerController extends Controller
             throw new \RuntimeException("Shopify credentials not configured (expected SHOPIFY_SHOP/SHOPIFY_STORE and SHOPIFY_ADMIN_TOKEN/SHOPIFY_ADMIN_API_TOKEN).");
         }
 
-        // clean numeric id from gid if needed
+        // sanitize product id if it's the global id (gid://...) or numeric, Shopify API expects numeric id in REST path
         $cleanId = $shopifyProductId;
         if (is_string($cleanId) && strpos($cleanId, 'gid://') === 0) {
+            // extract numeric id from gid if present
             if (preg_match('/\/(\d+)$/', $cleanId, $m)) {
                 $cleanId = $m[1];
             }
@@ -295,12 +293,14 @@ class PublicDesignerController extends Controller
             return;
         }
 
+        // store each variant into product->variants() relation
         foreach ($variants as $v) {
             $variantShopifyId = (string)($v['id'] ?? '');
             if (!$variantShopifyId) continue;
 
             $title = trim((string)($v['title'] ?? ''));
             $optionLabel = '';
+            // prefer option1 / option2 / option3 if present
             if (!empty($v['option1'])) $optionLabel = $v['option1'];
             elseif (!empty($v['option2'])) $optionLabel = $v['option2'];
             elseif (!empty($v['option3'])) $optionLabel = $v['option3'];
@@ -308,15 +308,14 @@ class PublicDesignerController extends Controller
             $price = isset($v['price']) ? $v['price'] : null;
             $sku = isset($v['sku']) ? $v['sku'] : null;
 
+            // Use updateOrCreate to upsert. Adjust column names to match your variants table.
             try {
-                // Adjust the column names to match your variants table fields.
                 $product->variants()->updateOrCreate(
                     ['shopify_variant_id' => $variantShopifyId],
                     [
                         'title' => $title,
                         'option_value' => $optionLabel,
-                        'price' => $price,
-                        'sku' => $sku,
+                        // if your table has 'variant_id' or 'id' needs mapping, adjust here.
                     ]
                 );
             } catch (\Throwable $e) {
@@ -325,59 +324,5 @@ class PublicDesignerController extends Controller
         }
 
         Log::info("designer: fetched and stored " . count($variants) . " variants for product {$product->id} (shopify_id={$cleanId})");
-    }
-
-    /**
-     * Build canonical public URL for product preview image.
-     * Order of preference:
-     *   preview_src -> preview_base -> image_url -> placeholder
-     * Accepts full URLs, '/storage/...' paths, 'storage/...' or simple filenames.
-     */
-    protected function resolvePreviewUrl($product)
-    {
-        $candidates = [
-            $product->preview_src ?? null,
-            $product->preview_base ?? null,
-            $product->image_url ?? null,
-            // older legacy names
-            $product->preview ?? null,
-        ];
-
-        foreach ($candidates as $p) {
-            if (empty($p)) continue;
-
-            // If already full URL
-            if (preg_match('#^https?://#i', $p)) return $p;
-
-            // If path begins with /storage/
-            if (strpos($p, '/storage/') === 0) {
-                return url($p);
-            }
-
-            // If starts with storage/...
-            if (strpos($p, 'storage/') === 0) {
-                return url('/' . ltrim($p, '/'));
-            }
-
-            // if it already points under product-previews
-            if (strpos($p, 'product-previews/') === 0) {
-                return url('/storage/' . ltrim($p, '/'));
-            }
-
-            // if it's a plain filename with an image extension -> assume storage/product-previews
-            if (preg_match('/\.(jpg|jpeg|png|gif|webp|svg)$/i', $p)) {
-                return url('/storage/product-previews/' . ltrim($p, '/'));
-            }
-
-            // fallback: prefix with /storage/
-            return url('/storage/' . ltrim($p, '/'));
-        }
-
-        // fallback: if product->image_url is absolute
-        if (!empty($product->image_url) && preg_match('#^https?://#i', $product->image_url)) {
-            return $product->image_url;
-        }
-
-        return asset('images/placeholder.png');
     }
 }

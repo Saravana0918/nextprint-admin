@@ -68,9 +68,6 @@
 @php
   $img = $product->preview_src ?? ($product->image_url ?? asset('images/placeholder.png'));
 
-  $imgVersion = isset($product->updated_at) ? strtotime($product->updated_at) : time();
-  $img = $img . (strpos($img, '?') === false ? '?v=' . $imgVersion : '&v=' . $imgVersion);
-
   // Normalize layoutSlots to include mask URL if available.
   $slotsForJs = [];
   if (!empty($layoutSlots) && is_array($layoutSlots)) {
@@ -97,25 +94,6 @@
       }
   }
 @endphp
-<script>
-  // Expose product updated timestamp for JS cache-bust checks
-  window.productUpdatedAt = {{ isset($product->updated_at) ? strtotime($product->updated_at) : time() }};
-  // Initial selected color & font (so other scripts can read immediately)
-  window.selectedColor = '{{ old("color", "#D4AF37") }}';
-  window.selectedFontName = '{{ old("font", "Bebas Neue") }}';
-</script>
-<script>
-  (function(){
-    const img = document.getElementById('np-base');
-    if (!img) return;
-    try {
-      const curV = new URL(img.src, window.location.origin).searchParams.get('v') || '';
-      if (String(curV) !== String(window.productUpdatedAt)) {
-        img.src = img.src.split('?')[0] + '?v=' + window.productUpdatedAt;
-      }
-    } catch(e){ console.warn('cache-bust check failed', e); }
-  })();
-</script>
 
 <div class="container">
   <div class="row g-4">
@@ -123,7 +101,7 @@
       <div class="border rounded p-3">
         <div class="np-stage" id="np-stage">
           <img id="np-base" crossorigin="anonymous" src="{{ $img }}" alt="Preview"
-              onerror="this.onerror=null;this.src='{{ asset('images/placeholder.png') }}'">
+               onerror="this.onerror=null;this.src='{{ asset('images/placeholder.png') }}'">
           <div id="np-prev-name" class="np-overlay font-bebas" aria-hidden="true"></div>
           <div id="np-prev-num"  class="np-overlay font-bebas" aria-hidden="true"></div>
         </div>
@@ -264,6 +242,10 @@
   }
 @endphp
 
+@php
+  // Prefer preview_src (admin uploaded) first, then product image_url, else placeholder
+  $img = $product->preview_src ?? ($product->image_url ?? asset('images/placeholder.png'));
+@endphp
 <script>
   // filtered slots (name+number) — used by existing overlay logic
   window.layoutSlots = {!! json_encode($slotsForJs ?? [], JSON_NUMERIC_CHECK) !!};
@@ -862,7 +844,7 @@ async function handleFile(file) {
     fd.append('file', file);
     // CSRF token if needed (Laravel blade provides it in the page)
     const token = document.querySelector('input[name="_token"]')?.value;
-    const resp = await fetch('{{ route("designer.upload_temp") }}', {
+    const resp = await fetch('/designer/upload-temp', {
       method: 'POST',
       headers: (token ? { 'X-CSRF-TOKEN': token } : {}),
       body: fd,
@@ -1066,6 +1048,49 @@ async function generateFullPreview() {
     throw err;
   }
 }
+
+
+async function doSave() {
+  try {
+    const fullPreviewUrl = await generateFullPreview();
+    let previewBaseUrl = null;
+    try {
+      previewBaseUrl = await uploadBaseArtwork();
+    } catch (err) {
+      console.warn('uploadBaseArtwork failed, continuing with full preview only', err);
+      previewBaseUrl = null;
+    }
+
+    const selectedFontFamily = window.selectedFontName || 'Bebas Neue'; // exact family name registered
+    const selectedColor = normalizeColorHex(window.selectedColor || '#000000');
+
+    const payload = {
+      preview_src: fullPreviewUrl,
+      preview_base: previewBaseUrl,
+      name_text: document.getElementById('input-name') ? document.getElementById('input-name').value : '',
+      number_text: document.getElementById('input-number') ? document.getElementById('input-number').value : '',
+      font: selectedFontFamily,
+      color: selectedColor,
+      // add other fields you send
+    };
+
+    const res = await fetch('/designer/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': window.Laravel ? window.Laravel.csrfToken : '' },
+      body: JSON.stringify(payload)
+    });
+
+    const result = await res.json();
+    if (!res.ok) throw new Error(result.message || 'Save failed');
+    alert('Saved!');
+    return result;
+  } catch (err) {
+    console.error('doSave error', err);
+    alert('Save failed: ' + (err.message || err));
+    throw err;
+  }
+}
+
 
   async function doSave() {
   if (!saveBtn) return;
