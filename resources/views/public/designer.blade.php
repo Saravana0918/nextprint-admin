@@ -667,34 +667,62 @@ altNumEls.forEach(el => {
   if (addTeam) addTeam.addEventListener('click', async function(e) {
   e.preventDefault();
 
-  // 1️⃣ Auto-save design first if not saved yet
-  if (!window.lastUploadedPreviewUrl) {
-    try {
-      const data = await doSave(); // auto-save if not already done
-      console.log('Auto-saved before team redirect:', data);
-      window.lastUploadedPreviewUrl = data?.preview_url || data?.preview_src || '';
-    } catch (err) {
-      alert('Could not auto-save design before opening team page.');
-      return;
-    }
-  }
-
-  // 2️⃣ Prepare all query params for redirect
   const productId = document.getElementById('np-product-id')?.value || '';
   const name = (document.querySelector('#np-name')?.value || '').toUpperCase();
   const number = (document.querySelector('#np-num')?.value || '').replace(/\D/g,'');
-  const font = (document.getElementById('np-font')?.value || '');
-  const color = (document.getElementById('np-color')?.value || '');
-  const previewUrl = window.lastUploadedPreviewUrl || '';
+  const font = document.getElementById('np-font')?.value || '';
+  const color = document.getElementById('np-color')?.value || '';
+  const logo = window.lastUploadedLogoUrl || '';
 
+  let previewUrl = window.lastUploadedPreviewUrl || '';
+
+  // 🧠 Step 1: If preview not yet uploaded → auto-generate & upload
+  if (!previewUrl) {
+    try {
+      console.log('No saved preview found — generating new one...');
+      const node = document.getElementById('np-stage') || document.querySelector('.np-stage');
+
+      // Hide UI overlays if needed
+      const overlays = Array.from(node.querySelectorAll('.np-controls, .np-toolbar'));
+      overlays.forEach(el => el.style.display = 'none');
+
+      const canvas = await html2canvas(node, { useCORS: true, backgroundColor: null, scale: 1.2 });
+      const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.9));
+      const fd = new FormData();
+      fd.append('file', blob, 'team_preview_auto_' + Date.now() + '.jpg');
+
+      const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+      const uploadRes = await fetch('{{ route("designer.upload_temp") }}', {
+        method: 'POST',
+        body: fd,
+        headers: (token ? { 'X-CSRF-TOKEN': token } : {}),
+        credentials: 'same-origin'
+      });
+
+      const uploadJson = await uploadRes.json().catch(() => null);
+      if (uploadJson && uploadJson.url) {
+        previewUrl = uploadJson.url;
+        window.lastUploadedPreviewUrl = previewUrl;
+        console.log('Auto-upload success:', previewUrl);
+      } else {
+        console.warn('Auto-upload failed');
+      }
+
+      overlays.forEach(el => el.style.display = '');
+    } catch (err) {
+      console.error('Auto preview generation failed', err);
+    }
+  }
+
+  // 🧭 Step 2: Redirect to team page with preview_url + customization params
   const params = new URLSearchParams();
   if (productId) params.set('product_id', productId);
-  if (previewUrl) params.set('preview_url', previewUrl); // ✅ main fix here
+  if (previewUrl) params.set('preview_url', previewUrl);  // ✅ ensures image always visible
   if (name) params.set('prefill_name', name);
   if (number) params.set('prefill_number', number);
   if (font) params.set('prefill_font', font);
   if (color) params.set('prefill_color', color);
-  if (window.lastUploadedLogoUrl) params.set('prefill_logo', window.lastUploadedLogoUrl);
+  if (logo) params.set('prefill_logo', logo);
 
   const base = "{{ route('team.create') }}";
   window.location.href = base + '?' + params.toString();
