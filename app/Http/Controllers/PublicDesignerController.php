@@ -6,6 +6,9 @@ use App\Models\Product;
 use App\Models\ProductView;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Str;
 use GuzzleHttp\Client;
 
 class PublicDesignerController extends Controller
@@ -223,7 +226,85 @@ class PublicDesignerController extends Controller
             }
         }
 
-        return view('public.designer', [
+        // ----- BEGIN bgUrl resolution (added) -----
+        $bgUrl = null;
+
+        // helper normalizer
+        $normalize = function($p){
+            if (!$p) return null;
+            $p = (string)$p;
+            $p = str_replace('\\','/',$p);
+            $p = preg_replace('~^//+~','',$p);                 // remove leading double-slash
+            $p = preg_replace('~^/?(storage|public)/~','',$p);
+            return ltrim($p,'/');
+        };
+
+        // 1) prefer product->thumbnail (admin uploaded)
+        if (!empty($product->thumbnail)) {
+            $rel = $normalize($product->thumbnail);
+            if ($rel && Storage::disk('public')->exists($rel)) {
+                $bgUrl = url('/files/'.$rel);
+            } elseif ($rel && file_exists(public_path('storage/'.$rel))) {
+                $bgUrl = asset('storage/'.$rel);
+            } elseif (preg_match('~^https?://~i', $product->thumbnail)) {
+                $bgUrl = $product->thumbnail;
+            }
+        }
+
+        // 2) then check view->image_path (explicit uploaded view image)
+        if (!$bgUrl && !empty($view->image_path)) {
+            $rel = $normalize($view->image_path);
+            if ($rel && Storage::disk('public')->exists($rel)) {
+                $bgUrl = url('/files/'.$rel);
+            } elseif ($rel && file_exists(public_path('storage/'.$rel))) {
+                $bgUrl = asset('storage/'.$rel);
+            }
+        }
+
+        // 3) then view->bg_image_url
+        if (!$bgUrl && !empty($view->bg_image_url)) {
+            $vbg = $view->bg_image_url;
+            if (preg_match('~^https?://~i', $vbg)) {
+                $bgUrl = $vbg;
+            } else {
+                $rel = $normalize($vbg);
+                if ($rel && Storage::disk('public')->exists($rel)) $bgUrl = url('/files/'.$rel);
+                elseif ($rel && file_exists(public_path('storage/'.$rel))) $bgUrl = asset('storage/'.$rel);
+            }
+        }
+
+        // 4) fallback to Shopify product image
+        if (!$bgUrl) {
+            $shopImg = optional($product->shopifyProduct)->image_url;
+            if ($shopImg) $bgUrl = $shopImg;
+        }
+
+        // 5) FINAL fallback: older preview folder used by designer (if you use /files/previews/preview_{productId}_*.jpg)
+        if (!$bgUrl) {
+            $previewsDir = storage_path('app/public/previews');
+            if (is_dir($previewsDir)) {
+                // glob for preview_{productId}_*.jpg|png
+                $pattern = $previewsDir . '/preview_' . ($product->id ?? '0') . '_*.*';
+                $matches = glob($pattern);
+                if (!empty($matches)) {
+                    // pick newest
+                    usort($matches, function($a,$b){ return filemtime($b) - filemtime($a); });
+                    // convert to /files/... path
+                    $file = str_replace(storage_path('app/public/'), '', $matches[0]);
+                    $bgUrl = url('/files/' . ltrim($file,'/'));
+                }
+            }
+        }
+
+        // Add cache-buster version param based on product/view update time
+        if ($bgUrl) {
+            $ver = isset($view->updated_at) ? strtotime($view->updated_at) : (isset($product->updated_at) ? strtotime($product->updated_at) : time());
+            // if bgUrl already has query, append
+            $bgUrl = $bgUrl . (strpos($bgUrl,'?') === false ? '?v=' . $ver : '&v=' . $ver);
+        }
+        // ----- END bgUrl resolution -----
+
+        $viewData = [
             'product' => $product,
             'view'    => $view,
             'areas'   => $areas,
@@ -234,7 +315,10 @@ class PublicDesignerController extends Controller
             'displayPrice' => (float)$displayPrice,
             'sizeOptions' => $sizeOptions,
             'variantMap' => $variantMap,
-        ]);
+            'bgUrl' => $bgUrl,
+        ];
+
+        return view('public.designer', $viewData);
     }
 
     /**

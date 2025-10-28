@@ -394,9 +394,7 @@ document.addEventListener('click', function(e){
 
     // dedupe while preserving order
     candidates = candidates.filter((v,i)=> v && candidates.indexOf(v) === i);
-
-    // debug: show resolved candidates in console and small debug panel (visible in page)
-    console.log('bg candidates:', candidates);
+    
     const dbgWrap = document.querySelector('.hint');
     if (dbgWrap) {
       const dbgBox = document.createElement('div');
