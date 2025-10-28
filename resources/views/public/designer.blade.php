@@ -100,8 +100,8 @@
     <div class="col-md-6 np-col order-1 order-md-2">
       <div class="border rounded p-3">
         <div class="np-stage" id="np-stage">
-          <img id="np-base" crossorigin="anonymous" src="{{ $img }}" alt="Preview"
-               onerror="this.onerror=null;this.src='{{ asset('images/placeholder.png') }}'">
+          <img id="np-base" crossorigin="anonymous" src="{{ $previewImg }}" alt="Preview"
+            onerror="this.onerror=null;this.src='{{ asset('images/placeholder.png') }}'">
           <div id="np-prev-name" class="np-overlay font-bebas" aria-hidden="true"></div>
           <div id="np-prev-num"  class="np-overlay font-bebas" aria-hidden="true"></div>
         </div>
