@@ -6,6 +6,7 @@ use App\Models\Product;
 use App\Models\ProductView;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use GuzzleHttp\Client;
 
 class PublicDesignerController extends Controller
@@ -223,7 +224,73 @@ class PublicDesignerController extends Controller
             }
         }
 
-        return view('public.designer', [
+        // ----------------------------
+        // NORMALIZE preview / image for designer stage (IMPORTANT)
+        // ----------------------------
+        $rawImg = $product->preview_src ?? $product->image_url ?? null;
+        $img = null;
+
+        if ($rawImg) {
+            $raw = str_replace('\\','/',$rawImg);
+
+            // 1) full absolute URL that contains /storage/ -> extract relative and build Storage url
+            if (preg_match('~^https?://[^/]+/storage/(.+)$~i', $raw, $m)) {
+                $rel = $m[1];
+                if (Storage::disk('public')->exists($rel)) {
+                    $img = Storage::disk('public')->url($rel);
+                } else {
+                    $img = $raw; // keep external full URL
+                }
+            }
+            // 2) path starting with /storage/...
+            elseif (preg_match('~^/storage/(.+)$~i', $raw, $m)) {
+                $rel = $m[1];
+                if (Storage::disk('public')->exists($rel)) {
+                    $img = Storage::disk('public')->url($rel);
+                } else {
+                    $img = $raw;
+                }
+            }
+            // 3) path starting with public/...
+            elseif (preg_match('~^public/(.+)$~i', $raw, $m)) {
+                $rel = $m[1];
+                if (Storage::disk('public')->exists($rel)) {
+                    $img = Storage::disk('public')->url($rel);
+                } else {
+                    $img = '/storage/' . ltrim($rel, '/');
+                }
+            }
+            // 4) looks like relative storage path: product-previews/xxx.jpg
+            elseif (preg_match('~^[\w\-/]+/.+\.(jpe?g|png|webp|gif|svg)$~i', $raw)) {
+                $rel = ltrim($raw, '/');
+                if (Storage::disk('public')->exists($rel)) {
+                    $img = Storage::disk('public')->url($rel);
+                } else {
+                    $img = '/storage/' . $rel;
+                }
+            }
+            // 5) full external URL (Shopify CDN etc) — keep as-is
+            elseif (preg_match('~^https?://~i', $raw)) {
+                $img = $raw;
+            } else {
+                // last resort — try building storage url
+                $rel = ltrim($raw, '/');
+                if (Storage::disk('public')->exists($rel)) {
+                    $img = Storage::disk('public')->url($rel);
+                } else {
+                    $img = null;
+                }
+            }
+        }
+
+        // final fallback to placeholder if null
+        if (empty($img)) {
+            $img = asset('images/placeholder.png');
+        }
+
+        Log::info('designer: resolved preview img', ['product_id'=>$product->id, 'raw'=>$rawImg, 'img'=>$img]);
+
+        $viewData = [
             'product' => $product,
             'view'    => $view,
             'areas'   => $areas,
@@ -234,7 +301,10 @@ class PublicDesignerController extends Controller
             'displayPrice' => (float)$displayPrice,
             'sizeOptions' => $sizeOptions,
             'variantMap' => $variantMap,
-        ]);
+            'img' => $img,
+        ];
+
+        return view('public.designer', $viewData);
     }
 
     /**
@@ -315,7 +385,9 @@ class PublicDesignerController extends Controller
                     [
                         'title' => $title,
                         'option_value' => $optionLabel,
-                        // if your table has 'variant_id' or 'id' needs mapping, adjust here.
+                        // Add mapping for price/sku if your variants table has columns for them
+                        'price' => $price,
+                        'sku' => $sku,
                     ]
                 );
             } catch (\Throwable $e) {
