@@ -164,6 +164,11 @@
         <div class="card-body text-center" style="position:relative;">
           <div id="player-stage" class="np-stage" aria-hidden="false">
             <img id="player-base"
+            @if(request()->query('preview_url'))
+                <style>
+                  #overlay-name, #overlay-number { display: none !important; }
+                </style>
+              @endif
                  src="{{ $img }}"
                  alt="{{ $product->name ?? 'Product' }}"
                  crossorigin="anonymous"
@@ -237,6 +242,7 @@
   window.layoutSlots = {!! json_encode($layoutSlots ?? [], JSON_NUMERIC_CHECK) !!};
   window.hasNumberSlot = !!(typeof window.layoutSlots === 'object' && window.layoutSlots && window.layoutSlots.number);
   console.info('hasNumberSlot=', window.hasNumberSlot);
+  window.isBakedPreview = !!(new URLSearchParams(window.location.search).get('preview_url'));
   if (!window.layoutSlots || !window.layoutSlots.number) {
   // hide number input column in each player row template (client side)
   // we already create rows dynamically — hide number inputs on createRow()
@@ -454,6 +460,13 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   function applyLayout() {
+    if (window.isBakedPreview) {
+    const ovName = document.getElementById('overlay-name');
+    const ovNum  = document.getElementById('overlay-number');
+    if (ovName) ovName.style.display = 'none';
+    if (ovNum) ovNum.style.display = 'none';
+    return; // stop here — don't apply text overlays again
+  }
     if (!imgEl || !imgEl.complete) return;
 
     // apply prefill font & color if present
