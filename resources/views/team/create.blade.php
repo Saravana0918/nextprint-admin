@@ -464,49 +464,52 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   function applyLayout() {
-    if (window.isBakedPreview) {
-    const ovName = document.getElementById('overlay-name');
-    const ovNum  = document.getElementById('overlay-number');
+  const ovName = document.getElementById('overlay-name');
+  const ovNum  = document.getElementById('overlay-number');
+
+  // 🧠 If this is a baked preview AND user has NOT started typing yet
+  const anyNameTyped = document.querySelector('.player-name')?.value?.trim().length > 0;
+  const anyNumberTyped = document.querySelector('.player-number')?.value?.trim().length > 0;
+
+  if (window.isBakedPreview && !anyNameTyped && !anyNumberTyped) {
+    // On first load, hide overlays so image looks clean
     if (ovName) ovName.style.display = 'none';
     if (ovNum) ovNum.style.display = 'none';
-    return; // stop here — don't apply text overlays again
+    return; // skip all text overlay setup on first load
   }
-    if (!imgEl || !imgEl.complete) return;
 
-    // apply prefill font & color if present
-    const pfFont = (pf.prefill_font || pf.font || '') .toString().toLowerCase();
-    const fontClass = fontClassMap[pfFont] || fontClassMap['bebas'];
-    if (ovName) ovName.className = 'np-overlay ' + fontClass;
-    if (ovNum)  ovNum.className  = 'np-overlay ' + fontClass;
+  if (!imgEl || !imgEl.complete) return;
 
-    if (pf.prefill_color || pf.color) {
-      try { var c = decodeURIComponent(pf.prefill_color || pf.color || ''); } catch(e){ var c = (pf.prefill_color || pf.color || ''); }
-      if (c) { ovName.style.color = c; ovNum.style.color = c; }
-    }
+  // 🧩 after user starts typing, show overlays again (live update)
+  if (ovName) ovName.style.display = 'flex';
+  if (window.hasNumberSlot && ovNum) ovNum.style.display = 'flex';
 
-    // position overlays
-    placeOverlay(ovName, layout.name, 'name');
-    placeOverlay(ovNum, layout.number, 'number');
+  // apply font and color like before
+  const pfFont = (pf.prefill_font || pf.font || '').toString().toLowerCase();
+  const fontClass = fontClassMap[pfFont] || fontClassMap['bebas'];
+  if (ovName) ovName.className = 'np-overlay ' + fontClass;
+  if (ovNum) ovNum.className  = 'np-overlay ' + fontClass;
 
-    // choose artwork slot from layoutSlots if present
-    let artwork = null;
-    try {
-      artwork = layout['logo'] || layout['artwork'] || layout['team_logo'] || (Object.values(layout).find(s=> s && (s.mask || (s.slot_key && /logo|artwork|team/i.test(s.slot_key)))) || null);
-    } catch(e) { artwork = null; }
-
-    // set logo src if pf exists but server didn't set src attribute
-    try {
-      if (hiddenTeamLogo && hiddenTeamLogo.value && (!logoEl.src || logoEl.src === location.origin + '/')) {
-        logoEl.src = hiddenTeamLogo.value;
-        logoEl.style.display = 'block';
-      } else if (pf.prefill_logo && (!logoEl.src || logoEl.src === location.origin + '/')) {
-        try { logoEl.src = decodeURIComponent(pf.prefill_logo); logoEl.style.display = 'block'; } catch(e){ logoEl.src = pf.prefill_logo; logoEl.style.display = 'block'; }
-        if (hiddenTeamLogo) hiddenTeamLogo.value = (pf.prefill_logo ? decodeURIComponent(pf.prefill_logo) : pf.prefill_logo);
-      }
-    } catch(e){ /* ignore */ }
-
-    if (logoEl) placeLogo(logoEl, artwork);
+  if (pf.prefill_color || pf.color) {
+    try { var c = decodeURIComponent(pf.prefill_color || pf.color || ''); } 
+    catch(e){ var c = (pf.prefill_color || pf.color || ''); }
+    if (c) { ovName.style.color = c; ovNum.style.color = c; }
   }
+
+  // position overlays like before
+  placeOverlay(ovName, layout.name, 'name');
+  placeOverlay(ovNum, layout.number, 'number');
+
+  // logo placement unchanged
+  let artwork = null;
+  try {
+    artwork = layout['logo'] || layout['artwork'] || layout['team_logo'] ||
+      (Object.values(layout).find(s=> s && (s.mask || (s.slot_key && /logo|artwork|team/i.test(s.slot_key)))) || null);
+  } catch(e) { artwork = null; }
+
+  if (logoEl) placeLogo(logoEl, artwork);
+}
+
 
   (function addReliableRecalc() {
     try {
