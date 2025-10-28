@@ -4,7 +4,18 @@
 
 @section('content')
 @php
-  $img = $product->preview_src ?? ($product->image_url ?? asset('images/placeholder.png'));
+  $img = null;
+if ($request->query('preview_url')) {
+    $img = $request->query('preview_url');
+} elseif (!empty($product->preview_url)) {
+    $img = $product->preview_url;
+} elseif (!empty($product->preview_src)) {
+    $img = $product->preview_src;
+} elseif (!empty($product->image_url)) {
+    $img = $product->image_url;
+} else {
+    $img = asset('images/placeholder.png');
+}
 
   // Start with any server-side $prefill passed by controller (if any)
    $prefill = $prefill ?? [];
@@ -206,7 +217,7 @@
         <input type="hidden" name="shopify_product_id" value="{{ $product->shopify_product_id ?? '' }}">
         {{-- Persist uploaded logo for server-side storage --}}
         <input type="hidden" id="team-prefill-logo" name="team_logo_url" value="{{ $prefill['prefill_logo'] ?? '' }}">
-        <input type="hidden" id="team-preview-url" name="preview_url" value="">
+        <input type="hidden" id="team-preview-url" name="preview_url" value="{{ request()->query('preview_url') ?? ($product->preview_url ?? '') }}">
         <input type="hidden" id="team-id-hidden" name="team_id" value="">
 
         <div class="mb-3 mobile-action-row">
@@ -229,6 +240,11 @@
     </div>
   </div>
 </div>
+
+<script>
+  window.teamPreviewUrl = {!! json_encode(request()->query('preview_url') ?? ($product->preview_url ?? null)) !!};
+  console.info('teamPreviewUrl=', window.teamPreviewUrl);
+</script>
 
 {{-- expose server values to JS --}}
 <script>
