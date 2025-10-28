@@ -146,57 +146,74 @@ class ProductController extends Controller
      * Upload product preview image (AJAX POST)
      * Route: POST /admin/products/{product}/preview
      */
-    public function uploadPreview(Request $req, Product $product)
-    {
-        $req->validate([
-            'preview_image' => 'required|image|max:5120' // 5MB
-        ]);
-
-        // store in public disk under product-previews
-        $file = $req->file('preview_image');
-        $path = $file->store('product-previews', 'public'); // returns relative path
-
-        // optionally delete old preview if you keep only one (not required)
-        if (!empty($product->preview_path) && Storage::disk('public')->exists($product->preview_path)) {
-            try {
-                Storage::disk('public')->delete($product->preview_path);
-            } catch (\Throwable $e) {
-                Log::warning("Failed to delete old preview: ".$e->getMessage());
-            }
-        }
-
-        // Save path to product (adjust field name as per your schema)
-        $product->preview_path = $path;
-        // also update thumbnail for preview chain if you want:
-        // $product->thumbnail = 'storage/'.$path; // optional
-        $product->save();
-
-        // Return full URL via /files/ route
-        $url = url('/files/'.$path);
-
-        Log::info('Product preview uploaded', ['product'=>$product->id, 'path'=>$path]);
-
-        return response()->json(['ok'=>true,'url'=>$url,'path'=>$path], 200);
+    public function uploadPreview(Request $request, Product $product)
+{
+    // simple validation
+    $v = Validator::make($request->all(), [
+        'preview_image' => ['required','image','mimes:jpg,jpeg,png,webp','max:5120'],
+    ]);
+    if ($v->fails()) {
+        return response()->json(['ok'=>false,'message'=>$v->errors()->first()], 422);
     }
 
-    /**
-     * Delete preview (AJAX DELETE)
-     * Route: DELETE /admin/products/{product}/preview
-     */
-    public function deletePreview(Request $req, Product $product)
-    {
-        // remove file if exists
-        $path = $product->preview_path ?? null;
-        if ($path && Storage::disk('public')->exists($path)) {
-            Storage::disk('public')->delete($path);
-        }
+    // store file to public disk under product-previews
+    $file = $request->file('preview_image');
+    $filename = time() . '_' . Str::random(8) . '.' . $file->getClientOriginalExtension();
+    $path = $file->storeAs('product-previews', $filename, 'public'); // storage/app/public/product-previews/...
 
-        // clear DB fields
-        $product->preview_path = null;
-        $product->save();
-
-        Log::info('Product preview deleted', ['product'=>$product->id, 'path'=>$path]);
-
-        return response()->json(['ok'=>true]);
+    if (!$path) {
+        return response()->json(['ok'=>false,'message'=>'Save failed'], 500);
     }
+
+    // create full url for frontend (Storage::disk('public')->url)
+    $url = Storage::disk('public')->url($path);
+
+    // Save to product table (preview column) if you have it
+    // assume product has 'preview_image' or 'preview' column — adapt if column name different
+    $product->preview = $path; // store relative path
+    $product->save();
+
+    // ALSO: update first ProductView image_path so decoration editor sees it
+    $view = $product->views()->first(); // use relation name you have (views())
+    if ($view) {
+        $view->image_path = 'storage/' . ltrim($path, '/'); // this matches how PrintAreaController later strips storage/
+        // OR store without 'storage/' and let PrintAreaController handle; both ok. Keep consistent.
+        $view->save();
+    }
+
+    \Log::info('Product preview uploaded', ['product' => $product->id, 'path' => $path]);
+
+    return response()->json(['ok'=>true,'url'=>$url,'path'=>$path]);
+}
+
+public function deletePreview(Request $request, Product $product)
+{
+    // if product->preview contains relative path like "product-previews/xxx.jpg"
+    $path = $product->preview ?? null;
+
+    // Also check view->image_path
+    $view = $product->views()->first();
+
+    // remove file if exists on disk
+    if ($path && Storage::disk('public')->exists($path)) {
+        Storage::disk('public')->delete($path);
+    }
+
+    // clear product preview column
+    if ($path) {
+        $product->preview = null;
+        $product->save();
+    }
+
+    // clear view image_path too (if it pointed to this)
+    if ($view) {
+        // if you stored as 'storage/product-previews/...' remove check or just nullify
+        $view->image_path = null;
+        $view->save();
+    }
+
+    \Log::info('Product preview deleted', ['product'=>$product->id]);
+
+    return response('', 204);
+}
 }

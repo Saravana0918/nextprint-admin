@@ -113,6 +113,9 @@ Route::post('/team/save', [\App\Http\Controllers\TeamController::class,'saveDesi
 
 Route::post('/save-preview', [App\Http\Controllers\PreviewController::class, 'store'])->name('preview.store');
 
+Route::post('/admin/products/{product}/preview', [\App\Http\Controllers\Admin\ProductController::class, 'upload']);
+Route::delete('/admin/products/{product}/preview', [\App\Http\Controllers\Admin\ProductController::class, 'deletePreview']);
+
 Route::get('/p/{handle}', [StoreController::class, 'show'])->name('store.product');
 Route::get('/api/public/products/{handle}/layout',  [PublicProductController::class, 'layout']);
 
