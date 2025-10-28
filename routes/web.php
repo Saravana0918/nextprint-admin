@@ -75,8 +75,10 @@ Route::prefix('admin')->name('admin.')->group(function () {
      | Product preview upload/delete (used by your Products index 'Settings' modal)
      | Names: admin.products.preview.upload  and admin.products.preview.delete
      */
-    Route::post('/products/{product}/preview', [ProductController::class, 'uploadPreview'])->name('products.preview.upload');
-    Route::delete('/products/{product}/preview', [ProductController::class, 'deletePreview'])->name('products.preview.delete');
+    Route::post('/products/{product}/preview', [ProductController::class, 'uploadPreview'])
+     ->name('admin.products.preview.upload');
+    Route::delete('/products/{product}/preview', [ProductController::class, 'deletePreview'])
+        ->name('admin.products.preview.delete');
 
     // Design orders (admin)
     Route::get('/design-orders', [DesignOrderController::class, 'index'])->name('design-orders.index');

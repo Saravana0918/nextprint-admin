@@ -4,47 +4,40 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Product;
-use App\Models\ProductView;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
-use App\Models\PrintMethod;
+use Illuminate\Support\Facades\Validator;
 
 class ProductController extends Controller
 {
     public function index()
     {
-        Log::info('ADMIN CHECK - products in DB flagged', ['count' => DB::table('products')->where('is_in_nextprint',1)->count()]);
-
-        $rows = DB::table('products as p')
+        Log::info('ADMIN CHECK - products in DB flagged', ['count' => \DB::table('products')->where('is_in_nextprint',1)->count()]);
+        $rows = \DB::table('products as p')
             ->leftJoin('shopify_products as sp', 'sp.id', '=', 'p.shopify_product_id')
-            ->leftJoin(DB::raw("
-                (
+            ->leftJoin(\DB::raw("(
                 SELECT ppm.product_id,
                        GROUP_CONCAT(pm.name, ', ') AS methods
                 FROM product_print_method ppm
                 JOIN print_methods pm ON pm.id = ppm.print_method_id
                 GROUP BY ppm.product_id
-                ) m
-            "), 'm.product_id', '=', 'p.id')
-            ->leftJoin(DB::raw("
-                (
-                  SELECT v1.*
-                  FROM product_views v1
-                  JOIN (
-                      SELECT product_id, MIN(id) AS id
-                      FROM product_views
-                      GROUP BY product_id
-                  ) x ON x.product_id = v1.product_id AND x.id = v1.id
-                ) pv
-            "), 'pv.product_id', '=', 'p.id')
+            ) m"), 'm.product_id', '=', 'p.id')
+            ->leftJoin(\DB::raw("(
+                SELECT v1.*
+                FROM product_views v1
+                JOIN (
+                    SELECT product_id, MIN(id) AS id
+                    FROM product_views
+                    GROUP BY product_id
+                ) x ON x.product_id = v1.product_id AND x.id = v1.id
+            ) pv"), 'pv.product_id', '=', 'p.id')
             ->select([
                 'p.id','p.name','sp.vendor','sp.status','sp.min_price',
-                DB::raw('pv.image_path  as view_image'),
-                DB::raw('sp.image_url   as shop_image'),
-                DB::raw('p.thumbnail    as legacy_image'),
-                DB::raw('COALESCE(m.methods, "") as methods'),
+                \DB::raw('pv.image_path  as view_image'),
+                \DB::raw('sp.image_url   as shop_image'),
+                \DB::raw('p.thumbnail    as legacy_image'),
+                \DB::raw('COALESCE(m.methods, "") as methods'),
             ])
             ->selectRaw("
                 COALESCE(
@@ -65,13 +58,8 @@ class ProductController extends Controller
             if (preg_match('~^https?://~i',$raw)) { $r->preview_src = $raw; continue; }
             $raw = preg_replace('~^/?(storage|public)/~','', $raw);
             $raw = ltrim($raw,'/');
-            // ensure we serve via /files/ route to avoid missing symlink issues
-            if (Storage::disk('public')->exists($raw)) {
-                $r->preview_src = url('/files/'.$raw);
-            } else {
-                // fallback: try as-is (maybe it's stored externally)
-                $r->preview_src = $raw;
-            }
+            // Storage::disk('public')->url expects relative path
+            $r->preview_src = Storage::disk('public')->url($raw);
         }
 
         return view('admin.products.index', compact('rows'));
@@ -79,7 +67,7 @@ class ProductController extends Controller
 
     public function edit(Product $product)
     {
-        $methods = PrintMethod::all();
+        $methods = \App\Models\PrintMethod::all();  // fetch all print methods
         return view('admin.products.edit', compact('product', 'methods'));
     }
 
@@ -105,12 +93,13 @@ class ProductController extends Controller
     public function destroy(Product $product)
     {
         $product->delete();
+
         return redirect()->route('admin.products')->with('success', 'Product deleted.');
     }
 
     public function goToDecoration(Product $product)
     {
-        // select or create a first view
+        // first view or create "Front"
         $view = $product->views()->first();
 
         if (!$view) {
@@ -123,7 +112,6 @@ class ProductController extends Controller
             ]);
         }
 
-        // if view bg empty and product thumbnail present, set it
         if ((empty($view->bg_image_url) || is_null($view->bg_image_url)) && !empty($product->thumbnail)) {
             $view->bg_image_url = $product->thumbnail;
             $view->save();
@@ -143,77 +131,68 @@ class ProductController extends Controller
     }
 
     /**
-     * Upload product preview image (AJAX POST)
-     * Route: POST /admin/products/{product}/preview
+     * Upload preview image for product (XHR)
+     * POST /admin/products/{product}/preview
      */
-    public function uploadPreview(Request $request, Product $product)
-{
-    // simple validation
-    $v = Validator::make($request->all(), [
-        'preview_image' => ['required','image','mimes:jpg,jpeg,png,webp','max:5120'],
-    ]);
-    if ($v->fails()) {
-        return response()->json(['ok'=>false,'message'=>$v->errors()->first()], 422);
-    }
+    public function uploadPreview(Request $req, Product $product)
+    {
+        // validate
+        $v = Validator::make($req->all(), [
+            'preview_image' => 'required|image|max:5120' // 5MB
+        ]);
 
-    // store file to public disk under product-previews
-    $file = $request->file('preview_image');
-    $filename = time() . '_' . Str::random(8) . '.' . $file->getClientOriginalExtension();
-    $path = $file->storeAs('product-previews', $filename, 'public'); // storage/app/public/product-previews/...
+        if ($v->fails()) {
+            return response()->json(['ok'=>false,'message'=>$v->errors()->first()], 422);
+        }
 
-    if (!$path) {
-        return response()->json(['ok'=>false,'message'=>'Save failed'], 500);
-    }
+        $file = $req->file('preview_image');
 
-    // create full url for frontend (Storage::disk('public')->url)
-    $url = Storage::disk('public')->url($path);
+        // store under public/product-previews
+        $path = $file->store('product-previews', 'public'); // returns like "product-previews/abc.jpg"
 
-    // Save to product table (preview column) if you have it
-    // assume product has 'preview_image' or 'preview' column — adapt if column name different
-    $product->preview = $path; // store relative path
-    $product->save();
+        if (!$path) {
+            return response()->json(['ok'=>false,'message'=>'store_failed'], 500);
+        }
 
-    // ALSO: update first ProductView image_path so decoration editor sees it
-    $view = $product->views()->first(); // use relation name you have (views())
-    if ($view) {
-        $view->image_path = 'storage/' . ltrim($path, '/'); // this matches how PrintAreaController later strips storage/
-        // OR store without 'storage/' and let PrintAreaController handle; both ok. Keep consistent.
-        $view->save();
-    }
-
-    \Log::info('Product preview uploaded', ['product' => $product->id, 'path' => $path]);
-
-    return response()->json(['ok'=>true,'url'=>$url,'path'=>$path]);
-}
-
-public function deletePreview(Request $request, Product $product)
-{
-    // if product->preview contains relative path like "product-previews/xxx.jpg"
-    $path = $product->preview ?? null;
-
-    // Also check view->image_path
-    $view = $product->views()->first();
-
-    // remove file if exists on disk
-    if ($path && Storage::disk('public')->exists($path)) {
-        Storage::disk('public')->delete($path);
-    }
-
-    // clear product preview column
-    if ($path) {
-        $product->preview = null;
+        // Option A: save into product->thumbnail (legacy). Adjust if you have dedicated column.
+        $product->thumbnail = $path;
         $product->save();
+
+        $url = Storage::disk('public')->url($path);
+
+        Log::info('Product preview uploaded', ['product_id'=>$product->id, 'path'=>$path]);
+
+        return response()->json(['ok'=>true,'url'=>$url,'path'=>$path,'product_id'=>$product->id]);
     }
 
-    // clear view image_path too (if it pointed to this)
-    if ($view) {
-        // if you stored as 'storage/product-previews/...' remove check or just nullify
-        $view->image_path = null;
-        $view->save();
+    /**
+     * Delete preview
+     * DELETE /admin/products/{product}/preview
+     */
+    public function deletePreview(Product $product)
+    {
+        try {
+            $path = $product->thumbnail;
+            if ($path) {
+                // normalize
+                $p = str_replace('\\','/',$path);
+                $p = preg_replace('~^/?(storage|public)/~','',$p);
+                $p = ltrim($p, '/');
+
+                if (Storage::disk('public')->exists($p)) {
+                    Storage::disk('public')->delete($p);
+                    Log::info('Deleted product preview file', ['product_id'=>$product->id, 'path'=>$p]);
+                }
+            }
+
+            // clear db column
+            $product->thumbnail = null;
+            $product->save();
+
+            return response()->json(['ok'=>true]);
+        } catch (\Throwable $e) {
+            Log::error('Failed to delete product preview: '.$e->getMessage(), ['product'=>$product->id]);
+            return response()->json(['ok'=>false,'message'=>'delete_failed'], 500);
+        }
     }
-
-    \Log::info('Product preview deleted', ['product'=>$product->id]);
-
-    return response('', 204);
-}
 }
