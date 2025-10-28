@@ -179,39 +179,31 @@ class ProductController extends Controller
      * Upload preview image for a product (AJAX)
      * POST /admin/products/{product}/preview
      */
-    public function uploadPreview(Request $request, $productId)
-    {
-        try {
-            $product = Product::findOrFail($productId);
-
-            if (!$request->hasFile('preview_image')) {
-                return response()->json(['message' => 'No file uploaded'], 422);
-            }
-
-            // validate
-            $request->validate([
-                'preview_image' => 'image|max:5120' // 5MB
-            ]);
-
-            $file = $request->file('preview_image');
-
-            // store under storage/app/public/product-previews
-            $path = $file->store('public/product-previews');
-            $publicUrl = Storage::url($path); // e.g. /storage/product-previews/xxx.jpg
-
-            // save to product
-            $product->preview_src = $publicUrl;
-            $product->touch(); // update updated_at for cache-bust
-            $product->save();
-
-            Log::info('Product preview uploaded', ['product_id' => $product->id, 'path' => $path]);
-
-            return response()->json(['url' => $publicUrl], 200);
-        } catch (\Throwable $e) {
-            Log::error('uploadPreview error: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
-            return response()->json(['message' => 'Upload failed'], 500);
+    public function uploadPreview(Request $request, Product $product)
+{
+    try {
+        if (!$request->hasFile('preview_image')) {
+            return response()->json(['message' => 'No file uploaded'], 422);
         }
+
+        $request->validate(['preview_image' => 'image|max:5120']);
+
+        $file = $request->file('preview_image');
+        $path = $file->store('public/product-previews');
+        $publicUrl = Storage::url($path); // /storage/product-previews/xxx.jpg
+
+        $product->preview_src = $publicUrl;
+        $product->touch();
+        $product->save();
+
+        Log::info('Product preview uploaded', ['product_id' => $product->id, 'path' => $path]);
+
+        return response()->json(['url' => $publicUrl], 200);
+    } catch (\Throwable $e) {
+        Log::error("uploadPreview error: " . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
+        return response()->json(['message' => 'Upload failed'], 500);
     }
+}
 
     /**
      * Delete preview image for a product (AJAX)
