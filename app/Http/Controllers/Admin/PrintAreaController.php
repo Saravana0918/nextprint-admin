@@ -12,53 +12,85 @@ use Illuminate\Support\Facades\Storage;
 class PrintAreaController extends Controller
 {
     public function edit(Product $product, ProductView $view)
-    {
-        $existing = $view->areas()
-            ->select(
-                'id','template_id','mask_svg_path',
-                'x_mm','y_mm','width_mm','height_mm','dpi','rotation',
-                'left_pct','top_pct','width_pct','height_pct',
-                'name','slot_key'
-            )
-            ->get();
+{
+    $existing = $view->areas()
+        ->select(
+            'id','template_id','mask_svg_path',
+            'x_mm','y_mm','width_mm','height_mm','dpi','rotation',
+            'left_pct','top_pct','width_pct','height_pct',
+            'name','slot_key'
+        )
+        ->get();
 
-        // uploaded local image → public URL using /files/ route
-        $uploaded = null;
-        if (!empty($view->image_path)) {
-            $p = str_replace('\\','/',$view->image_path);
-            $p = preg_replace('~^/?(storage|public)/~','',$p);
-            $p = ltrim($p, '/');
-            if ($p && Storage::disk('public')->exists($p)) {
-                $uploaded = url('/files/'.$p);
+    // Helper to normalize saved path
+    $normalize = function($path){
+        if (!$path) return null;
+        $p = str_replace('\\','/',$path);
+        $p = preg_replace('~^/?(storage|public)/~','',$p);
+        return ltrim($p, '/');
+    };
+
+    // 1) uploaded local image (view->image_path) -> try to resolve
+    $uploaded = null;
+    if (!empty($view->image_path)) {
+        $rel = $normalize($view->image_path);
+        if ($rel && \Illuminate\Support\Facades\Storage::disk('public')->exists($rel)) {
+            // Use the /files/ route (serves storage/app/public)
+            $uploaded = url('/files/'.$rel);
+        } else {
+            // fallback to storage url (may work if /storage symlink is present)
+            $uploaded = asset('storage/'.$rel);
+            if (!@getimagesize(public_path('storage/'.$rel))) {
+                $uploaded = null;
             }
         }
-
-        // Shopify image (relation optional)
-        $shopImage = optional($product->shopifyProduct)->image_url;
-
-        // Final fallback chain
-        $bgUrl = null;
-
-        if ($uploaded) {
-            $bgUrl = $uploaded;
-        } elseif (!empty($view->bg_image_url)) {
-            if (preg_match('~^https?://~i', $view->bg_image_url)) {
-                $bgUrl = $view->bg_image_url;
-            } else {
-                $rel = preg_replace('~^/?(storage|public)/~','',$view->bg_image_url);
-                $rel = ltrim($rel,'/');
-                if (Storage::disk('public')->exists($rel)) $bgUrl = url('/files/'.$rel);
-            }
-        } elseif (!empty($product->thumbnail)) {
-            $rel = preg_replace('~^/?(storage|public)/~','',$product->thumbnail);
-            $rel = ltrim($rel,'/');
-            if (Storage::disk('public')->exists($rel)) $bgUrl = url('/files/'.$rel);
-        } elseif (!empty($shopImage)) {
-            $bgUrl = $shopImage;
-        }
-
-        return view('admin.areas.edit', compact('product','view','existing','bgUrl'));
     }
+
+    // Shopify image (relation optional)
+    $shopImage = optional($product->shopifyProduct)->image_url;
+
+    // Final fallback chain - prefer uploaded -> view.bg_image_url -> product.thumbnail -> shopImage
+    $bgUrl = null;
+
+    if ($uploaded) {
+        $bgUrl = $uploaded;
+    } elseif (!empty($view->bg_image_url)) {
+        $rel = $normalize($view->bg_image_url);
+        if (preg_match('~^https?://~i', $view->bg_image_url)) {
+            $bgUrl = $view->bg_image_url;
+        } elseif ($rel && \Illuminate\Support\Facades\Storage::disk('public')->exists($rel)) {
+            $bgUrl = url('/files/'.$rel);
+        } elseif ($rel && file_exists(public_path('storage/'.$rel))) {
+            $bgUrl = asset('storage/'.$rel);
+        } else {
+            // if it's some relative path, still try to build a storage url (best-effort)
+            if ($rel) $bgUrl = asset('storage/'.$rel);
+        }
+    } elseif (!empty($product->thumbnail)) {
+        $rel = $normalize($product->thumbnail);
+        if ($rel && \Illuminate\Support\Facades\Storage::disk('public')->exists($rel)) {
+            $bgUrl = url('/files/'.$rel);
+        } elseif ($rel && file_exists(public_path('storage/'.$rel))) {
+            $bgUrl = asset('storage/'.$rel);
+        } else {
+            if ($rel) $bgUrl = asset('storage/'.$rel);
+        }
+    } elseif (!empty($shopImage)) {
+        $bgUrl = $shopImage;
+    }
+
+    \Log::info('PrintArea background resolved', [
+        'product_id' => $product->id,
+        'view_id'    => $view->id,
+        'view_image_path' => $view->image_path,
+        'view_bg_image_url'=> $view->bg_image_url,
+        'product_thumbnail' => $product->thumbnail,
+        'bgUrl' => $bgUrl
+    ]);
+
+    return view('admin.areas.edit', compact('product','view','existing','bgUrl'));
+}
+
 
     public function update(Request $req, Product $product, ProductView $view)
     {

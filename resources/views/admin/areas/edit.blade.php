@@ -55,17 +55,19 @@ public function edit(Product $product, ProductView $view){
     <div id="canvasWrap">
       <canvas id="design-canvas"></canvas>
     </div>
-    <div class="hint mt-2">
-      Drag/resize the red box. Use toolbar buttons above.
-      @php
-        $bgLink = $bgUrl ?? null;
-      @endphp
-      @if($bgLink)
-        • BG: <a href="{{ $bgLink }}" target="_blank">open image</a>
-      @else
-        • No view/product image yet.
-      @endif
+    <div style="margin-bottom:12px;">
+  @if($bgUrl)
+    <div style="padding:8px;background:#f1f1f1;border:1px solid #ddd;">
+      <strong>Debug bgUrl:</strong>
+      <a href="{{ $bgUrl }}" target="_blank">{{ $bgUrl }}</a>
     </div>
+  @else
+    <div style="padding:8px;background:#fee;border:1px solid #f88;">
+      <strong>No background URL found</strong>
+    </div>
+  @endif
+</div>
+
 
   </div>
 
