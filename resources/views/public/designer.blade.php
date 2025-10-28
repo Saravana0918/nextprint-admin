@@ -101,12 +101,11 @@
       <div class="border rounded p-3">
         <div class="np-stage" id="np-stage">
          @php
-            // ensure $img exists as fallback
-            $img = $img ?? ($product->preview_src ?? ($product->image_url ?? asset('images/placeholder.png')));
-          @endphp
-
-          <img id="np-base" src="{{ $img }}" alt="Preview"
-              onerror="this.onerror=null;this.src='{{ asset('images/placeholder.png') }}'">
+          // prefer controller-provided normalized previewImg if available
+          $img = $previewImg ?? ($product->preview_src ?? ($product->image_url ?? asset('images/placeholder.png')));
+        @endphp
+          <img id="np-base" crossorigin="anonymous" src="{{ $img }}" alt="Preview"
+            onerror="this.onerror=null;this.src='{{ asset('images/placeholder.png') }}'">
           <div id="np-prev-name" class="np-overlay font-bebas" aria-hidden="true"></div>
           <div id="np-prev-num"  class="np-overlay font-bebas" aria-hidden="true"></div>
         </div>

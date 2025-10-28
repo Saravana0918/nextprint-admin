@@ -16,9 +16,9 @@ class PublicDesignerController extends Controller
         $productId = $request->query('product_id');
         $viewId    = $request->query('view_id');
 
-        // Product lookup (your existing logic)...
         $product = null;
 
+        // --- Lookup product (existing logic preserved) ---
         if ($productId) {
             if (ctype_digit((string)$productId) && strlen((string)$productId) >= 8) {
                 $product = Product::with(['views','views.areas','variants'])
@@ -57,20 +57,17 @@ class PublicDesignerController extends Controller
             abort(404, 'Product not found');
         }
 
-        // --- NEW: If no variants loaded or variants count 0, try fetch from Shopify and save locally
+        // --- Ensure variants present (existing logic) ---
         if (!$product->relationLoaded('variants') || $product->variants->count() === 0) {
             try {
                 $this->fetchShopifyVariantsAndStore($product);
-                // reload relation after upsert
                 $product->load('variants');
             } catch (\Throwable $e) {
                 Log::warning("designer: fetchShopifyVariants failed product_id={$product->id} error=".$e->getMessage());
             }
         }
 
-        // ----------------------------
-        // Resolve view (same as before)
-        // ----------------------------
+        // --- Resolve view ---
         $view = null;
         if ($viewId) {
             $view = ProductView::with('areas')->find($viewId);
@@ -85,9 +82,7 @@ class PublicDesignerController extends Controller
 
         $areas = $view ? ($view->relationLoaded('areas') ? $view->areas : $view->areas()->get()) : collect([]);
 
-        // ----------------------------
-        // Build layout slots (same as your code)
-        // ----------------------------
+        // --- Build layoutSlots (existing logic preserved) ---
         $layoutSlots = [];
         foreach ($areas as $a) {
             $left  = (float)($a->left_pct ?? $a->x_mm ?? 0);
@@ -136,7 +131,7 @@ class PublicDesignerController extends Controller
 
         $originalLayoutSlots = $layoutSlots;
 
-        // artwork detection and filtering --- keep your existing logic
+        // artwork detection
         $hasArtworkSlot = false;
         foreach ($originalLayoutSlots as $slotKey => $slot) {
             $k = strtolower((string)$slotKey);
@@ -155,7 +150,7 @@ class PublicDesignerController extends Controller
         $showUpload = (bool)$hasArtworkSlot;
         \Log::info("designer: product_id={$product->id} showUpload=" . (int)$showUpload . " hasArtworkSlot=" . (int)$hasArtworkSlot);
 
-        // filteredLayoutSlots (same as your code)...
+        // filteredLayoutSlots build (same as before)
         $filteredLayoutSlots = [];
         if (!empty($layoutSlots) && is_array($layoutSlots)) {
             foreach (['name', 'number'] as $k) {
@@ -187,7 +182,7 @@ class PublicDesignerController extends Controller
             }
         }
 
-        // displayPrice compute (same as your code)
+        // displayPrice compute (existing)
         $displayPrice = 0.00;
         try {
             if (isset($product->min_price) && is_numeric($product->min_price) && (float)$product->min_price > 0) {
@@ -209,88 +204,62 @@ class PublicDesignerController extends Controller
             \Log::warning('designer: price compute failed: ' . $e->getMessage());
         }
 
-        // Build sizeOptions + variantMap for blade
+        // sizeOptions + variantMap
         $sizeOptions = [];
         $variantMap = [];
         if ($product->relationLoaded('variants')) {
             foreach ($product->variants as $v) {
-                // prefer explicit option columns; fall back to title
                 $label = trim((string)($v->option_value ?? $v->option_name ?? $v->title ?? ''));
                 $variantId = (string)($v->shopify_variant_id ?? $v->variant_id ?? $v->id ?? '');
                 if ($label === '' || $variantId === '') continue;
                 $sizeOptions[] = ['label' => $label, 'variant_id' => $variantId];
-                // map uppercase label to variant id for convenience (used maybe in JS)
                 $variantMap[strtoupper($label)] = $variantId;
             }
         }
 
-        // ----------------------------
-        // NORMALIZE preview / image for designer stage (IMPORTANT)
-        // ----------------------------
-        $rawImg = $product->preview_src ?? $product->image_url ?? null;
+        // -------------------------
+        // NEW: Normalize preview image value for blade
+        // -------------------------
         $img = null;
+        $raw = $product->preview_src ?? $product->image_url ?? null;
 
-        if ($rawImg) {
-            $raw = str_replace('\\','/',$rawImg);
+        if (!empty($raw)) {
+            // ensure forward slashes
+            $raw = str_replace('\\', '/', $raw);
 
-            // 1) full absolute URL that contains /storage/ -> extract relative and build Storage url
-            if (preg_match('~^https?://[^/]+/storage/(.+)$~i', $raw, $m)) {
-                $rel = $m[1];
-                if (Storage::disk('public')->exists($rel)) {
-                    $img = Storage::disk('public')->url($rel);
-                } else {
-                    $img = $raw; // keep external full URL
-                }
-            }
-            // 2) path starting with /storage/...
-            elseif (preg_match('~^/storage/(.+)$~i', $raw, $m)) {
-                $rel = $m[1];
-                if (Storage::disk('public')->exists($rel)) {
-                    $img = Storage::disk('public')->url($rel);
-                } else {
+            if (preg_match('~^https?://~i', $raw)) {
+                // already absolute URL
+                $img = $raw;
+            } else {
+                // remove leading /storage or /public or storage/ public/
+                $clean = preg_replace('~^/?(storage|public)/~i', '', $raw);
+                $clean = ltrim($clean, '/');
+
+                // if it's already "product-previews/xxx.jpg" we build correct storage URL
+                try {
+                    $candidate = Storage::disk('public')->url($clean); // returns '/storage/product-previews/xxx.jpg'
+                    // If url() returned something, make absolute (preserve scheme/host)
+                    // if app is serving from same host, absolute path ok; but better to create absolute URL
+                    $appUrl = config('app.url') ?? null;
+                    if ($appUrl && strpos($candidate, '/') === 0) {
+                        // ensure no double slash
+                        $img = rtrim($appUrl, '/') . $candidate;
+                    } else {
+                        $img = $candidate;
+                    }
+                } catch (\Throwable $e) {
+                    // fallback to using raw as-is
                     $img = $raw;
                 }
             }
-            // 3) path starting with public/...
-            elseif (preg_match('~^public/(.+)$~i', $raw, $m)) {
-                $rel = $m[1];
-                if (Storage::disk('public')->exists($rel)) {
-                    $img = Storage::disk('public')->url($rel);
-                } else {
-                    $img = '/storage/' . ltrim($rel, '/');
-                }
-            }
-            // 4) looks like relative storage path: product-previews/xxx.jpg
-            elseif (preg_match('~^[\w\-/]+/.+\.(jpe?g|png|webp|gif|svg)$~i', $raw)) {
-                $rel = ltrim($raw, '/');
-                if (Storage::disk('public')->exists($rel)) {
-                    $img = Storage::disk('public')->url($rel);
-                } else {
-                    $img = '/storage/' . $rel;
-                }
-            }
-            // 5) full external URL (Shopify CDN etc) — keep as-is
-            elseif (preg_match('~^https?://~i', $raw)) {
-                $img = $raw;
-            } else {
-                // last resort — try building storage url
-                $rel = ltrim($raw, '/');
-                if (Storage::disk('public')->exists($rel)) {
-                    $img = Storage::disk('public')->url($rel);
-                } else {
-                    $img = null;
-                }
-            }
-        }
-
-        // final fallback to placeholder if null
-        if (empty($img)) {
+        } else {
             $img = asset('images/placeholder.png');
         }
 
-        Log::info('designer: resolved preview img', ['product_id'=>$product->id, 'raw'=>$rawImg, 'img'=>$img]);
+        // Extra log to help debugging
+        \Log::info('designer: resolved preview img', ['product_id'=>$product->id, 'raw'=>$product->preview_src ?? null, 'img'=>$img]);
 
-        $viewData = [
+        return view('public.designer', [
             'product' => $product,
             'view'    => $view,
             'areas'   => $areas,
@@ -301,10 +270,9 @@ class PublicDesignerController extends Controller
             'displayPrice' => (float)$displayPrice,
             'sizeOptions' => $sizeOptions,
             'variantMap' => $variantMap,
-            'img' => $img,
-        ];
-
-        return view('public.designer', $viewData);
+            // pass normalized image path to blade as $img (blade uses $img)
+            'previewImg' => $img,
+        ]);
     }
 
     /**
