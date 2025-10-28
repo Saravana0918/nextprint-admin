@@ -244,7 +244,7 @@
   // we already create rows dynamically — hide number inputs on createRow()
   document.querySelectorAll('.player-number').forEach(n => { n.closest('.player-row')?.classList.add('no-number'); n.style.display='none'; });
   // hide overlay number visually
-  document.getElementById('overlay-number').style.display = 'none';
+  document.getElementById('overlay-number')?.style.display = 'none';
 }
 </script>
 <script>
@@ -363,67 +363,86 @@ document.addEventListener('DOMContentLoaded', function() {
   const fontClassMap = { 'bebas': 'font-bebas', 'anton': 'font-anton', 'oswald': 'font-oswald', 'impact': 'font-impact' };
   window.fontClassMap = fontClassMap; // expose for modal
 
-  function computeStageSize(stage, img) {
-    if (!stage || !img) return null;
-    const stageRect = stage.getBoundingClientRect();
-    const imgRect = img.getBoundingClientRect();
-    return {
-      offsetLeft: Math.round(imgRect.left - stageRect.left),
-      offsetTop: Math.round(imgRect.top - stageRect.top),
-      imgW: Math.max(1, imgRect.width),
-      imgH: Math.max(1, imgRect.height),
-      stageW: Math.max(1, stageRect.width),
-      stageH: Math.max(1, stageRect.height)
-    };
-  }
+  function computeStageSize(stageEl, imgEl) {
+  if (!stageEl || !imgEl) return null;
+  const stageRect = stageEl.getBoundingClientRect();
+  const imgRect = imgEl.getBoundingClientRect();
 
-  function placeOverlay(el, slot, slotKey) {
+  // If image rendered smaller by CSS (padding etc.), we compute the offsets properly
+  const offsetLeft = Math.round(imgRect.left - stageRect.left);
+  const offsetTop  = Math.round(imgRect.top  - stageRect.top);
+
+  return {
+    offsetLeft, offsetTop,
+    imgW: Math.max(1, Math.round(imgRect.width)),
+    imgH: Math.max(1, Math.round(imgRect.height)),
+    stageW: Math.max(1, Math.round(stageRect.width)),
+    stageH: Math.max(1, Math.round(stageRect.height))
+  };
+}
+
+  
+function placeOverlay(el, slot, slotKey) {
+  try {
     if (!el || !slot) return;
-    const s = computeStageSize(stageEl, imgEl);
+    const s = computeStageSize(stageEl, imgEl); // ensure stageEl/imgEl are in scope (they were earlier)
     if (!s) return;
 
-    const centerX = Math.round(s.offsetLeft + ((slot.left_pct||50)/100) * s.imgW + ((slot.width_pct||0)/200) * s.imgW);
-    const centerY = Math.round(s.offsetTop  + ((slot.top_pct||50)/100)  * s.imgH + ((slot.height_pct||0)/200) * s.imgH);
-    const areaWpx = Math.max(8, Math.round(((slot.width_pct||10)/100) * s.imgW));
-    const areaHpx = Math.max(8, Math.round(((slot.height_pct||10)/100) * s.imgH));
+    // compute center in px relative to stage
+    const centerX = Math.round(s.offsetLeft + ((Number(slot.left_pct||50) / 100) * s.imgW));
+    const centerY = Math.round(s.offsetTop  + ((Number(slot.top_pct||50)  / 100) * s.imgH));
 
+    // compute area for font sizing
+    const areaWpx = Math.max(8, Math.round(((Number(slot.width_pct||10) / 100) * s.imgW)));
+    const areaHpx = Math.max(8, Math.round(((Number(slot.height_pct||10) / 100) * s.imgH)));
+
+    // make sure overlay is direct child of stage and absolutely positioned
     el.style.position = 'absolute';
     el.style.left = centerX + 'px';
     el.style.top  = centerY + 'px';
-    el.style.width = areaWpx + 'px';
-    el.style.height = areaHpx + 'px';
+
+    // use translate(-50%,-50%) to center at the coordinate
     el.style.transform = 'translate(-50%,-50%) rotate(' + ((slot.rotation||0)) + 'deg)';
     el.style.display = 'flex';
     el.style.alignItems = 'center';
     el.style.justifyContent = 'center';
+    el.style.boxSizing = 'border-box';
+    el.style.padding = '0 6px';
     el.style.pointerEvents = 'none';
     el.style.whiteSpace = 'nowrap';
     el.style.overflow = 'hidden';
-    el.style.boxSizing = 'border-box';
-    el.style.padding = '0 6px';
+    el.style.zIndex = (slotKey === 'number' ? 99995 : 99994);
 
-    // font sizing
-    const txt = (el.textContent || '').toString().trim() || (slotKey === 'number' ? '09' : 'NAME');
-    const chars = Math.max(1, txt.length);
+    // font-size calculation (robust)
+    const text = (el.textContent || '').toString().trim() || (slotKey === 'number' ? '09' : 'NAME');
+    const chars = Math.max(1, text.length);
     const isMobile = window.innerWidth <= 767;
-    const heightCandidate = Math.floor(areaHpx * (slotKey === 'number' ? (isMobile?1.05:1.0) : 1.0));
+    const heightCandidate = Math.floor(areaHpx * (slotKey === 'number' ? (isMobile ? 1.05 : 1.0) : 1.0));
     const avgCharRatio = 0.48;
     const widthCap = Math.floor((areaWpx * 0.95) / (chars * avgCharRatio));
-    let fs = Math.floor(Math.min(heightCandidate, widthCap));
+    let fontSize = Math.floor(Math.min(heightCandidate, widthCap));
     const maxAllowed = Math.max(14, Math.floor(s.stageW * (isMobile ? 0.45 : 0.32)));
-    fs = Math.max(8, Math.min(fs, maxAllowed));
-    fs = Math.floor(fs * 1.08);
-    el.style.fontSize = fs + 'px';
+    fontSize = Math.max(8, Math.min(fontSize, maxAllowed));
+    fontSize = Math.floor(fontSize * 1.08);
+
+    el.style.fontSize = fontSize + 'px';
     el.style.lineHeight = '1';
     el.style.fontWeight = '700';
 
+    // reduce until fits
     let attempts = 0;
-    while (el.scrollWidth > el.clientWidth && fs > 7 && attempts < 30) {
-      fs = Math.max(7, Math.floor(fs * 0.92));
-      el.style.fontSize = fs + 'px';
+    while (el.scrollWidth > el.clientWidth && fontSize > 7 && attempts < 30) {
+      fontSize = Math.max(7, Math.floor(fontSize * 0.92));
+      el.style.fontSize = fontSize + 'px';
       attempts++;
     }
+
+    // DEBUG: log computed values (remove/comment in production)
+    // console.log('placeOverlay', slotKey, {centerX, centerY, areaWpx, areaHpx, fontSize, s});
+  } catch (err) {
+    console.warn('placeOverlay error', err);
   }
+}
 
   // place uploaded logo using artwork slot
   function placeLogo(logo, slot) {
