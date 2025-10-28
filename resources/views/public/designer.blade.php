@@ -664,34 +664,41 @@ altNumEls.forEach(el => {
   try { sizeEl.dispatchEvent(new Event('change')); } catch(e) {}
 }
 
-  if (addTeam) addTeam.addEventListener('click', function(e) {
+  if (addTeam) addTeam.addEventListener('click', async function(e) {
   e.preventDefault();
-  const productId = $('np-product-id')?.value || null;
-  // designer: when user clicks "Add Team Players"
-const params = new URLSearchParams();
-const name = (document.querySelector('#np-name')?.value || '').toUpperCase();
-const number = (document.querySelector('#np-num')?.value || '').replace(/\D/g,'');
-const font = (document.getElementById('np-font')?.value || '');
-const color = (document.getElementById('np-color')?.value || '');
-const previewUrl = window.lastUploadedPreviewUrl || document.getElementById('np-preview-hidden')?.value || '';
 
-if (productId) params.set('product_id', productId);
-if (previewUrl) params.set('preview_url', encodeURIComponent(previewUrl));  // ✅ ADD THIS
-if (name) params.set('prefill_name', encodeURIComponent(name));
-if (number) params.set('prefill_number', encodeURIComponent(number));
-if (font) params.set('prefill_font', encodeURIComponent(font));
-if (color) params.set('prefill_color', encodeURIComponent(color));
-// layoutSlots might be large JSON -> encode once
-if (window.layoutSlots) params.set('layoutSlots', encodeURIComponent(JSON.stringify(window.layoutSlots)));
-// logo must be public URL (see step 2)
-if (window.lastUploadedLogoUrl) params.set('prefill_logo', encodeURIComponent(window.lastUploadedLogoUrl));
+  // 1️⃣ Auto-save design first if not saved yet
+  if (!window.lastUploadedPreviewUrl) {
+    try {
+      const data = await doSave(); // auto-save if not already done
+      console.log('Auto-saved before team redirect:', data);
+      window.lastUploadedPreviewUrl = data?.preview_url || data?.preview_src || '';
+    } catch (err) {
+      alert('Could not auto-save design before opening team page.');
+      return;
+    }
+  }
 
-const base = "{{ route('team.create') }}"; // blade variable in designer
-window.location.href = base + (params.toString() ? ('?' + params.toString()) : '');
+  // 2️⃣ Prepare all query params for redirect
+  const productId = document.getElementById('np-product-id')?.value || '';
+  const name = (document.querySelector('#np-name')?.value || '').toUpperCase();
+  const number = (document.querySelector('#np-num')?.value || '').replace(/\D/g,'');
+  const font = (document.getElementById('np-font')?.value || '');
+  const color = (document.getElementById('np-color')?.value || '');
+  const previewUrl = window.lastUploadedPreviewUrl || '';
 
+  const params = new URLSearchParams();
+  if (productId) params.set('product_id', productId);
+  if (previewUrl) params.set('preview_url', previewUrl); // ✅ main fix here
+  if (name) params.set('prefill_name', name);
+  if (number) params.set('prefill_number', number);
+  if (font) params.set('prefill_font', font);
+  if (color) params.set('prefill_color', color);
+  if (window.lastUploadedLogoUrl) params.set('prefill_logo', window.lastUploadedLogoUrl);
+
+  const base = "{{ route('team.create') }}";
+  window.location.href = base + '?' + params.toString();
 });
-
-
 
   // init
   applyFont(fontEl?.value || 'bebas');
