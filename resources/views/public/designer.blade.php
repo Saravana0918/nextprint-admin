@@ -673,53 +673,60 @@ altNumEls.forEach(el => {
   const font = document.getElementById('np-font')?.value || '';
   const color = document.getElementById('np-color')?.value || '';
   const logo = window.lastUploadedLogoUrl || '';
+  const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
 
-  let previewUrl = window.lastUploadedPreviewUrl || '';
+  let previewUrl = '';
 
-  // 🧠 Step 1: If preview not yet uploaded → auto-generate & upload
-  if (!previewUrl) {
-    try {
-      console.log('No saved preview found — generating new one...');
-      const node = document.getElementById('np-stage') || document.querySelector('.np-stage');
+  try {
+    console.log('Generating PLAIN preview (no overlays)...');
+    const stageNode = document.getElementById('np-stage');
 
-      // Hide UI overlays if needed
-      const overlays = Array.from(node.querySelectorAll('.np-controls, .np-toolbar'));
-      overlays.forEach(el => el.style.display = 'none');
+    // temporarily hide name & number overlays
+    const ovName = document.getElementById('np-prev-name');
+    const ovNum  = document.getElementById('np-prev-num');
+    const ovNameDisp = ovName ? ovName.style.display : '';
+    const ovNumDisp  = ovNum ? ovNum.style.display  : '';
+    if (ovName) ovName.style.display = 'none';
+    if (ovNum) ovNum.style.display = 'none';
 
-      const canvas = await html2canvas(node, { useCORS: true, backgroundColor: null, scale: 1.2 });
-      const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.9));
-      const fd = new FormData();
-      fd.append('file', blob, 'team_preview_auto_' + Date.now() + '.jpg');
+    await new Promise(r => setTimeout(r, 80)); // let DOM update
 
-      const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-      const uploadRes = await fetch('{{ route("designer.upload_temp") }}', {
-        method: 'POST',
-        body: fd,
-        headers: (token ? { 'X-CSRF-TOKEN': token } : {}),
-        credentials: 'same-origin'
-      });
+    // capture only plain jersey
+    const canvas = await html2canvas(stageNode, { useCORS: true, backgroundColor: null, scale: 1.2 });
+    const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.9));
 
-      const uploadJson = await uploadRes.json().catch(() => null);
-      if (uploadJson && uploadJson.url) {
-        previewUrl = uploadJson.url;
-        window.lastUploadedPreviewUrl = previewUrl;
-        console.log('Auto-upload success:', previewUrl);
-      } else {
-        console.warn('Auto-upload failed');
-      }
+    // restore overlays
+    if (ovName) ovName.style.display = ovNameDisp;
+    if (ovNum) ovNum.style.display = ovNumDisp;
 
-      overlays.forEach(el => el.style.display = '');
-    } catch (err) {
-      console.error('Auto preview generation failed', err);
+    // upload this plain jersey
+    const fd = new FormData();
+    fd.append('file', blob, 'plain_team_base_' + Date.now() + '.jpg');
+    const uploadRes = await fetch('{{ route("designer.upload_temp") }}', {
+      method: 'POST',
+      body: fd,
+      headers: (token ? { 'X-CSRF-TOKEN': token } : {}),
+      credentials: 'same-origin'
+    });
+    const uploadJson = await uploadRes.json().catch(() => null);
+    if (uploadJson && uploadJson.url) {
+      previewUrl = uploadJson.url;
+      console.log('Plain base uploaded:', previewUrl);
+    } else {
+      alert('Upload failed');
+      return;
     }
+  } catch (err) {
+    console.error('Plain preview generation failed', err);
+    alert('Could not generate base image.');
+    return;
   }
 
-  // 🧭 Step 2: Redirect to team page with preview_url + customization params
+  // redirect to Team Players page with plain jersey only
   const params = new URLSearchParams();
   if (productId) params.set('product_id', productId);
-  if (previewUrl) params.set('preview_url', previewUrl);  // ✅ ensures image always visible
-  if (name) params.set('prefill_name', name);
-  if (number) params.set('prefill_number', number);
+  if (previewUrl) params.set('preview_url', previewUrl); // plain base only
+  // we can also pass customization defaults if needed:
   if (font) params.set('prefill_font', font);
   if (color) params.set('prefill_color', color);
   if (logo) params.set('prefill_logo', logo);

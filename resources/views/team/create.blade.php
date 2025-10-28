@@ -163,14 +163,6 @@
       <div class="card">
         <div class="card-body text-center" style="position:relative;">
           <div id="player-stage" class="np-stage" aria-hidden="false">
-
-            {{-- ✅ Hide overlays if preview_url already exists --}}
-            @if(request()->query('preview_url'))
-              <style>
-                #overlay-name, #overlay-number { display: none !important; }
-              </style>
-            @endif
-
             <img id="player-base"
                 src="{{ $img }}"
                 alt="{{ $product->name ?? 'Product' }}"
