@@ -1134,6 +1134,70 @@ async function uploadBlobViaTemp(blob, filename = null) {
   });
 });
 </script>
+<script>
+// QUICK PATCH: force overlays visible & update on input
+document.addEventListener('DOMContentLoaded', function(){
+  try {
+    const nameSelector = '#players-list .player-name';
+    const numSelector  = '#players-list .player-number';
+    const ovName = document.getElementById('overlay-name');
+    const ovNum  = document.getElementById('overlay-number');
+
+    function touchOverlayDisplay() {
+      // ensure overlays shown when user types
+      if (ovName) { ovName.style.display = 'flex'; }
+      if (ovNum && window.hasNumberSlot) { ovNum.style.display = 'flex'; }
+    }
+
+    function onRowInput(e) {
+      try {
+        const row = e.target.closest('.player-row');
+        if (!row) return;
+        // set overlay texts
+        const nm = (row.querySelector('.player-name')?.value || '').toUpperCase().slice(0,12) || 'NAME';
+        const nu = (row.querySelector('.player-number')?.value || '').replace(/\D/g,'').slice(0,3) || '09';
+        if (ovName) ovName.textContent = nm;
+        if (ovNum) ovNum.textContent = (window.hasNumberSlot ? nu : '');
+        touchOverlayDisplay();
+        // small debounce layout reflow
+        clearTimeout(window._team_overlay_timer);
+        window._team_overlay_timer = setTimeout(()=> {
+          try { if (typeof applyLayout === 'function') applyLayout(); } catch(e){ console.warn(e); }
+        }, 60);
+      } catch(err) { console.warn('onRowInput', err); }
+    }
+
+    // delegate listener to players-list (works for dynamic rows)
+    const playersList = document.getElementById('players-list');
+    if (playersList) {
+      playersList.addEventListener('input', function(e){
+        const t = e.target;
+        if (!t) return;
+        if (t.classList.contains('player-name') || t.classList.contains('player-number')) {
+          onRowInput(e);
+        }
+      }, { passive: true });
+    }
+
+    // also if there is an initial prefill row, trigger update (after small timeout for layout)
+    setTimeout(()=> {
+      const first = document.querySelector('#players-list .player-row');
+      if (first) {
+        const ev = new Event('input', { bubbles: true });
+        const nameEl = first.querySelector('.player-name');
+        if (nameEl && nameEl.value) nameEl.dispatchEvent(ev);
+      }
+    }, 240);
+
+    // Developer debug helpers (only run in dev)
+    window._debugTeamOverlays = {
+      ovName, ovNum,
+      forceRecalc: ()=> { try { if (typeof applyLayout === 'function') applyLayout(); } catch(e){ console.warn(e); } }
+    };
+    console.info('Team overlay quick-patch installed.');
+  } catch(e) { console.warn('overlay quick patch failed', e); }
+});
+</script>
 
 
 @endsection
