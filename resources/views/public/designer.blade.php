@@ -100,8 +100,13 @@
     <div class="col-md-6 np-col order-1 order-md-2">
       <div class="border rounded p-3">
         <div class="np-stage" id="np-stage">
-          <img id="np-base" crossorigin="anonymous" src="{{ $previewImg }}" alt="Preview"
-            onerror="this.onerror=null;this.src='{{ asset('images/placeholder.png') }}'">
+         @php
+            // ensure $img exists as fallback
+            $img = $img ?? ($product->preview_src ?? ($product->image_url ?? asset('images/placeholder.png')));
+          @endphp
+
+          <img id="np-base" src="{{ $img }}" alt="Preview"
+              onerror="this.onerror=null;this.src='{{ asset('images/placeholder.png') }}'">
           <div id="np-prev-name" class="np-overlay font-bebas" aria-hidden="true"></div>
           <div id="np-prev-num"  class="np-overlay font-bebas" aria-hidden="true"></div>
         </div>
