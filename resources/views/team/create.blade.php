@@ -236,16 +236,9 @@
 <script>
   window.prefill = {!! json_encode($prefill ?? []) !!};
   window.layoutSlots = {!! json_encode($layoutSlots ?? [], JSON_NUMERIC_CHECK) !!};
-  window.hasNumberSlot = !!(typeof window.layoutSlots === 'object' && window.layoutSlots && window.layoutSlots.number);
-  console.info('hasNumberSlot=', window.hasNumberSlot);
+  // DO NOT decide hasNumberSlot here — we'll compute it after fallback layout is chosen.
   window.isBakedPreview = !!(new URLSearchParams(window.location.search).get('preview_url'));
-  if (!window.layoutSlots || !window.layoutSlots.number) {
-  // hide number input column in each player row template (client side)
-  // we already create rows dynamically — hide number inputs on createRow()
-  document.querySelectorAll('.player-number').forEach(n => { n.closest('.player-row')?.classList.add('no-number'); n.style.display='none'; });
-  // hide overlay number visually
-  document.getElementById('overlay-number')?.style.display = 'none';
-}
+  console.info('layoutSlots (server):', window.layoutSlots, 'isBakedPreview=', window.isBakedPreview);
 </script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -358,6 +351,24 @@ document.addEventListener('DOMContentLoaded', function() {
                     name: { left_pct:50, top_pct:25, width_pct:85, height_pct:8, rotation:0 },
                     number: { left_pct:50, top_pct:54, width_pct:70, height_pct:12, rotation:0 }
                  };
+    // --- NEW: compute hasNumberSlot based on the actual layout we will use (fallback included)
+  window.hasNumberSlot = !!(layout && layout.number);
+  console.info('computed layout (used):', layout, 'hasNumberSlot=', window.hasNumberSlot);
+
+  // ensure overlay and inputs are hidden or shown according to hasNumberSlot
+  if (!window.hasNumberSlot) {
+    try {
+      document.querySelectorAll('.player-number').forEach(el => { el.style.display = 'none'; el.value = ''; el.closest('.player-row')?.classList.add('no-number'); });
+      document.getElementById('overlay-number')?.style.setProperty('display','none','important');
+    } catch(e){ console.warn('hide-number-init failed', e); }
+  } else {
+    // make sure overlay exists and is visible so applyLayout can position it
+    try {
+      const ov = document.getElementById('overlay-number');
+      if (ov) ov.style.setProperty('display','flex','important');
+    } catch(e){ console.warn('show-number-init failed', e); }
+  }
+
 
   // Map designer font key -> css class (same as designer)
   const fontClassMap = { 'bebas': 'font-bebas', 'anton': 'font-anton', 'oswald': 'font-oswald', 'impact': 'font-impact' };
