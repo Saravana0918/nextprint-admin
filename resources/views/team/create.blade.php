@@ -4,11 +4,10 @@
 
 @section('content')
 @php
-   $img = request()->query('preview_url')
-         ?? ($product->preview_url ?? null)
-         ?? ($product->preview_src ?? null)
-         ?? ($product->image_url ?? null)
-         ?? asset('images/placeholder.png');
+  // Prefer preview_url from query first (sent from Designer)
+$img = request()->query('preview_url')
+    ?? ($product->preview_url ?? $product->preview_src ?? $product->image_url ?? asset('images/placeholder.png'));
+
 
   // Start with any server-side $prefill passed by controller (if any)
    $prefill = $prefill ?? [];
@@ -210,8 +209,7 @@
         <input type="hidden" name="shopify_product_id" value="{{ $product->shopify_product_id ?? '' }}">
         {{-- Persist uploaded logo for server-side storage --}}
         <input type="hidden" id="team-prefill-logo" name="team_logo_url" value="{{ $prefill['prefill_logo'] ?? '' }}">
-        <input type="hidden" id="team-preview-url" name="preview_url"
-       value="{{ request()->query('preview_url') ?? ($product->preview_url ?? '') }}">
+        <input type="hidden" id="team-preview-url" name="preview_url" value="">
         <input type="hidden" id="team-id-hidden" name="team_id" value="">
 
         <div class="mb-3 mobile-action-row">
@@ -248,11 +246,6 @@
   // hide overlay number visually
   document.getElementById('overlay-number').style.display = 'none';
 }
-</script>
-<script>
-  // expose preview url to JS
-  window.teamPreviewUrl = {!! json_encode(request()->query('preview_url') ?? ($product->preview_url ?? null)) !!};
-  console.info('teamPreviewUrl=', window.teamPreviewUrl);
 </script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
@@ -353,9 +346,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
   const stageEl = document.getElementById('player-stage');
   const imgEl = document.getElementById('player-base');
-  if (window.teamPreviewUrl && imgEl) {
-  try { imgEl.src = window.teamPreviewUrl; } catch(e){ console.warn('set preview src failed', e); }
-}
   const ovName = document.getElementById('overlay-name');
   const ovNum  = document.getElementById('overlay-number');
   const logoEl = document.getElementById('player-logo');
