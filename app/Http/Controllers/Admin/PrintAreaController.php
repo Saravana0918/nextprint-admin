@@ -12,32 +12,81 @@ use Illuminate\Support\Facades\Storage;
 class PrintAreaController extends Controller
 {
     public function edit(Product $product, ProductView $view)
-    {
-        $existing = $view->areas()
-            ->select(
-                'id','template_id','mask_svg_path',
-                'x_mm','y_mm','width_mm','height_mm','dpi','rotation',
-                'left_pct','top_pct','width_pct','height_pct',
-                'name'
-            )
-            ->get();
+{
+    $existing = $view->areas()
+        ->select(
+            'id','template_id','mask_svg_path',
+            'x_mm','y_mm','width_mm','height_mm','dpi','rotation',
+            'left_pct','top_pct','width_pct','height_pct',
+            'name'
+        )
+        ->get();
 
-        // uploaded local image → public URL
-        $uploaded = null;
-        if (!empty($view->image_path)) {
-            $p = str_replace('\\','/',$view->image_path);
-            $p = preg_replace('~^/?(storage|public)/~','',$p);
-            $uploaded = Storage::disk('public')->url(ltrim($p,'/'));
-        }
+    // 1) candidate selection (prefer uploaded image_path, then view.bg_image_url, then product.preview_src/thumbnail, then shop image)
+    $candidate = null;
 
-        // Shopify image (relation optional)
-        $shopImage = optional($product->shopifyProduct)->image_url;
-
-        // Final fallback chain
-        $bgUrl = $uploaded ?: ($view->bg_image_url ?: ($product->thumbnail ?: $shopImage));
-
-        return view('admin.areas.edit', compact('product','view','existing','bgUrl'));
+    if (!empty($view->image_path)) {
+        $candidate = $view->image_path;
+    } elseif (!empty($view->bg_image_url)) {
+        $candidate = $view->bg_image_url;
+    } elseif (!empty($product->preview_src)) {
+        $candidate = $product->preview_src;
+    } elseif (!empty($product->thumbnail)) {
+        $candidate = $product->thumbnail;
+    } else {
+        $candidate = optional($product->shopifyProduct)->image_url;
     }
+
+    // 2) normalize candidate -> relative (product-previews/xxx.jpg) if possible
+    $relative = null;
+    if ($candidate) {
+        $c = str_replace('\\','/',$candidate);
+
+        // If it's a full URL containing /storage/
+        if (preg_match('~https?://[^/]+/storage/(.+)$~i', $c, $m)) {
+            $relative = $m[1];
+        }
+        // If it starts with /storage/
+        elseif (preg_match('~^/storage/(.+)$~i', $c, $m)) {
+            $relative = $m[1];
+        }
+        // If it starts with public/
+        elseif (preg_match('~^public/(.+)$~i', $c, $m)) {
+            $relative = $m[1];
+        }
+        // If it looks like already relative (product-previews/...)
+        elseif (preg_match('~^[\w\-]+/.+~', $c)) {
+            $relative = ltrim($c,'/');
+        } else {
+            // fallback: keep original (will fail exists() check below)
+            $relative = null;
+        }
+    }
+
+    // 3) build public URL only if file exists on 'public' disk
+    $bgUrl = null;
+    if ($relative && Storage::disk('public')->exists($relative)) {
+        $bgUrl = Storage::disk('public')->url($relative); // -> /storage/...
+    } else {
+        // if no storage file, still allow full URLs (shopImage etc) as-is
+        if ($candidate && preg_match('~^https?://~i', $candidate)) {
+            $bgUrl = $candidate;
+        } else {
+            $bgUrl = null;
+        }
+    }
+
+    \Log::info('PrintArea debug', [
+        'product_id' => $product->id,
+        'view_id'    => $view->id,
+        'candidate'  => $candidate,
+        'relative'   => $relative,
+        'bgUrl'      => $bgUrl
+    ]);
+
+    return view('admin.areas.edit', compact('product','view','existing','bgUrl'));
+}
+
 
     public function update(Request $req, Product $product, ProductView $view)
     {
