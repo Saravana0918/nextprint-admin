@@ -163,16 +163,20 @@
       <div class="card">
         <div class="card-body text-center" style="position:relative;">
           <div id="player-stage" class="np-stage" aria-hidden="false">
-            <img id="player-base"
+
+            {{-- ✅ Hide overlays if preview_url already exists --}}
             @if(request()->query('preview_url'))
-                <style>
-                  #overlay-name, #overlay-number { display: none !important; }
-                </style>
-              @endif
-                 src="{{ $img }}"
-                 alt="{{ $product->name ?? 'Product' }}"
-                 crossorigin="anonymous"
-                 onerror="this.onerror=null;this.src='{{ asset('images/placeholder.png') }}'">
+              <style>
+                #overlay-name, #overlay-number { display: none !important; }
+              </style>
+            @endif
+
+            <img id="player-base"
+                src="{{ $img }}"
+                alt="{{ $product->name ?? 'Product' }}"
+                crossorigin="anonymous"
+                onerror="this.onerror=null;this.src='{{ asset('images/placeholder.png') }}'">
+
 
             {{-- Logo element (populated from designer prefill or empty hidden) --}}
             @if(!empty($prefill['prefill_logo']))
