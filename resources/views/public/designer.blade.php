@@ -360,22 +360,7 @@ window.findPreferredSlot = function(){
     return null;
   }
 };
-
-function openTeamCreateWithPreview(productId, previewUrl, data) {
-  const query = new URLSearchParams({
-    product_id: productId,
-    preview_url: previewUrl,   // ✅ ADD THIS LINE
-    prefill_name: data.name,
-    prefill_number: data.number,
-    prefill_font: data.font,
-    prefill_color: data.color,
-    prefill_logo: data.logo || ''
-  });
-  window.location.href = `/team/create?${query.toString()}`;
-}
 </script>
-
-
 <script>
 (function(){
   const $ = id => document.getElementById(id);
@@ -691,7 +676,7 @@ const color = (document.getElementById('np-color')?.value || '');
 const previewUrl = window.lastUploadedPreviewUrl || document.getElementById('np-preview-hidden')?.value || '';
 
 if (productId) params.set('product_id', productId);
-if (previewUrl) params.set('preview_url', encodeURIComponent(previewUrl));
+if (previewUrl) params.set('preview_url', encodeURIComponent(previewUrl));  // ✅ ADD THIS
 if (name) params.set('prefill_name', encodeURIComponent(name));
 if (number) params.set('prefill_number', encodeURIComponent(number));
 if (font) params.set('prefill_font', encodeURIComponent(font));
