@@ -15,20 +15,27 @@ class PrintAreaController extends Controller
 {
     public function edit(Product $product, ProductView $view)
 {
-    $existing = $view->areas()->select(
-        'id','template_id','mask_svg_path',
-        'x_mm','y_mm','width_mm','height_mm','dpi','rotation',
-        'left_pct','top_pct','width_pct','height_pct',
-        'name','slot_key'
-    )->get();
+    $existing = $view->areas()
+        ->select(
+            'id','template_id','mask_svg_path',
+            'x_mm','y_mm','width_mm','height_mm','dpi','rotation',
+            'left_pct','top_pct','width_pct','height_pct',
+            'name','slot_key'
+        )
+        ->get();
 
     $normalize = function($path){
         if (!$path) return null;
         $p = str_replace('\\','/',$path);
+        // remove leading protocol-less double-slash like //storage/...
+        $p = preg_replace('~^//+~', '', $p);
+        // remove leading /storage/ or /public/
         $p = preg_replace('~^/?(storage|public)/~','',$p);
+        $p = preg_replace('~^/+(storage|public)/~','',$p);
         return ltrim($p, '/');
     };
 
+    // 1) view.image_path (explicit uploaded view image)
     $uploaded = null;
     if (!empty($view->image_path)) {
         $rel = $normalize($view->image_path);
@@ -56,7 +63,7 @@ class PrintAreaController extends Controller
     } elseif (!empty($product->thumbnail)) {
         $rel = $normalize($product->thumbnail);
         if ($rel && Storage::disk('public')->exists($rel)) {
-            $bgUrl = url('/files/'.$rel);         // prefer /files/ route
+            $bgUrl = url('/files/'.$rel); // prefer /files/ route
         } elseif ($rel && file_exists(public_path('storage/'.$rel))) {
             $bgUrl = asset('storage/'.$rel);
         } elseif (preg_match('~^https?://~i', $product->thumbnail)) {

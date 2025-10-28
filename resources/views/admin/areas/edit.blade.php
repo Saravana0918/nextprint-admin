@@ -16,15 +16,6 @@
 @endpush
 
 @section('content')
-{{-- REMINDER (Controller):
-public function edit(Product $product, ProductView $view){
-    $area = $view->printAreas()->first(); // optional legacy single
-    $existing = $view->printAreas()
-        ->select('id','template_id','mask_svg_path','x_mm','y_mm','width_mm','height_mm','dpi','rotation')
-        ->get();
-    return view('admin.areas.edit', compact('product','view','area','existing','bgUrl'));
-}
---}}
 
 <h4 class="mb-3">{{ $product->name }} — {{ $view->name }} (Decoration Area)</h4>
 
@@ -365,41 +356,102 @@ document.addEventListener('click', function(e){
   canvas.requestRenderAll();
 }
 
-  if (bgUrl) {
-    const preload = new Image();
-    // crossOrigin can be removed if you see CORS/taint issues
-    preload.crossOrigin = 'anonymous';
-    preload.onload = function () {
-      let scale = 1;
-      const maxW = Math.min(wrapW, MAX_BG_W);
-      if (preload.width > maxW) scale = maxW / preload.width;
+  // ===== Robust background loader: try multiple candidates and pick first that loads =====
+  (function(){
+    // candidates from server (bgUrl) + fallback to product->thumbnail or view->bg_image_url if present
+    const serverBg = @json($bgUrl);
+    const productThumb = @json($product->thumbnail ?? null);
+    const viewBg = @json($view->bg_image_url ?? null);
 
-      const w = Math.round(preload.width  * scale);
-      const h = Math.round(preload.height * scale);
-      canvas.setWidth(w);
-      canvas.setHeight(h);
+    // normalize a path -> try to build /files/ and /storage/ variants too
+    function buildCandidates(p){
+      if (!p) return [];
+      p = String(p);
+      // if it's an absolute URL, return it as is
+      if (/^https?:\/\//i.test(p)) return [p];
+      // remove leading slashes
+      p = p.replace(/^\/+/, '');
+      return [
+        '/files/' + p,          // Laravel route that serves storage directly (recommended)
+        '/storage/' + p,        // public symlink
+        p                       // raw relative (best-effort)
+      ];
+    }
 
-      const bg = new fabric.Image(preload, { selectable:false, evented:false });
-      bg.scale(scale);
-      canvas.setBackgroundImage(bg, canvas.renderAll.bind(canvas));
-      ready();
-    };
-    preload.onerror = function(){
-      canvas.setWidth(wrapW);
-      canvas.setHeight(Math.round(wrapW*0.7));
-      canvas.setBackgroundColor('#f6f7fb', canvas.renderAll.bind(canvas));
-      ready();
-    };
+    // merge candidates: server provided first, then view/product fallbacks
+    let candidates = [];
+    if (serverBg) {
+      if (/^https?:\/\//i.test(serverBg)) candidates.push(serverBg);
+      else {
+        // if server gave a path like "/files/..." or "/storage/...", keep it first
+        candidates.push(serverBg);
+        // also add normalized variants just in case
+        const norm = serverBg.replace(/^\/+/, '');
+        candidates = candidates.concat(buildCandidates(norm));
+      }
+    }
+    candidates = candidates.concat(buildCandidates(viewBg)).concat(buildCandidates(productThumb));
 
-    // Use server-side version based on view.updated_at or product.updated_at
-    const bgVersion = {{ isset($view) && $view->updated_at ? strtotime($view->updated_at) : (isset($product) && $product->updated_at ? strtotime($product->updated_at) : time()) }};
-    preload.src = bgUrl ? (bgUrl + '?v=' + bgVersion) : '';
-  } else {
-    canvas.setWidth(wrapW);
-    canvas.setHeight(Math.round(wrapW*0.7));
-    canvas.setBackgroundColor('#f6f7fb', canvas.renderAll.bind(canvas));
-    ready();
-  }
+    // dedupe while preserving order
+    candidates = candidates.filter((v,i)=> v && candidates.indexOf(v) === i);
+
+    // debug: show resolved candidates in console and small debug panel (visible in page)
+    console.log('bg candidates:', candidates);
+    const dbgWrap = document.querySelector('.hint');
+    if (dbgWrap) {
+      const dbgBox = document.createElement('div');
+      dbgBox.style.fontSize = '12px';
+      dbgBox.style.marginTop = '6px';
+      dbgBox.innerHTML = '<strong>BG candidates:</strong> ' + candidates.map(c=>`<a href="${c}" target="_blank" style="margin-right:6px">${c}</a>`).join('');
+      dbgWrap.appendChild(dbgBox);
+    }
+
+    // try to load each candidate sequentially
+    function tryLoadList(list, idx){
+      if (!list || idx >= list.length) {
+        // all failed -> fallback color
+        canvas.setWidth(wrapW);
+        canvas.setHeight(Math.round(wrapW*0.7));
+        canvas.setBackgroundColor('#f6f7fb', canvas.renderAll.bind(canvas));
+        ready();
+        return;
+      }
+
+      const url = list[idx] + '?v=' + ({{ isset($view) && $view->updated_at ? strtotime($view->updated_at) : (isset($product) && $product->updated_at ? strtotime($product->updated_at) : time()) }});
+      const img = new Image();
+      // remove crossOrigin for same-origin /files or /storage to avoid taint issues
+      try { img.crossOrigin = undefined; } catch(e){}
+
+      img.onload = function(){
+        // good — set canvas size and background
+        let scale = 1;
+        const maxW = Math.min(wrapW, MAX_BG_W);
+        if (img.width > maxW) scale = maxW / img.width;
+
+        const w = Math.round(img.width * scale);
+        const h = Math.round(img.height * scale);
+        canvas.setWidth(w);
+        canvas.setHeight(h);
+
+        const bg = new fabric.Image(img, { selectable:false, evented:false });
+        bg.scale(scale);
+        canvas.setBackgroundImage(bg, canvas.renderAll.bind(canvas));
+        ready();
+      };
+
+      img.onerror = function(){
+        console.warn('bg load failed for', url);
+        // try next candidate
+        tryLoadList(list, idx + 1);
+      };
+
+      // start loading
+      img.src = url;
+    }
+
+    // start attempts
+    tryLoadList(candidates, 0);
+  })();
 
   // Keep outline in sync with rect
   window.updateOutline = function(rect){
