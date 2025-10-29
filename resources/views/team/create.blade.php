@@ -396,60 +396,83 @@ document.addEventListener('DOMContentLoaded', function() {
 function placeOverlay(el, slot, slotKey) {
   try {
     if (!el || !slot) return;
-    const s = computeStageSize(stageEl, imgEl); // ensure stageEl/imgEl are in scope (they were earlier)
+    const s = computeStageSize(stageEl, imgEl);
     if (!s) return;
 
     // compute center in px relative to stage
-    const centerX = Math.round(s.offsetLeft + ((Number(slot.left_pct||50) / 100) * s.imgW));
-    const centerY = Math.round(s.offsetTop  + ((Number(slot.top_pct||50)  / 100) * s.imgH));
+    let centerX = Math.round(s.offsetLeft + ((Number(slot.left_pct||50) / 100) * s.imgW));
+    let centerY = Math.round(s.offsetTop  + ((Number(slot.top_pct||50)  / 100) * s.imgH));
 
-    // compute area for font sizing
+    // compute area for overlay box (in px)
     const areaWpx = Math.max(8, Math.round(((Number(slot.width_pct||10) / 100) * s.imgW)));
     const areaHpx = Math.max(8, Math.round(((Number(slot.height_pct||10) / 100) * s.imgH)));
 
-    // make sure overlay is direct child of stage and absolutely positioned
+    // clamp center so the box stays fully inside the image area
+    const imgLeft = s.offsetLeft;
+    const imgTop  = s.offsetTop;
+    const imgRight = s.offsetLeft + s.imgW;
+    const imgBottom = s.offsetTop + s.imgH;
+
+    const halfW = Math.floor(areaWpx / 2);
+    const halfH = Math.floor(areaHpx / 2);
+
+    // clamp horizontally
+    if (centerX - halfW < imgLeft) centerX = imgLeft + halfW;
+    if (centerX + halfW > imgRight) centerX = imgRight - halfW;
+    // clamp vertically
+    if (centerY - halfH < imgTop) centerY = imgTop + halfH;
+    if (centerY + halfH > imgBottom) centerY = imgBottom - halfH;
+
+    // absolutely position a bounded box centered at centerX/centerY
     el.style.position = 'absolute';
     el.style.left = centerX + 'px';
     el.style.top  = centerY + 'px';
-
-    // use translate(-50%,-50%) to center at the coordinate
-    el.style.transform = 'translate(-50%,-50%) rotate(' + ((slot.rotation||0)) + 'deg)';
+    el.style.width = areaWpx + 'px';
+    el.style.height = areaHpx + 'px';
+    el.style.boxSizing = 'border-box';
+    el.style.padding = '0';
     el.style.display = 'flex';
     el.style.alignItems = 'center';
     el.style.justifyContent = 'center';
-    el.style.boxSizing = 'border-box';
-    el.style.padding = '0 6px';
     el.style.pointerEvents = 'none';
-    el.style.whiteSpace = 'nowrap';
-    el.style.overflow = 'hidden';
     el.style.zIndex = (slotKey === 'number' ? 99995 : 99994);
 
-    // font-size calculation (robust)
+    // center using translate and rotation
+    el.style.transform = 'translate(-50%,-50%) rotate(' + ((slot.rotation||0)) + 'deg)';
+
+    // clipping behavior
+    el.style.overflow = 'hidden';
+    el.style.whiteSpace = 'nowrap';
+    el.style.textAlign = 'center';
+
+    // compute font size to fit inside box
     const text = (el.textContent || '').toString().trim() || (slotKey === 'number' ? '09' : 'NAME');
     const chars = Math.max(1, text.length);
     const isMobile = window.innerWidth <= 767;
-    const heightCandidate = Math.floor(areaHpx * (slotKey === 'number' ? (isMobile ? 1.05 : 1.0) : 1.0));
-    const avgCharRatio = 0.48;
-    const widthCap = Math.floor((areaWpx * 0.95) / (chars * avgCharRatio));
-    let fontSize = Math.floor(Math.min(heightCandidate, widthCap));
-    const maxAllowed = Math.max(14, Math.floor(s.stageW * (isMobile ? 0.45 : 0.32)));
-    fontSize = Math.max(8, Math.min(fontSize, maxAllowed));
-    fontSize = Math.floor(fontSize * 1.08);
+    const pad = 6;
+    const availW = Math.max(8, (areaWpx - pad * 2));
+    const availH = Math.max(8, areaHpx);
+
+    const avgCharRatio = (slotKey === 'number') ? 0.55 : 0.5;
+    let fontSizeByHeight = Math.floor(availH * (slotKey === 'number' ? 0.9 : 0.85));
+    let fontSizeByWidth  = Math.floor(availW / Math.max(1, chars * avgCharRatio));
+    let fontSize = Math.min(fontSizeByHeight, fontSizeByWidth);
+    const stageLimit = Math.max(14, Math.floor(s.stageW * (isMobile ? 0.45 : 0.32)));
+    fontSize = Math.max(8, Math.min(fontSize, stageLimit));
+    fontSize = Math.floor(fontSize * 1.02);
 
     el.style.fontSize = fontSize + 'px';
     el.style.lineHeight = '1';
     el.style.fontWeight = '700';
+    el.style.letterSpacing = (slotKey === 'number' ? '0.5px' : '1.2px');
 
-    // reduce until fits
+    // small loop to reduce if still overflowing horizontally
     let attempts = 0;
     while (el.scrollWidth > el.clientWidth && fontSize > 7 && attempts < 30) {
       fontSize = Math.max(7, Math.floor(fontSize * 0.92));
       el.style.fontSize = fontSize + 'px';
       attempts++;
     }
-
-    // DEBUG: log computed values (remove/comment in production)
-    // console.log('placeOverlay', slotKey, {centerX, centerY, areaWpx, areaHpx, fontSize, s});
   } catch (err) {
     console.warn('placeOverlay error', err);
   }
