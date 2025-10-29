@@ -78,7 +78,7 @@
   .font-impact{font-family:Impact, 'Arial Black', sans-serif;}
 
   /* match designer stage exactly */
-  .np-stage { position: relative; width: 100%; max-width: 534px; margin: 0 auto; background:#fff; border-radius:8px; box-sizing: border-box; overflow: visible; }
+  .np-stage { position: relative; width: 100%; max-width: 534px; margin: 0 auto; background:#fff; border-radius:8px; box-sizing: border-box; overflow: hidden; }
   .np-stage img { width:100%; height:auto; border-radius:6px; display:block; }
 
   /* overlay styling (same as designer) */
