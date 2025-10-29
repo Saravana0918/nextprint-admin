@@ -873,48 +873,76 @@ function placeOverlay(el, slot, slotKey) {
             const layoutLocal = (typeof window.layoutSlots === 'object' && Object.keys(window.layoutSlots || {}).length) ? window.layoutSlots : layout;
 
             function modalPlace(el, slot, slotKey){
-              if (!el || !slot) return;
-              const centerX = Math.round(s.offsetLeft + ((slot.left_pct||50)/100) * s.imgW + ((slot.width_pct||0)/200) * s.imgW);
-              const centerY = Math.round(s.offsetTop  + ((slot.top_pct||50)/100)  * s.imgH + ((slot.height_pct||0)/200) * s.imgH);
-              const areaWpx = Math.max(8, Math.round(((slot.width_pct||10)/100) * s.imgW));
-              const areaHpx = Math.max(8, Math.round(((slot.height_pct||10)/100) * s.imgH));
+  if (!el || !slot) return;
 
-              el.style.position = 'absolute';
-              el.style.left = centerX + 'px';
-              el.style.top  = centerY + 'px';
-              el.style.width = areaWpx + 'px';
-              el.style.height = areaHpx + 'px';
-              el.style.transform = 'translate(-50%,-50%) rotate(' + ((slot.rotation||0)) + 'deg)';
-              el.style.display = 'flex';
-              el.style.alignItems = 'center';
-              el.style.justifyContent = 'center';
-              el.style.pointerEvents = 'none';
-              el.style.whiteSpace = 'nowrap';
-              el.style.overflow = 'hidden';
-              el.style.boxSizing = 'border-box';
-              el.style.padding = '0 6px';
+  // compute center relative to modal image rect s.img
+  const centerX = Math.round(s.offsetLeft + ((slot.left_pct||50)/100) * s.imgW);
+  const centerY = Math.round(s.offsetTop  + ((slot.top_pct||50)/100)  * s.imgH);
 
-              const txt = (el.textContent || '').toString().trim() || (slotKey === 'number' ? '09' : 'NAME');
-              const chars = Math.max(1, txt.length);
-              const isMobile = window.innerWidth <= 767;
-              const heightCandidate = Math.floor(areaHpx * (slotKey === 'number' ? (isMobile?1.05:1.0) : 1.0));
-              const avgCharRatio = 0.48;
-              const widthCap = Math.floor((areaWpx * 0.95) / (chars * avgCharRatio));
-              let fs = Math.floor(Math.min(heightCandidate, widthCap));
-              const maxAllowed = Math.max(14, Math.floor(s.stageW * (isMobile ? 0.45 : 0.32)));
-              fs = Math.max(8, Math.min(fs, maxAllowed));
-              fs = Math.floor(fs * 1.08);
-              el.style.fontSize = fs + 'px';
-              el.style.lineHeight = '1';
-              el.style.fontWeight = '700';
+  // compute area for overlay box
+  const areaWpx = Math.max(8, Math.round(((slot.width_pct||10)/100) * s.imgW));
+  const areaHpx = Math.max(8, Math.round(((slot.height_pct||10)/100) * s.imgH));
 
-              let attempts = 0;
-              while (el.scrollWidth > el.clientWidth && fs > 7 && attempts < 30) {
-                fs = Math.max(7, Math.floor(fs * 0.92));
-                el.style.fontSize = fs + 'px';
-                attempts++;
-              }
-            }
+  // clamp so box never leaves modal image bounds
+  const imgLeft = s.offsetLeft;
+  const imgTop  = s.offsetTop;
+  const imgRight = s.offsetLeft + s.imgW;
+  const imgBottom = s.offsetTop + s.imgH;
+
+  const halfW = Math.floor(areaWpx / 2);
+  const halfH = Math.floor(areaHpx / 2);
+
+  let cx = centerX, cy = centerY;
+  if (cx - halfW < imgLeft) cx = imgLeft + halfW;
+  if (cx + halfW > imgRight) cx = imgRight - halfW;
+  if (cy - halfH < imgTop) cy = imgTop + halfH;
+  if (cy + halfH > imgBottom) cy = imgBottom - halfH;
+
+  // apply absolute box sizing & center transform
+  el.style.position = 'absolute';
+  el.style.left = cx + 'px';
+  el.style.top  = cy + 'px';
+  el.style.width = areaWpx + 'px';
+  el.style.height = areaHpx + 'px';
+  el.style.transform = 'translate(-50%,-50%) rotate(' + ((slot.rotation||0)) + 'deg)';
+  el.style.display = 'flex';
+  el.style.alignItems = 'center';
+  el.style.justifyContent = 'center';
+  el.style.boxSizing = 'border-box';
+  el.style.padding = '0 6px';
+  el.style.pointerEvents = 'none';
+  el.style.whiteSpace = 'nowrap';
+  el.style.overflow = 'hidden';
+  el.style.textAlign = 'center';
+  el.style.zIndex = (slotKey === 'number' ? 99995 : 99994);
+
+  // font sizing inside the box (fit to width/height)
+  const txt = (el.textContent || '').toString().trim() || (slotKey === 'number' ? '09' : 'NAME');
+  const chars = Math.max(1, txt.length);
+  const isMobile = window.innerWidth <= 767;
+  const pad = 6;
+  const availW = Math.max(8, (areaWpx - pad * 2));
+  const availH = Math.max(8, areaHpx);
+  const avgCharRatio = (slotKey === 'number') ? 0.55 : 0.5;
+  let fsByH = Math.floor(availH * (slotKey === 'number' ? 0.9 : 0.85));
+  let fsByW = Math.floor(availW / Math.max(1, chars * avgCharRatio));
+  let fs = Math.min(fsByH, fsByW);
+  const maxAllowed = Math.max(14, Math.floor(s.stageW * (isMobile ? 0.45 : 0.32)));
+  fs = Math.max(8, Math.min(fs, maxAllowed));
+  fs = Math.floor(fs * 1.02);
+  el.style.fontSize = fs + 'px';
+  el.style.lineHeight = '1';
+  el.style.fontWeight = '700';
+
+  // final shrink loop if still overflowing (safety)
+  let attempts = 0;
+  while (el.scrollWidth > el.clientWidth && fs > 7 && attempts < 30) {
+    fs = Math.max(7, Math.floor(fs * 0.92));
+    el.style.fontSize = fs + 'px';
+    attempts++;
+  }
+}
+
 
             const modalNameEl = modalStage.querySelector('#overlay-name') || modalStage.querySelector('.np-overlay');
             const modalNumEl  = modalStage.querySelector('#overlay-number') || (modalStage.querySelectorAll('.np-overlay')[1] || null);
