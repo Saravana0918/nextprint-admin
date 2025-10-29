@@ -9,7 +9,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Http\Response;
 
 class ProductController extends Controller
 {
@@ -53,8 +52,6 @@ class ProductController extends Controller
                 DB::raw('COALESCE(m.methods, "") as methods'),
                 'p.preview_src' // include direct preview_src from products table
             ])
-
-            // Ensure priority: product.preview_src -> pv.image_path -> sp.image_url -> p.thumbnail
             ->selectRaw("
                 COALESCE(
                   NULLIF(p.preview_src, ''),
@@ -64,10 +61,7 @@ class ProductController extends Controller
                 ) as preview_image
             ")
             ->orderBy('p.id', 'desc')
-
-            // <-- filter by Shopify "Show in NextPrint" collection/tag
             ->where('p.is_in_nextprint', 1)
-
             ->paginate(30);
 
         // build preview_src absolute URL for each row
@@ -153,16 +147,28 @@ class ProductController extends Controller
 
         // prefer preview_src, then thumbnail
         $bg = $product->preview_src ?? $product->thumbnail ?? null;
-            if ((empty($view->bg_image_url) || is_null($view->bg_image_url)) && !empty($bg)) {
-                // ensure we store relative path (strip leading /storage/ if present)
-                if (preg_match('~^/storage/(.+)$~', $bg, $m)) {
-                    $bg = $m[1];
-                } elseif (preg_match('~^https?://.+/storage/(.+)$~', $bg, $m)) {
-                    $bg = $m[1];
-                }
-                $view->bg_image_url = $bg;
-                $view->save();
+
+        if (!empty($bg)) {
+            // normalize stored value to RELATIVE path (strip leading /storage/ or full url)
+            if (preg_match('~^/storage/(.+)$~', $bg, $m)) {
+                $bgRel = $m[1];
+            } elseif (preg_match('~^https?://.+/storage/(.+)$~', $bg, $m)) {
+                $bgRel = $m[1];
+            } elseif (preg_match('~^public/(.+)$~', $bg, $m)) {
+                $bgRel = $m[1];
+            } else {
+                $bgRel = ltrim($bg, '/');
             }
+
+            // If view doesn't have image_path or bg_image_url, set them now
+            if (empty($view->image_path) || is_null($view->image_path)) {
+                $view->image_path = $bgRel;
+            }
+            if (empty($view->bg_image_url) || is_null($view->bg_image_url)) {
+                $view->bg_image_url = $bgRel;
+            }
+            $view->save();
+        }
 
         // redirect to areas editor
         return redirect()->route('admin.areas.edit', [$product->id, $view->id]);
@@ -186,101 +192,160 @@ class ProductController extends Controller
      * POST /admin/products/{product}/preview
      */
     public function uploadPreview(Request $request, $productId)
-{
-    try {
-        $product = Product::findOrFail($productId);
+    {
+        try {
+            $product = Product::findOrFail($productId);
 
-        if (!$request->hasFile('preview_image')) {
-            return response()->json(['message' => 'No file uploaded'], 422);
-        }
-
-        $request->validate([
-            'preview_image' => 'image|max:5120' // 5MB
-        ]);
-
-        $file = $request->file('preview_image');
-
-        // STORE correctly on the "public" disk. This returns "product-previews/filename.jpg"
-        $relative = $file->store('product-previews', 'public');
-
-        // delete old file if exists (handle old value formats)
-        $old = $product->preview_src;
-        if (!empty($old)) {
-            // old might be: "product-previews/..", "/storage/product-previews/..", "/storage/public/product-previews/..", or full URL
-            if (preg_match('~^/storage/(.+)$~', $old, $m)) {
-                $oldRel = $m[1];
-            } elseif (preg_match('~^https?://.+/storage/(.+)$~', $old, $m)) {
-                $oldRel = $m[1];
-            } elseif (preg_match('~^public/(.+)$~', $old, $m)) {
-                $oldRel = $m[1];
-            } else {
-                // assume already relative
-                $oldRel = $old;
+            if (!$request->hasFile('preview_image')) {
+                return response()->json(['message' => 'No file uploaded'], 422);
             }
 
-            if ($oldRel && Storage::disk('public')->exists($oldRel)) {
-                Storage::disk('public')->delete($oldRel);
-                Log::info('Deleted old preview during upload', ['file' => $oldRel, 'product_id' => $product->id]);
+            $request->validate([
+                'preview_image' => 'image|max:5120' // 5MB
+            ]);
+
+            $file = $request->file('preview_image');
+
+            // STORE correctly on the "public" disk. This returns "product-previews/filename.jpg"
+            $relative = $file->store('product-previews', 'public');
+
+            // delete old file if exists (handle old value formats)
+            $old = $product->preview_src;
+            if (!empty($old)) {
+                if (preg_match('~^/storage/(.+)$~', $old, $m)) {
+                    $oldRel = $m[1];
+                } elseif (preg_match('~^https?://.+/storage/(.+)$~', $old, $m)) {
+                    $oldRel = $m[1];
+                } elseif (preg_match('~^public/(.+)$~', $old, $m)) {
+                    $oldRel = $m[1];
+                } else {
+                    $oldRel = $old;
+                }
+
+                if (!empty($oldRel) && Storage::disk('public')->exists($oldRel)) {
+                    Storage::disk('public')->delete($oldRel);
+                    Log::info('Deleted old preview during upload', ['file' => $oldRel, 'product_id' => $product->id]);
+                }
             }
+
+            // Save RELATIVE path to DB (no leading "public/" or "/storage/")
+            $product->preview_src = $relative;
+            $product->touch();
+            $product->save();
+
+            // LOG
+            Log::info('Product preview uploaded', ['product_id' => $product->id, 'path' => $relative]);
+
+            // Also insert into product_previews table for history (optional, safe-guard)
+            try {
+                DB::table('product_previews')->insert([
+                    'product_id' => $product->id,
+                    'path'       => $relative,
+                    'url'        => Storage::disk('public')->url($relative),
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]);
+            } catch (\Throwable $e) {
+                Log::warning('Could not insert product_previews row: ' . $e->getMessage());
+            }
+
+            // Update the product_views record (first/front view) so Decoration Area sees it immediately
+            try {
+                $view = $product->views()->first();
+                if (!$view) {
+                    $view = $product->views()->create([
+                        'name' => 'Front',
+                        'dpi' => 300,
+                        'rotation' => 0,
+                        'image_path' => null,
+                        'bg_image_url' => null
+                    ]);
+                }
+
+                // store relative path for image_path & bg_image_url
+                $view->image_path = $relative;
+                $view->bg_image_url = $relative;
+                // also optional fields some code expects (candidate/relative/bgUrl)
+                if (Schema::hasColumn('product_views', 'candidate')) {
+                    $view->candidate = '/storage/' . $relative;
+                }
+                if (Schema::hasColumn('product_views', 'relative')) {
+                    $view->relative = $relative;
+                }
+                $view->save();
+
+                Log::info('Updated product_view with preview', ['product_id' => $product->id, 'view_id' => $view->id, 'image_path' => $relative]);
+            } catch (\Throwable $e) {
+                Log::warning('Could not update product_views row: ' . $e->getMessage());
+            }
+
+            // return public URL for client usage
+            $publicUrl = Storage::disk('public')->url($relative); // /storage/product-previews/xxx.jpg
+
+            return response()->json(['url' => $publicUrl, 'path' => $relative], 200);
+        } catch (\Throwable $e) {
+            Log::error('uploadPreview error: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
+            return response()->json(['message' => 'Upload failed'], 500);
         }
-
-        // Save RELATIVE path to DB (no leading "public/" or "/storage/")
-        $product->preview_src = $relative;
-        $product->touch();
-        $product->save();
-
-        Log::info('Product preview uploaded', ['product_id' => $product->id, 'path' => $relative]);
-
-        // return public URL for client usage
-        $publicUrl = Storage::disk('public')->url($relative); // /storage/product-previews/xxx.jpg
-
-        return response()->json(['url' => $publicUrl, 'path' => $relative], 200);
-    } catch (\Throwable $e) {
-        Log::error('uploadPreview error: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
-        return response()->json(['message' => 'Upload failed'], 500);
     }
-}
-
 
     /**
      * Delete preview image for a product (AJAX)
      * DELETE /admin/products/{product}/preview
      */
     public function deletePreview($productId)
-{
-    try {
-        $product = Product::findOrFail($productId);
+    {
+        try {
+            $product = Product::findOrFail($productId);
 
-        $deleted = false;
-        $old = $product->preview_src;
+            $deleted = false;
+            $old = $product->preview_src;
 
-        if (!empty($old)) {
-            if (preg_match('~^/storage/(.+)$~', $old, $m)) {
-                $relative = $m[1];
-            } elseif (preg_match('~^https?://.+/storage/(.+)$~', $old, $m)) {
-                $relative = $m[1];
-            } elseif (preg_match('~^public/(.+)$~', $old, $m)) {
-                $relative = $m[1];
-            } else {
-                $relative = $old;
+            if (!empty($old)) {
+                if (preg_match('~^/storage/(.+)$~', $old, $m)) {
+                    $relative = $m[1];
+                } elseif (preg_match('~^https?://.+/storage/(.+)$~', $old, $m)) {
+                    $relative = $m[1];
+                } elseif (preg_match('~^public/(.+)$~', $old, $m)) {
+                    $relative = $m[1];
+                } else {
+                    $relative = $old;
+                }
+
+                if ($relative && Storage::disk('public')->exists($relative)) {
+                    Storage::disk('public')->delete($relative);
+                    Log::info('Deleted preview file', ['file' => $relative, 'product_id' => $product->id]);
+                    $deleted = true;
+                }
             }
 
-            if ($relative && Storage::disk('public')->exists($relative)) {
-                Storage::disk('public')->delete($relative);
-                Log::info('Deleted preview file', ['file' => $relative, 'product_id' => $product->id]);
-                $deleted = true;
+            // unset preview on product
+            $product->preview_src = null;
+            $product->touch();
+            $product->save();
+
+            // Also clear view image if present
+            try {
+                $view = $product->views()->first();
+                if ($view) {
+                    $view->image_path = null;
+                    $view->bg_image_url = null;
+                    if (Schema::hasColumn('product_views', 'candidate')) {
+                        $view->candidate = null;
+                    }
+                    if (Schema::hasColumn('product_views', 'relative')) {
+                        $view->relative = null;
+                    }
+                    $view->save();
+                }
+            } catch (\Throwable $e) {
+                Log::warning('Could not clear product_views row on delete: ' . $e->getMessage());
             }
+
+            return response()->json(['ok' => true, 'deleted' => $deleted], 200);
+        } catch (\Throwable $e) {
+            Log::error('deletePreview error: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
+            return response()->json(['message' => 'Delete failed'], 500);
         }
-
-        $product->preview_src = null;
-        $product->touch();
-        $product->save();
-
-        return response()->json(['ok' => true, 'deleted' => $deleted], 200);
-    } catch (\Throwable $e) {
-        Log::error('deletePreview error: ' . $e->getMessage(), ['trace' => $e->getTraceAsString()]);
-        return response()->json(['message' => 'Delete failed'], 500);
     }
-}
-
 }
