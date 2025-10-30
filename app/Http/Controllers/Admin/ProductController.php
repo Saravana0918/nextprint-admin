@@ -15,72 +15,95 @@ class ProductController extends Controller
     /**
      * Product listing for admin (with preview_src build)
      */
-    public function index()
-    {
-        Log::info('ADMIN CHECK - products in DB flagged', ['count' => DB::table('products')->where('is_in_nextprint',1)->count()]);
+    /**
+ * Product listing for admin (with preview_src build) + search
+ */
+public function index(Request $request)
+{
+    // optional debug
+    Log::info('ADMIN CHECK - products in DB flagged', ['count' => DB::table('products')->where('is_in_nextprint',1)->count()]);
 
-        $rows = DB::table('products as p')
-            ->leftJoin('shopify_products as sp', 'sp.id', '=', 'p.shopify_product_id')
+    $q = trim($request->query('q', ''));
 
-            ->leftJoin(DB::raw("
-                (
-                SELECT ppm.product_id,
-                        GROUP_CONCAT(pm.name, ', ') AS methods
-                FROM product_print_method ppm
-                JOIN print_methods pm ON pm.id = ppm.print_method_id
-                GROUP BY ppm.product_id
-                ) m
-            "), 'm.product_id', '=', 'p.id')
+    // build base query (same joins as before)
+    $query = DB::table('products as p')
+        ->leftJoin('shopify_products as sp', 'sp.id', '=', 'p.shopify_product_id')
+        ->leftJoin(DB::raw("
+            (
+            SELECT ppm.product_id,
+                    GROUP_CONCAT(pm.name, ', ') AS methods
+            FROM product_print_method ppm
+            JOIN print_methods pm ON pm.id = ppm.print_method_id
+            GROUP BY ppm.product_id
+            ) m
+        "), 'm.product_id', '=', 'p.id')
+        ->leftJoin(DB::raw("
+            (
+              SELECT v1.*
+              FROM product_views v1
+              JOIN (
+                  SELECT product_id, MIN(id) AS id
+                  FROM product_views
+                  GROUP BY product_id
+              ) x ON x.product_id = v1.product_id AND x.id = v1.id
+            ) pv
+        "), 'pv.product_id', '=', 'p.id')
+        ->select([
+            'p.id','p.name','sp.vendor','sp.status','sp.min_price',
+            DB::raw('pv.image_path  as view_image'),
+            DB::raw('sp.image_url   as shop_image'),
+            DB::raw('p.thumbnail    as legacy_image'),
+            DB::raw('COALESCE(m.methods, "") as methods'),
+            'p.preview_src' // direct preview_src from products table
+        ])
+        ->selectRaw("
+            COALESCE(
+              NULLIF(p.preview_src, ''),
+              NULLIF(pv.image_path, ''),
+              NULLIF(sp.image_url, ''),
+              NULLIF(p.thumbnail, '')
+            ) as preview_image
+        ")
+        ->where('p.is_in_nextprint', 1);
 
-            ->leftJoin(DB::raw("
-                (
-                  SELECT v1.*
-                  FROM product_views v1
-                  JOIN (
-                      SELECT product_id, MIN(id) AS id
-                      FROM product_views
-                      GROUP BY product_id
-                  ) x ON x.product_id = v1.product_id AND x.id = v1.id
-                ) pv
-            "), 'pv.product_id', '=', 'p.id')
-
-            ->select([
-                'p.id','p.name','sp.vendor','sp.status','sp.min_price',
-                DB::raw('pv.image_path  as view_image'),
-                DB::raw('sp.image_url   as shop_image'),
-                DB::raw('p.thumbnail    as legacy_image'),
-                DB::raw('COALESCE(m.methods, "") as methods'),
-                'p.preview_src' // include direct preview_src from products table
-            ])
-            ->selectRaw("
-                COALESCE(
-                  NULLIF(p.preview_src, ''),
-                  NULLIF(pv.image_path, ''),
-                  NULLIF(sp.image_url, ''),
-                  NULLIF(p.thumbnail, '')
-                ) as preview_image
-            ")
-            ->orderBy('p.id', 'desc')
-            ->where('p.is_in_nextprint', 1)
-            ->paginate(30);
-
-        // build preview_src absolute URL for each row
-        foreach ($rows as $r) {
-            $raw = $r->preview_image;
-            if (!$raw) { $r->preview_src = null; continue; }
-            $raw = str_replace('\\','/',$raw);
-            if (preg_match('~^https?://~i',$raw)) {
-                $r->preview_src = $raw;
-                continue;
-            }
-            // remove leading storage/public
-            $raw = preg_replace('~^/?(storage|public)/~','', $raw);
-            $raw = ltrim($raw,'/');
-            $r->preview_src = Storage::disk('public')->url($raw);
-        }
-
-        return view('admin.products.index', compact('rows'));
+    // Apply search filter if provided
+    if ($q !== '') {
+        $search = $q;
+        $query->where(function($sub) use ($search) {
+            $sub->where('p.name', 'like', "%{$search}%")
+                ->orWhere('p.id', $search)
+                ->orWhere('sp.vendor', 'like', "%{$search}%")
+                ->orWhere('p.sku', 'like', "%{$search}%");
+        });
     }
+
+    // order & paginate
+    $perPage = 30;
+    $rows = $query->orderBy('p.id', 'desc')->paginate($perPage);
+
+    // keep q in pagination links
+    if ($q !== '') {
+        $rows->appends(['q' => $q]);
+    }
+
+    // build preview_src absolute URL for each row (same logic as before)
+    foreach ($rows as $r) {
+        $raw = $r->preview_image;
+        if (!$raw) { $r->preview_src = null; continue; }
+        $raw = str_replace('\\','/',$raw);
+        if (preg_match('~^https?://~i',$raw)) {
+            $r->preview_src = $raw;
+            continue;
+        }
+        // remove leading storage/public
+        $raw = preg_replace('~^/?(storage|public)/~','', $raw);
+        $raw = ltrim($raw,'/');
+        $r->preview_src = Storage::disk('public')->url($raw);
+    }
+
+    return view('admin.products.index', compact('rows', 'q'));
+}
+
 
     /**
      * Edit product page

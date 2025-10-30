@@ -21,6 +21,33 @@
   </div>
 </div>
 
+<!-- ====== SEARCH BAR: paste this directly below the header block ====== -->
+<div class="row mb-3">
+  <div class="col-md-8">
+    <form method="GET" action="{{ url('admin/products') }}" class="d-flex" id="products-search-form" role="search">
+      <div class="input-group w-100">
+        <input
+          type="search"
+          name="q"
+          value="{{ request()->query('q') }}"
+          class="form-control"
+          placeholder="Search by name, ID, vendor, SKU..."
+          aria-label="Search products"
+        >
+        <button class="btn btn-primary" type="submit">
+          <i class="bi bi-search"></i> Search
+        </button>
+        <button class="btn btn-outline-secondary" type="button" id="clear-search-btn">Clear</button>
+      </div>
+    </form>
+  </div>
+
+  @if(!empty($q))
+  <div class="mb-2">
+    <small class="text-muted">Showing results for: <strong>{{ $q }}</strong></small>
+  </div>
+@endif
+
 <div class="table-responsive">
   <table class="table">
     <thead>
@@ -241,6 +268,20 @@ document.addEventListener('DOMContentLoaded', function(){
     a.innerText = msg;
     a.style.display = 'block';
   }
+});
+</script>
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+  const clearBtn = document.getElementById('clear-search-btn');
+  if (!clearBtn) return;
+  clearBtn.addEventListener('click', function(){
+    const input = document.querySelector('#products-search-form input[name="q"]');
+    if (input) {
+      input.value = '';
+      // submit empty to reset
+      document.getElementById('products-search-form').submit();
+    }
+  });
 });
 </script>
 @endpush
