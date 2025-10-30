@@ -221,7 +221,7 @@ class ProductController extends Controller
             }
 
             $request->validate([
-                'preview_image' => 'image|max:5120' // 5MB
+            'preview_image' => 'image|max:20480' // 20MB
             ]);
 
             $file = $request->file('preview_image');
