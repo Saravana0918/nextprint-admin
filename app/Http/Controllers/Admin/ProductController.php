@@ -9,101 +9,98 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 class ProductController extends Controller
 {
     /**
-     * Product listing for admin (with preview_src build)
+     * Product listing for admin (with preview_src build) + search
      */
-    /**
- * Product listing for admin (with preview_src build) + search
- */
-public function index(Request $request)
-{
-    // optional debug
-    Log::info('ADMIN CHECK - products in DB flagged', ['count' => DB::table('products')->where('is_in_nextprint',1)->count()]);
+    public function index(Request $request)
+    {
+        // optional debug
+        Log::info('ADMIN CHECK - products in DB flagged', ['count' => DB::table('products')->where('is_in_nextprint',1)->count()]);
 
-    $q = trim($request->query('q', ''));
+        $q = trim($request->query('q', ''));
 
-    // build base query (same joins as before)
-    $query = DB::table('products as p')
-        ->leftJoin('shopify_products as sp', 'sp.id', '=', 'p.shopify_product_id')
-        ->leftJoin(DB::raw("
-            (
-            SELECT ppm.product_id,
-                    GROUP_CONCAT(pm.name, ', ') AS methods
-            FROM product_print_method ppm
-            JOIN print_methods pm ON pm.id = ppm.print_method_id
-            GROUP BY ppm.product_id
-            ) m
-        "), 'm.product_id', '=', 'p.id')
-        ->leftJoin(DB::raw("
-            (
-              SELECT v1.*
-              FROM product_views v1
-              JOIN (
-                  SELECT product_id, MIN(id) AS id
-                  FROM product_views
-                  GROUP BY product_id
-              ) x ON x.product_id = v1.product_id AND x.id = v1.id
-            ) pv
-        "), 'pv.product_id', '=', 'p.id')
-        ->select([
-            'p.id','p.name','sp.vendor','sp.status','sp.min_price',
-            DB::raw('pv.image_path  as view_image'),
-            DB::raw('sp.image_url   as shop_image'),
-            DB::raw('p.thumbnail    as legacy_image'),
-            DB::raw('COALESCE(m.methods, "") as methods'),
-            'p.preview_src' // direct preview_src from products table
-        ])
-        ->selectRaw("
-            COALESCE(
-              NULLIF(p.preview_src, ''),
-              NULLIF(pv.image_path, ''),
-              NULLIF(sp.image_url, ''),
-              NULLIF(p.thumbnail, '')
-            ) as preview_image
-        ")
-        ->where('p.is_in_nextprint', 1);
+        // build base query (same joins as before)
+        $query = DB::table('products as p')
+            ->leftJoin('shopify_products as sp', 'sp.id', '=', 'p.shopify_product_id')
+            ->leftJoin(DB::raw("
+                (
+                SELECT ppm.product_id,
+                        GROUP_CONCAT(pm.name, ', ') AS methods
+                FROM product_print_method ppm
+                JOIN print_methods pm ON pm.id = ppm.print_method_id
+                GROUP BY ppm.product_id
+                ) m
+            "), 'm.product_id', '=', 'p.id')
+            ->leftJoin(DB::raw("
+                (
+                  SELECT v1.*
+                  FROM product_views v1
+                  JOIN (
+                      SELECT product_id, MIN(id) AS id
+                      FROM product_views
+                      GROUP BY product_id
+                  ) x ON x.product_id = v1.product_id AND x.id = v1.id
+                ) pv
+            "), 'pv.product_id', '=', 'p.id')
+            ->select([
+                'p.id','p.name','sp.vendor','sp.status','sp.min_price',
+                DB::raw('pv.image_path  as view_image'),
+                DB::raw('sp.image_url   as shop_image'),
+                DB::raw('p.thumbnail    as legacy_image'),
+                DB::raw('COALESCE(m.methods, "") as methods'),
+                'p.preview_src' // direct preview_src from products table
+            ])
+            ->selectRaw("
+                COALESCE(
+                  NULLIF(p.preview_src, ''),
+                  NULLIF(pv.image_path, ''),
+                  NULLIF(sp.image_url, ''),
+                  NULLIF(p.thumbnail, '')
+                ) as preview_image
+            ")
+            ->where('p.is_in_nextprint', 1);
 
-    // Apply search filter if provided
-    if ($q !== '') {
-        $search = $q;
-        $query->where(function($sub) use ($search) {
-            $sub->where('p.name', 'like', "%{$search}%")
-                ->orWhere('p.id', $search)
-                ->orWhere('sp.vendor', 'like', "%{$search}%")
-                ->orWhere('p.sku', 'like', "%{$search}%");
-        });
-    }
-
-    // order & paginate
-    $perPage = 30;
-    $rows = $query->orderBy('p.id', 'desc')->paginate($perPage);
-
-    // keep q in pagination links
-    if ($q !== '') {
-        $rows->appends(['q' => $q]);
-    }
-
-    // build preview_src absolute URL for each row (same logic as before)
-    foreach ($rows as $r) {
-        $raw = $r->preview_image;
-        if (!$raw) { $r->preview_src = null; continue; }
-        $raw = str_replace('\\','/',$raw);
-        if (preg_match('~^https?://~i',$raw)) {
-            $r->preview_src = $raw;
-            continue;
+        // Apply search filter if provided
+        if ($q !== '') {
+            $search = $q;
+            $query->where(function($sub) use ($search) {
+                $sub->where('p.name', 'like', "%{$search}%")
+                    ->orWhere('p.id', $search)
+                    ->orWhere('sp.vendor', 'like', "%{$search}%")
+                    ->orWhere('p.sku', 'like', "%{$search}%");
+            });
         }
-        // remove leading storage/public
-        $raw = preg_replace('~^/?(storage|public)/~','', $raw);
-        $raw = ltrim($raw,'/');
-        $r->preview_src = Storage::disk('public')->url($raw);
+
+        // order & paginate
+        $perPage = 30;
+        $rows = $query->orderBy('p.id', 'desc')->paginate($perPage);
+
+        // keep q in pagination links
+        if ($q !== '') {
+            $rows->appends(['q' => $q]);
+        }
+
+        // build preview_src absolute URL for each row (same logic as before)
+        foreach ($rows as $r) {
+            $raw = $r->preview_image;
+            if (!$raw) { $r->preview_src = null; continue; }
+            $raw = str_replace('\\','/',$raw);
+            if (preg_match('~^https?://~i',$raw)) {
+                $r->preview_src = $raw;
+                continue;
+            }
+            // remove leading storage/public
+            $raw = preg_replace('~^/?(storage|public)/~','', $raw);
+            $raw = ltrim($raw,'/');
+            $r->preview_src = Storage::disk('public')->url($raw);
+        }
+
+        return view('admin.products.index', compact('rows', 'q'));
     }
-
-    return view('admin.products.index', compact('rows', 'q'));
-}
-
 
     /**
      * Edit product page
@@ -260,16 +257,18 @@ public function index(Request $request)
             Log::info('Product preview uploaded', ['product_id' => $product->id, 'path' => $relative]);
 
             // Also insert into product_previews table for history (optional, safe-guard)
-            try {
-                DB::table('product_previews')->insert([
-                    'product_id' => $product->id,
-                    'path'       => $relative,
-                    'url'        => Storage::disk('public')->url($relative),
-                    'created_at' => now(),
-                    'updated_at' => now()
-                ]);
-            } catch (\Throwable $e) {
-                Log::warning('Could not insert product_previews row: ' . $e->getMessage());
+            if (Schema::hasTable('product_previews')) {
+                try {
+                    DB::table('product_previews')->insert([
+                        'product_id' => $product->id,
+                        'path'       => $relative,
+                        'url'        => Storage::disk('public')->url($relative),
+                        'created_at' => now(),
+                        'updated_at' => now()
+                    ]);
+                } catch (\Throwable $e) {
+                    Log::warning('Could not insert product_previews row: ' . $e->getMessage());
+                }
             }
 
             // Update the product_views record (first/front view) so Decoration Area sees it immediately
@@ -288,13 +287,17 @@ public function index(Request $request)
                 // store relative path for image_path & bg_image_url
                 $view->image_path = $relative;
                 $view->bg_image_url = $relative;
-                // also optional fields some code expects (candidate/relative/bgUrl)
-                if (Schema::hasColumn('product_views', 'candidate')) {
-                    $view->candidate = '/storage/' . $relative;
+
+                // protect Schema::hasColumn calls with hasTable
+                if (Schema::hasTable('product_views')) {
+                    if (Schema::hasColumn('product_views', 'candidate')) {
+                        $view->candidate = '/storage/' . $relative;
+                    }
+                    if (Schema::hasColumn('product_views', 'relative')) {
+                        $view->relative = $relative;
+                    }
                 }
-                if (Schema::hasColumn('product_views', 'relative')) {
-                    $view->relative = $relative;
-                }
+
                 $view->save();
 
                 Log::info('Updated product_view with preview', ['product_id' => $product->id, 'view_id' => $view->id, 'image_path' => $relative]);
@@ -353,11 +356,13 @@ public function index(Request $request)
                 if ($view) {
                     $view->image_path = null;
                     $view->bg_image_url = null;
-                    if (Schema::hasColumn('product_views', 'candidate')) {
-                        $view->candidate = null;
-                    }
-                    if (Schema::hasColumn('product_views', 'relative')) {
-                        $view->relative = null;
+                    if (Schema::hasTable('product_views')) {
+                        if (Schema::hasColumn('product_views', 'candidate')) {
+                            $view->candidate = null;
+                        }
+                        if (Schema::hasColumn('product_views', 'relative')) {
+                            $view->relative = null;
+                        }
                     }
                     $view->save();
                 }
