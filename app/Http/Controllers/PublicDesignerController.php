@@ -348,16 +348,30 @@ class PublicDesignerController extends Controller
 
             // Use updateOrCreate to upsert. Adjust column names to match your variants table.
             try {
-                $product->variants()->updateOrCreate(
-                    ['shopify_variant_id' => $variantShopifyId],
-                    [
-                        'title' => $title,
-                        'option_value' => $optionLabel,
-                        // Add mapping for price/sku if your variants table has columns for them
-                        'price' => $price,
-                        'sku' => $sku,
-                    ]
-                );
+                // build upsert payload only for columns present in the product_variants table
+                $data = [
+                    'title' => $title,
+                    'option_value' => $optionLabel,
+                ];
+
+                // add price/sku only if columns exist
+                if (\Schema::hasColumn('product_variants', 'price') && $price !== null) {
+                    $data['price'] = $price;
+                }
+                if (\Schema::hasColumn('product_variants', 'sku') && $sku !== null) {
+                    $data['sku'] = $sku;
+                }
+
+                // upsert
+                try {
+                    $product->variants()->updateOrCreate(
+                        ['shopify_variant_id' => $variantShopifyId],
+                        $data
+                    );
+                } catch (\Throwable $e) {
+                    Log::warning("designer: variant upsert failed for shopify_variant_id={$variantShopifyId} error=" . $e->getMessage());
+                }
+
             } catch (\Throwable $e) {
                 Log::warning("designer: variant upsert failed for shopify_variant_id={$variantShopifyId} error=" . $e->getMessage());
             }
