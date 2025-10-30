@@ -15,6 +15,10 @@ class Kernel extends ConsoleKernel
         \App\Console\Commands\ShopifySyncVariants::class,
     ];
 
+    protected $routeMiddleware = [
+    'admin.basic' => \App\Http\Middleware\HttpBasicAdmin::class,
+    ];
+
     /**
      * Define the application's command schedule.
      */
