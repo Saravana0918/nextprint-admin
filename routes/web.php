@@ -83,7 +83,6 @@ Route::prefix('admin')->name('admin.')->group(function () {
         ->name('design-orders.destroy');
     Route::get('/design-orders/{id}/download', [DesignOrderController::class, 'download'])
     ->name('design-orders.download');
-    Route::get('/products', [\App\Http\Controllers\Admin\ProductController::class, 'index'])->name('admin.products');
 
 }); // end admin
 
