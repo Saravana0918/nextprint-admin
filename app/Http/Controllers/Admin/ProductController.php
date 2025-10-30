@@ -18,12 +18,10 @@ class ProductController extends Controller
      */
     public function index(Request $request)
     {
-        // optional debug
         Log::info('ADMIN CHECK - products in DB flagged', ['count' => DB::table('products')->where('is_in_nextprint',1)->count()]);
 
         $q = trim($request->query('q', ''));
 
-        // build base query (same joins as before)
         $query = DB::table('products as p')
             ->leftJoin('shopify_products as sp', 'sp.id', '=', 'p.shopify_product_id')
             ->leftJoin(DB::raw("
@@ -52,7 +50,7 @@ class ProductController extends Controller
                 DB::raw('sp.image_url   as shop_image'),
                 DB::raw('p.thumbnail    as legacy_image'),
                 DB::raw('COALESCE(m.methods, "") as methods'),
-                'p.preview_src' // direct preview_src from products table
+                'p.preview_src'
             ])
             ->selectRaw("
                 COALESCE(
@@ -64,7 +62,6 @@ class ProductController extends Controller
             ")
             ->where('p.is_in_nextprint', 1);
 
-        // Apply search filter if provided
         if ($q !== '') {
             $search = $q;
             $query->where(function($sub) use ($search) {
@@ -75,16 +72,13 @@ class ProductController extends Controller
             });
         }
 
-        // order & paginate
         $perPage = 30;
         $rows = $query->orderBy('p.id', 'desc')->paginate($perPage);
 
-        // keep q in pagination links
         if ($q !== '') {
             $rows->appends(['q' => $q]);
         }
 
-        // build preview_src absolute URL for each row (same logic as before)
         foreach ($rows as $r) {
             $raw = $r->preview_image;
             if (!$raw) { $r->preview_src = null; continue; }
@@ -93,7 +87,6 @@ class ProductController extends Controller
                 $r->preview_src = $raw;
                 continue;
             }
-            // remove leading storage/public
             $raw = preg_replace('~^/?(storage|public)/~','', $raw);
             $raw = ltrim($raw,'/');
             $r->preview_src = Storage::disk('public')->url($raw);
@@ -107,7 +100,7 @@ class ProductController extends Controller
      */
     public function edit(Product $product)
     {
-        $methods = PrintMethod::all();  // fetch all print methods
+        $methods = PrintMethod::all();
         return view('admin.products.edit', compact('product', 'methods'));
     }
 
@@ -127,7 +120,6 @@ class ProductController extends Controller
 
         $product->update($data);
 
-        // write print methods to pivot
         $ids = $request->input('print_method_ids', []);
         $product->printMethods()->sync($ids);
 
@@ -135,7 +127,7 @@ class ProductController extends Controller
     }
 
     /**
-     * Delete product (hard delete here)
+     * Delete product
      */
     public function destroy(Product $product)
     {
@@ -147,12 +139,10 @@ class ProductController extends Controller
     }
 
     /**
-     * Navigate to Decoration (areas) editor for a product
-     * Ensures the view has a sensible bg image (preview_src preferred)
+     * Go to Decoration editor
      */
     public function goToDecoration(Product $product)
     {
-        // find existing first view or create default "Front"
         $view = $product->views()->first();
 
         if (!$view) {
@@ -165,11 +155,9 @@ class ProductController extends Controller
             ]);
         }
 
-        // prefer preview_src, then thumbnail
         $bg = $product->preview_src ?? $product->thumbnail ?? null;
 
         if (!empty($bg)) {
-            // normalize stored value to RELATIVE path (strip leading /storage/ or full url)
             if (preg_match('~^/storage/(.+)$~', $bg, $m)) {
                 $bgRel = $m[1];
             } elseif (preg_match('~^https?://.+/storage/(.+)$~', $bg, $m)) {
@@ -180,7 +168,6 @@ class ProductController extends Controller
                 $bgRel = ltrim($bg, '/');
             }
 
-            // If view doesn't have image_path or bg_image_url, set them now
             if (empty($view->image_path) || is_null($view->image_path)) {
                 $view->image_path = $bgRel;
             }
@@ -190,12 +177,11 @@ class ProductController extends Controller
             $view->save();
         }
 
-        // redirect to areas editor
         return redirect()->route('admin.areas.edit', [$product->id, $view->id]);
     }
 
     /**
-     * Return product print methods JSON (used elsewhere)
+     * Return product print methods JSON
      */
     public function methodsJson(Product $product)
     {
@@ -220,16 +206,17 @@ class ProductController extends Controller
                 return response()->json(['message' => 'No file uploaded'], 422);
             }
 
+            // allow up to 50MB (Laravel max is in KB)
             $request->validate([
-            'preview_image' => 'image|max:20480' // 20MB
+                'preview_image' => 'image|max:51200' // 50MB
             ]);
 
             $file = $request->file('preview_image');
 
-            // STORE correctly on the "public" disk. This returns "product-previews/filename.jpg"
+            // store on public disk
             $relative = $file->store('product-previews', 'public');
 
-            // delete old file if exists (handle old value formats)
+            // delete old file if exists
             $old = $product->preview_src;
             if (!empty($old)) {
                 if (preg_match('~^/storage/(.+)$~', $old, $m)) {
@@ -248,15 +235,14 @@ class ProductController extends Controller
                 }
             }
 
-            // Save RELATIVE path to DB (no leading "public/" or "/storage/")
+            // save relative path
             $product->preview_src = $relative;
             $product->touch();
             $product->save();
 
-            // LOG
             Log::info('Product preview uploaded', ['product_id' => $product->id, 'path' => $relative]);
 
-            // Also insert into product_previews table for history (optional, safe-guard)
+            // insert into product_previews if table exists
             if (Schema::hasTable('product_previews')) {
                 try {
                     DB::table('product_previews')->insert([
@@ -271,7 +257,7 @@ class ProductController extends Controller
                 }
             }
 
-            // Update the product_views record (first/front view) so Decoration Area sees it immediately
+            // update product_views first view
             try {
                 $view = $product->views()->first();
                 if (!$view) {
@@ -284,11 +270,9 @@ class ProductController extends Controller
                     ]);
                 }
 
-                // store relative path for image_path & bg_image_url
                 $view->image_path = $relative;
                 $view->bg_image_url = $relative;
 
-                // protect Schema::hasColumn calls with hasTable
                 if (Schema::hasTable('product_views')) {
                     if (Schema::hasColumn('product_views', 'candidate')) {
                         $view->candidate = '/storage/' . $relative;
@@ -305,8 +289,7 @@ class ProductController extends Controller
                 Log::warning('Could not update product_views row: ' . $e->getMessage());
             }
 
-            // return public URL for client usage
-            $publicUrl = Storage::disk('public')->url($relative); // /storage/product-previews/xxx.jpg
+            $publicUrl = Storage::disk('public')->url($relative);
 
             return response()->json(['url' => $publicUrl, 'path' => $relative], 200);
         } catch (\Throwable $e) {
@@ -345,12 +328,10 @@ class ProductController extends Controller
                 }
             }
 
-            // unset preview on product
             $product->preview_src = null;
             $product->touch();
             $product->save();
 
-            // Also clear view image if present
             try {
                 $view = $product->views()->first();
                 if ($view) {
