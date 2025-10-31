@@ -241,6 +241,61 @@
   console.info('layoutSlots (server):', window.layoutSlots, 'isBakedPreview=', window.isBakedPreview);
 </script>
 <script>
+  // normalize prefill/font/color so mapping to CSS classes works reliably
+  (function(){
+    try {
+      const pf = window.prefill = window.prefill || {};
+
+      // font normalization: map many variants to short keys used by fontClassMap
+      const FONT_NORMALIZER = {
+        'bebas': 'bebas',
+        'bebas neue': 'bebas',
+        'bebas-neue': 'bebas',
+        'bebas_neue': 'bebas',
+        'bebasneue': 'bebas',
+        'bebas neue': 'bebas',
+        'anton': 'anton',
+        'oswald': 'oswald',
+        'impact': 'impact',
+        'bebas neue': 'bebas'
+      };
+
+      function normalizeFontKey(raw) {
+        if (!raw) return '';
+        let s = String(raw).trim().toLowerCase();
+        // remove punctuation
+        s = s.replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim();
+        if (FONT_NORMALIZER[s]) return FONT_NORMALIZER[s];
+        // try matching contained tokens
+        for (const k in FONT_NORMALIZER) {
+          if (s.indexOf(k) !== -1) return FONT_NORMALIZER[k];
+        }
+        // fallback: take first token
+        return s.split(' ')[0] || s;
+      }
+
+      function normalizeColor(raw) {
+        if (!raw) return '';
+        try { raw = decodeURIComponent(raw); } catch(e){ raw = String(raw); }
+        raw = String(raw).trim();
+        if (raw === '') return '';
+        if (raw[0] !== '#') raw = '#' + raw.replace(/^#*/, '');
+        return raw;
+      }
+
+      if (pf.prefill_font) pf.prefill_font = normalizeFontKey(pf.prefill_font);
+      else if (pf.font) pf.prefill_font = normalizeFontKey(pf.font);
+
+      if (pf.prefill_color) pf.prefill_color = normalizeColor(pf.prefill_color);
+      else if (pf.color) pf.prefill_color = normalizeColor(pf.color);
+
+      // expose normalized values for debug
+      window._pf_normalized = pf;
+      console.info('prefill normalized:', pf);
+    } catch(e) { console.warn('prefill normalizer error', e); }
+  })();
+</script>
+<script>
 document.addEventListener('DOMContentLoaded', function() {
   try {
     if (!window.hasNumberSlot) {
@@ -516,11 +571,11 @@ function placeOverlay(el, slot, slotKey) {
   const anyNameTyped = document.querySelector('.player-name')?.value?.trim().length > 0;
   const anyNumberTyped = document.querySelector('.player-number')?.value?.trim().length > 0;
 
-  if (window.isBakedPreview && !anyNameTyped && !anyNumberTyped) {
-    // On first load, hide overlays so image looks clean
+  const hasPrefill = !!(pf && (pf.prefill_name || pf.prefill_number || pf.prefill_font || pf.prefill_color || pf.prefill_logo));
+  if (window.isBakedPreview && !anyNameTyped && !anyNumberTyped && !hasPrefill) {
     if (ovName) ovName.style.display = 'none';
     if (ovNum) ovNum.style.display = 'none';
-    return; // skip all text overlay setup on first load
+    return;
   }
 
   if (!imgEl || !imgEl.complete) return;
@@ -690,16 +745,17 @@ function placeOverlay(el, slot, slotKey) {
   addBtn.addEventListener('click', ()=> createRow());
 
   // initial rows from prefill (if provided)
-  if ((pf.prefill_name && pf.prefill_name.length) || (pf.prefill_number && pf.prefill_number.length)) {
+    if ((pf.prefill_name && pf.prefill_name.length) || (pf.prefill_number && pf.prefill_number.length) || pf.prefill_font || pf.prefill_color) {
     createRow({
       name: (pf.prefill_name || pf.name || '').toString().toUpperCase().slice(0,12),
       number: (pf.prefill_number || pf.number || '').toString().replace(/\D/g,'').slice(0,3),
-      font: pf.prefill_font || pf.font || '',
-      color: (pf.prefill_color ? decodeURIComponent(pf.prefill_color) : pf.color) || ''
+      font: (pf.prefill_font || pf.font || '').toString().toLowerCase(),
+      color: (pf.prefill_color || pf.color || '') // already normalized earlier
     });
   } else {
     createRow();
   }
+
 
   // ensure hiddenTeamLogo kept in sync
   try {

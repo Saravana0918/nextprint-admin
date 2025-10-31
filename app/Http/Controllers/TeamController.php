@@ -60,11 +60,12 @@ class TeamController extends Controller
 
     DB::beginTransaction();
     try {
-        // --- Handle preview image (store base64 to storage/app/public/team_previews) ---
-        $previewPathRel = null;   // e.g. storage/team_previews/xxx.png  (for asset())
-        $previewLocal = null;     // e.g. /home/forge/.../storage/app/public/team_previews/xxx.png
+        $previewPathRel = null;    // relative storage path, e.g. 'team_previews/xxx.jpg'
+        $previewPublicUrl = null;  // public URL, e.g. '/storage/team_previews/xxx.jpg'
+        $previewLocal = null;
 
-        if (!empty($data['preview_src']) && \Illuminate\Support\Str::startsWith($data['preview_src'], 'data:')) {
+        // --- Handle preview image (data URI or supplied path/url) ---
+        if (!empty($data['preview_src']) && Str::startsWith($data['preview_src'], 'data:')) {
             if (preg_match('/^data:(image\/[a-zA-Z]+);base64,(.+)$/', $data['preview_src'], $m)) {
                 $ext = explode('/', $m[1])[1] ?? 'png';
                 $bin = base64_decode($m[2]);
@@ -72,31 +73,61 @@ class TeamController extends Controller
                     $fname = 'team_preview_' . time() . '_' . Str::random(6) . '.' . $ext;
                     $storagePath = 'team_previews/' . $fname;
                     Storage::disk('public')->put($storagePath, $bin);
-                    $previewPathRel = 'storage/' . $storagePath;
+                    $previewPathRel = $storagePath; // store relative path
+                    $previewPublicUrl = Storage::disk('public')->url($storagePath);
                     $previewLocal = storage_path('app/public/' . $storagePath);
                 }
             }
         } elseif (!empty($data['preview_src'])) {
-            // frontend supplied a path or URL. Could be '/storage/..' or 'team_previews/..' or full URL
+            // front-end passed path/url (could be '/storage/..' or full http url or 'team_previews/..')
             $previewRaw = $data['preview_src'];
-            // if starts with /storage or storage/ -> treat as relative public path
-            if (Str::startsWith($previewRaw, '/storage') || Str::startsWith($previewRaw, 'storage/')) {
-                $previewPathRel = ltrim($previewRaw, '/');
-                // compute local candidate
-                $rel = preg_replace('#^storage/#', '', $previewPathRel);
+
+            if (Str::startsWith($previewRaw, '/storage')) {
+                // strip leading slash -> relative 'storage/team_previews/..'
+                $possible = ltrim($previewRaw, '/');
+                // convert to storage relative
+                if (strpos($possible, 'storage/') === 0) {
+                    $rel = preg_replace('#^storage/#', '', $possible);
+                    $localCandidate = storage_path('app/public/' . $rel);
+                    if (file_exists($localCandidate)) {
+                        $previewPathRel = $rel;
+                        $previewPublicUrl = Storage::disk('public')->url($rel);
+                        $previewLocal = $localCandidate;
+                    } else {
+                        // keep the url as-is
+                        $previewPublicUrl = $previewRaw;
+                        $previewPathRel = $previewRaw;
+                    }
+                } else {
+                    // unusual, fallback
+                    $previewPublicUrl = $previewRaw;
+                    $previewPathRel = $previewRaw;
+                }
+            } elseif (Str::startsWith($previewRaw, 'storage/')) {
+                $rel = preg_replace('#^storage/#', '', $previewRaw);
                 $localCandidate = storage_path('app/public/' . $rel);
-                if (file_exists($localCandidate)) $previewLocal = $localCandidate;
+                if (file_exists($localCandidate)) {
+                    $previewPathRel = $rel;
+                    $previewPublicUrl = Storage::disk('public')->url($rel);
+                    $previewLocal = $localCandidate;
+                } else {
+                    $previewPathRel = $previewRaw;
+                    $previewPublicUrl = $previewRaw;
+                }
             } elseif (Str::startsWith($previewRaw, 'http://') || Str::startsWith($previewRaw, 'https://')) {
+                $previewPublicUrl = $previewRaw;
                 $previewPathRel = $previewRaw;
             } else {
-                // maybe plain "team_previews/xxx.png"
+                // relative like team_previews/xxx.jpg
                 $localCandidate = storage_path('app/public/' . ltrim($previewRaw, '/'));
                 if (file_exists($localCandidate)) {
+                    $previewPathRel = ltrim($previewRaw, '/');
+                    $previewPublicUrl = Storage::disk('public')->url($previewPathRel);
                     $previewLocal = $localCandidate;
-                    $previewPathRel = 'storage/' . ltrim($previewRaw, '/');
                 } else {
-                    // fallback store raw value as preview_path
+                    // store as-is
                     $previewPathRel = $previewRaw;
+                    $previewPublicUrl = $previewRaw;
                 }
             }
         }
@@ -115,24 +146,24 @@ class TeamController extends Controller
             ];
         }, $data['players']);
 
-        // --- Insert teams row (only existing columns) ---
+        // --- Insert teams row ---
         $teamPayload = [
             'product_id' => $data['product_id'] ?? null,
             'players' => json_encode($players, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE),
             'team_logo_url' => $data['team_logo_url'] ?? null,
-            'preview_url' => $previewPathRel ? asset($previewPathRel) : null,
+            'preview_url' => $previewPublicUrl ?? null,
             'preview_path' => $previewPathRel ?? null,
             'created_by' => auth()->id() ?? null,
             'created_at' => now(),
             'updated_at' => now(),
         ];
+
         $teamCols = Schema::getColumnListing('teams');
         $teamPayload = array_intersect_key($teamPayload, array_flip($teamCols));
         $teamId = DB::table('teams')->insertGetId($teamPayload);
 
         // --- Insert/update design_orders ---
         $first = $players[0] ?? [];
-        // normalize order level font/color
         $orderFont = $first['font'] ?? null;
         $orderColor = $first['color'] ?? null;
         if ($orderColor) {
@@ -148,11 +179,10 @@ class TeamController extends Controller
             'number_text' => $first['number'] ?? null,
             'font' => $orderFont,
             'color' => $orderColor,
-            'preview_src' => $previewPathRel ?? null,
+            'preview_src' => $previewPublicUrl ?? null,
             'preview_path' => $previewPathRel ?? null,
-            // store local path if we resolved it (useful for DomPDF)
             'preview_local_path' => $previewLocal ?? null,
-            'raw_payload' => json_encode(['team_id' => $teamId, 'players' => $players]),
+            'raw_payload' => json_encode(['team_id' => $teamId, 'players' => $players], JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE),
             'status' => 'new',
             'created_at' => now(),
             'updated_at' => now(),
@@ -174,7 +204,7 @@ class TeamController extends Controller
             'success' => true,
             'team_id' => $teamId,
             'order_id' => $linkedOrderId,
-            'preview_url' => $previewPathRel ? asset($previewPathRel) : null,
+            'preview_url' => $previewPublicUrl ?? null,
             'message' => 'Design Saved ✅ You Can Click Buy Now',
         ]);
     } catch (\Throwable $e) {
@@ -187,11 +217,8 @@ class TeamController extends Controller
     }
 }
 
-
 public function store(Request $request)
 {
-    // Build validation rules and validate first (we need $data early)
-    // We need product to inspect layout slots — but validate first minimal fields
     $rules = [
         'team_id'           => 'nullable|integer|exists:teams,id',
         'product_id'        => 'required|integer|exists:products,id',
@@ -206,7 +233,7 @@ public function store(Request $request)
 
     $data = $request->validate($rules);
 
-    // load product so we can detect layout slots
+    // load product for layout/variants
     $product = Product::with('variants')->find($data['product_id'] ?? $request->input('product_id'));
     $hasNumberSlot = false;
     if ($product && !empty($product->layout_slots)) {
@@ -214,20 +241,17 @@ public function store(Request $request)
         $hasNumberSlot = !empty($ls) && !empty($ls['number']);
     }
 
-    // adjust rules for number if needed (validate again only numbers part)
     if ($hasNumberSlot) {
         $request->validate(['players.*.number' => ['required', 'regex:/^\d{1,3}$/']]);
-    } else {
-        // ensure numbers cleaned out in processing (no need to revalidate)
     }
 
-    // build variant map from product variants if available
+    // build variant map
     $variantMap = [];
     if ($product && $product->relationLoaded('variants') && $product->variants) {
         foreach ($product->variants as $v) {
-            $k = trim((string) ($v->option_value ?? $v->option_name ?? ''));
+            $k = trim((string) ($v->option_value ?? $v->option_name ?? $v->title ?? ''));
             if ($k === '') continue;
-            $variantMap[strtoupper($k)] = (string) ($v->shopify_variant_id ?? $v->variant_id ?? '');
+            $variantMap[strtoupper($k)] = (string) ($v->shopify_variant_id ?? $v->variant_id ?? $v->id ?? '');
         }
     }
 
@@ -246,7 +270,7 @@ public function store(Request $request)
         if (empty($variantId) && !empty($p['size']) && isset($product->variants)) {
             foreach ($product->variants as $v) {
                 $title = strtoupper(trim((string)($v->title ?? '')));
-                if ($title !== '' && strpos($title, strtoupper($p['size'])) !== false) {
+                if ($title !== '' && strpos($title, strtoupper((string)$p['size'])) !== false) {
                     $variantId = (string)($v->shopify_variant_id ?? $v->variant_id ?? $v->id ?? null);
                     break;
                 }
@@ -263,7 +287,7 @@ public function store(Request $request)
         ];
     }
 
-    // ensure everyone has variant_id if product requires it
+    // require valid variant_id for each player if product variants are mandatory
     $missingVariants = array_filter($playersProcessed, function($pl) {
         return empty($pl['variant_id']) || !preg_match('/^\d+$/', (string)$pl['variant_id']);
     });
@@ -285,13 +309,13 @@ public function store(Request $request)
                 }
                 return back()->with('error', 'Team not found.');
             }
-            $team->players = $playersProcessed;
+            $team->players = json_encode($playersProcessed, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE);
             if (!empty($data['preview_url'])) $team->preview_url = $data['preview_url'];
             $team->save();
         } else {
             $team = Team::create([
                 'product_id' => $data['product_id'],
-                'players' => $playersProcessed,
+                'players' => json_encode($playersProcessed, JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE),
                 'preview_url' => $data['preview_url'] ?? null,
                 'created_by' => auth()->id() ?? null,
             ]);
@@ -318,8 +342,8 @@ public function store(Request $request)
             'color' => !empty($firstPlayer['color']) ? (strpos($firstPlayer['color'],'#')===0?$firstPlayer['color']:'#'.ltrim($firstPlayer['color'],'#')) : null,
             'preview_src' => $data['preview_url'] ?? $team->preview_url ?? null,
             'preview_path' => $data['preview_url'] ?? $team->preview_url ?? null,
-            'raw_payload' => json_encode(['team_id' => $team->id, 'players' => $playersProcessed]),
-            'payload' => json_encode(['players' => $playersProcessed]),
+            'raw_payload' => json_encode(['team_id' => $team->id, 'players' => $playersProcessed], JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE),
+            'payload' => json_encode(['players' => $playersProcessed], JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE),
             'status' => 'new',
             'created_at' => now(),
             'updated_at' => now(),
@@ -339,7 +363,7 @@ public function store(Request $request)
         Log::warning('Could not ensure design_orders row exists: ' . $e->getMessage(), ['team_id' => $team->id ?? null]);
     }
 
-    // Build shopfront cart pairs
+    // Build cart pairs and redirect to shopfront
     $pairs = [];
     foreach ($playersProcessed as $pl) {
         $vid = (string)$pl['variant_id'];
@@ -360,4 +384,5 @@ public function store(Request $request)
 
     return redirect()->away($cartUrl);
 }
+
 }

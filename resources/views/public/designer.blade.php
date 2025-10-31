@@ -668,68 +668,69 @@ altNumEls.forEach(el => {
   e.preventDefault();
 
   const productId = document.getElementById('np-product-id')?.value || '';
-  const name = (document.querySelector('#np-name')?.value || '').toUpperCase();
-  const number = (document.querySelector('#np-num')?.value || '').replace(/\D/g,'');
-  const font = document.getElementById('np-font')?.value || '';
-  const color = document.getElementById('np-color')?.value || '';
-  const logo = window.lastUploadedLogoUrl || '';
-  const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+  // read visible inputs (desktop or mobile)
+  const nameInput = document.querySelector('#np-name') || document.querySelector('#np-name-mobile');
+  const numInput  = document.querySelector('#np-num')  || document.querySelector('#np-num-mobile');
+  const fontVal   = document.getElementById('np-font')?.value || '';
+  const colorVal  = document.getElementById('np-color')?.value || (document.querySelector('.np-swatch.active')?.dataset?.color || '');
+  const logo      = window.lastUploadedLogoUrl || '';
 
+  const name = (nameInput && nameInput.value) ? (nameInput.value || '').toUpperCase().trim() : '';
+  const number = (numInput && numInput.value) ? (numInput.value || '').replace(/\D/g,'').trim() : '';
+  const font = fontVal || '';
+  const color = colorVal || '';
+
+  // prepare previewUrl: upload a plain base (no overlays) similarly to earlier code
   let previewUrl = '';
-
   try {
-    console.log('Generating PLAIN preview (no overlays)...');
-    const stageNode = document.getElementById('np-stage');
-
-    // temporarily hide name & number overlays
+    // hide overlays while capturing plain base
     const ovName = document.getElementById('np-prev-name');
     const ovNum  = document.getElementById('np-prev-num');
-    const ovNameDisp = ovName ? ovName.style.display : '';
-    const ovNumDisp  = ovNum ? ovNum.style.display  : '';
+    const prevNameDisp = ovName ? ovName.style.display : '';
+    const prevNumDisp  = ovNum ? ovNum.style.display : '';
     if (ovName) ovName.style.display = 'none';
-    if (ovNum) ovNum.style.display = 'none';
+    if (ovNum)  ovNum.style.display = 'none';
+    await new Promise(r => setTimeout(r, 80));
 
-    await new Promise(r => setTimeout(r, 80)); // let DOM update
+    // capture & compress then upload to upload_temp endpoint
+    const canvas = await html2canvas(document.getElementById('np-stage'), { useCORS:true, backgroundColor:null, scale: 1.2 });
+    const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.85));
+    if (!blob) throw new Error('Could not create preview blob');
 
-    // capture only plain jersey
-    const canvas = await html2canvas(stageNode, { useCORS: true, backgroundColor: null, scale: 1.2 });
-    const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.9));
-
-    // restore overlays
-    if (ovName) ovName.style.display = ovNameDisp;
-    if (ovNum) ovNum.style.display = ovNumDisp;
-
-    // upload this plain jersey
     const fd = new FormData();
     fd.append('file', blob, 'plain_team_base_' + Date.now() + '.jpg');
-    const uploadRes = await fetch('{{ route("designer.upload_temp") }}', {
+
+    const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+    const res = await fetch('{{ route("designer.upload_temp") }}', {
       method: 'POST',
       body: fd,
-      headers: (token ? { 'X-CSRF-TOKEN': token } : {}),
-      credentials: 'same-origin'
+      credentials: 'same-origin',
+      headers: (token ? { 'X-CSRF-TOKEN': token } : {})
     });
-    const uploadJson = await uploadRes.json().catch(() => null);
-    if (uploadJson && uploadJson.url) {
-      previewUrl = uploadJson.url;
-      console.log('Plain base uploaded:', previewUrl);
+    const json = await res.json().catch(()=>null);
+    if (res.ok && json && json.url) {
+      previewUrl = json.url;
     } else {
-      alert('Upload failed');
-      return;
+      // fallback: we will still redirect but preview_url may be empty
+      console.warn('upload-temp did not return url', json);
     }
+
+    // restore overlays
+    if (ovName) ovName.style.display = prevNameDisp;
+    if (ovNum)  ovNum.style.display = prevNumDisp;
   } catch (err) {
-    console.error('Plain preview generation failed', err);
-    alert('Could not generate base image.');
-    return;
+    console.warn('Could not create/upload plain preview:', err);
   }
 
-  // redirect to Team Players page with plain jersey only
+  // build params (use prefill_ keys)
   const params = new URLSearchParams();
   if (productId) params.set('product_id', productId);
-  if (previewUrl) params.set('preview_url', previewUrl); // plain base only
-  // we can also pass customization defaults if needed:
+  if (name) params.set('prefill_name', name);
+  if (number) params.set('prefill_number', number);
   if (font) params.set('prefill_font', font);
   if (color) params.set('prefill_color', color);
   if (logo) params.set('prefill_logo', logo);
+  if (previewUrl) params.set('preview_url', previewUrl);
 
   const base = "{{ route('team.create') }}";
   window.location.href = base + '?' + params.toString();
