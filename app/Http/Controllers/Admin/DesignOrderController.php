@@ -40,148 +40,195 @@ class DesignOrderController extends Controller
      * Show a single design order (detail)
      */
     public function show($id)
-    {
-        $order = DB::table('design_orders as d')
-            ->leftJoin('products as p', 'p.id', '=', 'd.product_id')
-            ->select(['d.*', DB::raw('p.name as product_name')])
-            ->where('d.id', $id)
-            ->first();
+{
+    $order = DB::table('design_orders as d')
+        ->leftJoin('products as p', 'p.id', '=', 'd.product_id')
+        ->select(['d.*', DB::raw('p.name as product_name')])
+        ->where('d.id', $id)
+        ->first();
 
-        if (! $order) {
-            abort(404, 'Design order not found');
+    if (! $order) {
+        abort(404, 'Design order not found');
+    }
+
+    // gather raw payloads for debugging
+    $raw_payload_text = $order->raw_payload ?? null;
+    $payload_text = $order->payload ?? null;
+    $meta_text = $order->meta ?? null;
+
+    $resolvedFont = null;
+    $resolvedColor = null;
+    $extracted = [];
+
+    try {
+        // try decode payload (may be JSON string)
+        $pl = $payload_text ? json_decode($payload_text, true) : [];
+        if (is_string($pl)) $pl = json_decode($pl, true) ?: [];
+        $pl = is_array($pl) ? $pl : [];
+
+        $rp = $raw_payload_text ? json_decode($raw_payload_text, true) : [];
+        if (is_string($rp)) $rp = json_decode($rp, true) ?: [];
+        $rp = is_array($rp) ? $rp : [];
+
+        $m = $meta_text ? json_decode($meta_text, true) : [];
+        $m = is_array($m) ? $m : [];
+
+        // collect for logs/view
+        $extracted['payload_keys'] = array_keys($pl);
+        $extracted['raw_payload_keys'] = array_keys($rp);
+        $extracted['meta_keys'] = array_keys($m);
+
+        // attempt to find font/color from various common keys
+        $candidates = [];
+        // payload level
+        foreach (['font','color','selectedFont','selectedColor','style','settings'] as $k) {
+            if (isset($pl[$k])) $candidates[$k] = $pl[$k];
+        }
+        // raw_payload level
+        foreach (['font','color','selectedFont','selectedColor','style','settings'] as $k) {
+            if (isset($rp[$k])) $candidates["raw_{$k}"] = $rp[$k];
+        }
+        // meta level
+        foreach (['font','color','selectedFont','selectedColor'] as $k) {
+            if (isset($m[$k])) $candidates["meta_{$k}"] = $m[$k];
         }
 
-        /*
-         * --- NEW: normalize font & color so blade can display them ---
-         * Try payload -> raw_payload -> meta, fallback to existing fields.
-         */
-        try {
-            $font = null;
-            $color = null;
-
-            // payload (structured JSON)
-            if (!empty($order->payload)) {
-                $pl = json_decode($order->payload, true) ?: [];
-                if (!empty($pl['font'])) $font = $pl['font'];
-                if (!empty($pl['color'])) $color = $pl['color'];
-                if (empty($font) && !empty($pl['selectedFont'])) $font = $pl['selectedFont'];
-                if (empty($color) && !empty($pl['selectedColor'])) $color = $pl['selectedColor'];
-                if (empty($font) && !empty($pl['style']['font'])) $font = $pl['style']['font'] ?? null;
+        // deep check: sometimes font/color inside nested arrays
+        // search function
+        $findIn = function($haystack, $keys) {
+            if (!is_array($haystack)) return null;
+            foreach ($keys as $k) {
+                if (isset($haystack[$k])) return $haystack[$k];
             }
-
-            // raw_payload (sometimes double-encoded or raw JSON)
-            if ((empty($font) || empty($color)) && !empty($order->raw_payload)) {
-                $rp = json_decode($order->raw_payload, true);
-                if (is_string($rp)) $rp = json_decode($rp, true) ?: [];
-                $rp = $rp ?: [];
-                if (empty($font) && !empty($rp['font'])) $font = $rp['font'];
-                if (empty($color) && !empty($rp['color'])) $color = $rp['color'];
-                if (empty($font) && !empty($rp['selectedFont'])) $font = $rp['selectedFont'];
-                if (empty($color) && !empty($rp['selectedColor'])) $color = $rp['selectedColor'];
+            // search nested
+            $flat = new RecursiveIteratorIterator(new RecursiveArrayIterator($haystack));
+            foreach ($flat as $val) {
+                // nothing to do — we just collect values earlier
             }
+            return null;
+        };
 
-            // meta (sometimes used)
-            if ((empty($font) || empty($color)) && !empty($order->meta)) {
-                $m = json_decode($order->meta, true) ?: [];
-                if (empty($font) && !empty($m['font'])) $font = $m['font'];
-                if (empty($color) && !empty($m['color'])) $color = $m['color'];
-                if (empty($font) && !empty($m['selectedFont'])) $font = $m['selectedFont'];
-                if (empty($color) && !empty($m['selectedColor'])) $color = $m['selectedColor'];
-            }
-
-            // final fallback to top-level columns if present
-            if (empty($font) && !empty($order->font)) $font = $order->font;
-            if (empty($color) && !empty($order->color)) $color = $order->color;
-
-            // normalize values
-            $orderFont = is_string($font) ? trim($font) : null;
-            $orderColor = is_string($color) ? trim($color) : null;
-            if ($orderColor && $orderColor !== '' && $orderColor[0] !== '#') {
-                $orderColor = '#' . ltrim($orderColor, '#');
-            }
-
-            // attach back to $order object so blade sees them
-            $order->font = $orderFont;
-            $order->color = $orderColor;
-
-            // Optional debug log - uncomment to debug
-            // Log::info("DesignOrder #{$id} font/color resolved", ['font'=>$orderFont, 'color'=>$orderColor, 'payload_exists'=>!empty($order->payload)]);
-        } catch (\Throwable $e) {
-            Log::warning("DesignOrder #{$id}: font/color extraction failed: " . $e->getMessage());
+        // direct picks
+        if (empty($resolvedFont)) {
+            if (!empty($pl['font'])) $resolvedFont = $pl['font'];
+            elseif (!empty($pl['selectedFont'])) $resolvedFont = $pl['selectedFont'];
+            elseif (!empty($rp['font'])) $resolvedFont = $rp['font'];
+            elseif (!empty($m['font'])) $resolvedFont = $m['font'];
+        }
+        if (empty($resolvedColor)) {
+            if (!empty($pl['color'])) $resolvedColor = $pl['color'];
+            elseif (!empty($pl['selectedColor'])) $resolvedColor = $pl['selectedColor'];
+            elseif (!empty($rp['color'])) $resolvedColor = $rp['color'];
+            elseif (!empty($m['color'])) $resolvedColor = $m['color'];
         }
 
-        $players = collect();
+        // fallback: try nested style keys like ['style']['font'] etc.
+        if (empty($resolvedFont)) {
+            $resolvedFont = $pl['style']['font'] ?? $pl['settings']['font'] ?? $rp['style']['font'] ?? $m['style']['font'] ?? null;
+        }
+        if (empty($resolvedColor)) {
+            $resolvedColor = $pl['style']['color'] ?? $pl['settings']['color'] ?? $rp['style']['color'] ?? $m['style']['color'] ?? null;
+        }
 
-        try {
-            // Try team players from teams table
-            if (!empty($order->team_id)) {
-                $team = DB::table('teams')->where('id', (int)$order->team_id)->first();
-                if ($team && !empty($team->players)) {
-                    $decoded = json_decode($team->players, true);
-                    if (is_array($decoded)) {
-                        $players = collect($decoded)->map(function ($p, $i) {
-                            $p = (array)$p;
-                            return (object)[
-                                'id' => $p['id'] ?? $i + 1,
-                                'name' => $p['name'] ?? '',
-                                'number' => $p['number'] ?? '',
-                                'size' => $p['size'] ?? '',
-                                'font' => $p['font'] ?? '',
-                                'preview_src' => $p['preview_src'] ?? null,
-                                'created_at' => $p['created_at'] ?? now(),
-                            ];
-                        });
-                    }
-                }
+        // normalize color
+        if ($resolvedColor && is_string($resolvedColor)) {
+            $resolvedColor = trim($resolvedColor);
+            if ($resolvedColor !== '' && $resolvedColor[0] !== '#') $resolvedColor = '#' . ltrim($resolvedColor, '#');
+        }
 
-                // fallback to team_players table if teams.players not present
-                if ($players->isEmpty()) {
-                    $players = DB::table('team_players')
-                        ->where('team_id', $order->team_id)
-                        ->orderBy('id')
-                        ->get();
-                }
-            }
+        // attach to order object
+        $order->font = is_string($resolvedFont) ? trim($resolvedFont) : $resolvedFont;
+        $order->color = $resolvedColor;
 
-            // fallback to payload/meta if still empty
-            if ($players->isEmpty() && !empty($order->meta)) {
-                $metaDecoded = json_decode($order->meta, true);
-                if (is_string($metaDecoded)) $metaDecoded = json_decode($metaDecoded, true);
-                if (!empty($metaDecoded['players']) && is_array($metaDecoded['players'])) {
-                    $players = collect($metaDecoded['players'])->map(function ($p, $i) use ($order) {
+        // store a friendly debug structure
+        $debug_payloads = [
+            'payload_sample' => $pl,
+            'raw_payload_sample' => $rp,
+            'meta_sample' => $m,
+            'candidates_found' => $candidates,
+            'resolved_font' => $order->font,
+            'resolved_color' => $order->color,
+            'extracted_summary' => $extracted
+        ];
+
+        // log for quick server-side inspection
+        Log::info("DesignOrder debug #{$id}", $debug_payloads);
+    } catch (\Throwable $e) {
+        Log::warning("DesignOrder debug failed for #{$id}: " . $e->getMessage());
+        $debug_payloads = ['error' => $e->getMessage()];
+    }
+
+    // existing players logic (unchanged)
+    $players = collect();
+    try {
+        if (!empty($order->team_id)) {
+            $team = DB::table('teams')->where('id', (int)$order->team_id)->first();
+            if ($team && !empty($team->players)) {
+                $decoded = json_decode($team->players, true);
+                if (is_array($decoded)) {
+                    $players = collect($decoded)->map(function ($p, $i) {
                         $p = (array)$p;
                         return (object)[
                             'id' => $p['id'] ?? $i + 1,
                             'name' => $p['name'] ?? '',
                             'number' => $p['number'] ?? '',
                             'size' => $p['size'] ?? '',
-                            'font' => $p['font'] ?? $order->font ?? '',
+                            'font' => $p['font'] ?? '',
                             'preview_src' => $p['preview_src'] ?? null,
-                            'created_at' => $p['created_at'] ?? $order->created_at ?? now(),
+                            'created_at' => $p['created_at'] ?? now(),
                         ];
                     });
                 }
             }
 
-            // fallback to team_players by product
-            if ($players->isEmpty() && !empty($order->product_id)) {
+            if ($players->isEmpty()) {
                 $players = DB::table('team_players')
-                    ->where('product_id', $order->product_id)
+                    ->where('team_id', $order->team_id)
                     ->orderBy('id')
                     ->get();
             }
-
-            $players = collect($players)->map(function ($p) {
-                if (is_array($p)) return (object)$p;
-                return $p;
-            });
-        } catch (\Throwable $e) {
-            Log::warning('DesignOrderController::show players fetch failed: ' . $e->getMessage());
-            $players = collect();
         }
 
-        return view('admin.design_orders.show', compact('order', 'players'));
+        if ($players->isEmpty() && !empty($order->meta)) {
+            $metaDecoded = json_decode($order->meta, true);
+            if (is_string($metaDecoded)) $metaDecoded = json_decode($metaDecoded, true);
+            if (!empty($metaDecoded['players']) && is_array($metaDecoded['players'])) {
+                $players = collect($metaDecoded['players'])->map(function ($p, $i) use ($order) {
+                    $p = (array)$p;
+                    return (object)[
+                        'id' => $p['id'] ?? $i + 1,
+                        'name' => $p['name'] ?? '',
+                        'number' => $p['number'] ?? '',
+                        'size' => $p['size'] ?? '',
+                        'font' => $p['font'] ?? $order->font ?? '',
+                        'preview_src' => $p['preview_src'] ?? null,
+                        'created_at' => $p['created_at'] ?? $order->created_at ?? now(),
+                    ];
+                });
+            }
+        }
+
+        if ($players->isEmpty() && !empty($order->product_id)) {
+            $players = DB::table('team_players')
+                ->where('product_id', $order->product_id)
+                ->orderBy('id')
+                ->get();
+        }
+
+        $players = collect($players)->map(function ($p) {
+            if (is_array($p)) return (object)$p;
+            return $p;
+        });
+    } catch (\Throwable $e) {
+        Log::warning('DesignOrderController::show players fetch failed: ' . $e->getMessage());
+        $players = collect();
     }
+
+    // pass debug_payloads to view for immediate inspection
+    return view('admin.design_orders.show', compact('order', 'players'))
+           ->with('debug_payloads', $debug_payloads ?? []);
+}
+
 
     /**
      * Download package (PDF + CSV + preview image) as a ZIP.

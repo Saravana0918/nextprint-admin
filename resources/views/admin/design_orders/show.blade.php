@@ -5,7 +5,7 @@
   use Illuminate\Support\Str;
   use Illuminate\Support\Facades\Storage;
 
-  // small font key -> friendly name map
+  // font key -> friendly name map
   $fontMap = [
     'bebas' => 'Bebas Neue',
     'bebas neue' => 'Bebas Neue',
@@ -15,20 +15,136 @@
     'impact' => 'Impact',
   ];
 
-  // helper: normalize color to hex with leading #
+  /**
+   * Recursively search array (or object coerced to array) for the first matching key
+   * Returns null if not found.
+   */
+  $searchKeysRecursive = function($hay, array $keys) use (&$searchKeysRecursive) {
+    if (empty($hay)) return null;
+    if (!is_array($hay)) {
+      // try to convert objects
+      if (is_object($hay)) $hay = (array)$hay;
+      else return null;
+    }
+    foreach ($keys as $k) {
+      if (array_key_exists($k, $hay) && $hay[$k] !== null && $hay[$k] !== '') {
+        return $hay[$k];
+      }
+      // case-insensitive check
+      foreach ($hay as $hk => $hv) {
+        if (strcasecmp($hk, $k) === 0 && $hv !== null && $hv !== '') {
+          return $hv;
+        }
+      }
+    }
+    // traverse nested arrays
+    foreach ($hay as $v) {
+      if (is_array($v) || is_object($v)) {
+        $found = $searchKeysRecursive((array)$v, $keys);
+        if ($found !== null && $found !== '') return $found;
+      }
+    }
+    return null;
+  };
+
+  /**
+   * Safely decode JSON which may be double encoded or empty
+   */
+  $safeJsonDecode = function($text) {
+    if (empty($text)) return [];
+    // try normal decode
+    $decoded = json_decode($text, true);
+    if (is_array($decoded)) return $decoded;
+    // if decode returned string, try decode again
+    if (is_string($decoded)) {
+      $decoded2 = json_decode($decoded, true);
+      if (is_array($decoded2)) return $decoded2;
+    }
+    // if still no array, try to coerce simple formats
+    return [];
+  };
+
+  /**
+   * Normalize color string to leading '#' hex if possible
+   */
   $normalizeColor = function($c) {
     if (!$c) return null;
     $c = trim((string)$c);
-    try { $c = urldecode($c); } catch(\Throwable$e){}
+    try { $c = urldecode($c); } catch(\Throwable$e) {}
     if ($c === '') return null;
-    if ($c[0] !== '#') $c = '#' . ltrim($c, '#');
-    return $c;
+    // if it's like rgb(...) try to convert to hex (basic)
+    if (stripos($c, 'rgb(') === 0) {
+      $vals = preg_replace('/[^\d,\.]/','', $c);
+      $parts = array_map('trim', explode(',', $vals));
+      if (count($parts) >= 3) {
+        $r = (int)$parts[0]; $g = (int)$parts[1]; $b = (int)$parts[2];
+        return sprintf('#%02x%02x%02x', max(0,min(255,$r)), max(0,min(255,$g)), max(0,min(255,$b)));
+      }
+    }
+    // hex without #?
+    if (preg_match('/^[0-9a-f]{3,6}$/i', ltrim($c, '#'))) {
+      $hex = ltrim($c, '#');
+      if (strlen($hex) === 3) {
+        // expand short hex
+        $hex = $hex[0].$hex[0].$hex[1].$hex[1].$hex[2].$hex[2];
+      }
+      return '#' . strtolower($hex);
+    }
+    // allow color names? (basic common)
+    $cssNames = [
+      'black'=>'#000000','white'=>'#ffffff','red'=>'#ff0000','green'=>'#008000','blue'=>'#0000ff',
+      'yellow'=>'#ffff00','gray'=>'#808080','grey'=>'#808080'
+    ];
+    $low = strtolower($c);
+    if (isset($cssNames[$low])) return $cssNames[$low];
+    // already contains # and hex
+    if ($c[0] === '#' && preg_match('/^#[0-9a-f]{3,6}$/i', $c)) {
+      if (strlen($c) === 4) {
+        $h = substr($c,1);
+        $h = $h[0].$h[0].$h[1].$h[1].$h[2].$h[2];
+        return '#'.strtolower($h);
+      }
+      return strtolower($c);
+    }
+    return null;
   };
 
+  // Start extraction for font/color
   $orderFontRaw = trim((string)($order->font ?? ''));
-  $orderFontKey = strtolower(preg_replace('/[^a-z0-9]+/',' ', $orderFontRaw));
-  $orderFontLabel = $fontMap[$orderFontKey] ?? ($order->font ? $order->font : '—');
-  $orderColorHex = $normalizeColor($order->color ?? null);
+  $orderColorRaw = trim((string)($order->color ?? ''));
+
+  // if top-level present keep it, else try payload/raw_payload/meta
+  if (empty($orderFontRaw) || empty($orderColorRaw)) {
+    $payloadArr = $safeJsonDecode($order->payload ?? '');
+    $rawPayloadArr = $safeJsonDecode($order->raw_payload ?? '');
+    $metaArr = $safeJsonDecode($order->meta ?? '');
+
+    // keys to look for (order matters)
+    $fontKeys = ['font','selectedFont','font_family','fontName','font_key','fontKey','typeface','family'];
+    $colorKeys = ['color','selectedColor','hex','colour','fontColor','textColor','fillColor'];
+
+    if (empty($orderFontRaw)) {
+      // check payload, raw_payload, meta, then top-level fallback
+      $orderFontRaw = $searchKeysRecursive($payloadArr, $fontKeys) ?? $searchKeysRecursive($rawPayloadArr, $fontKeys) ?? $searchKeysRecursive($metaArr, $fontKeys) ?? $orderFontRaw;
+      if (is_array($orderFontRaw)) {
+        // sometimes font object: try common subkeys
+        $orderFontRaw = $orderFontRaw['name'] ?? $orderFontRaw['key'] ?? $orderFontRaw['family'] ?? null;
+      }
+    }
+
+    if (empty($orderColorRaw)) {
+      $orderColorRaw = $searchKeysRecursive($payloadArr, $colorKeys) ?? $searchKeysRecursive($rawPayloadArr, $colorKeys) ?? $searchKeysRecursive($metaArr, $colorKeys) ?? $orderColorRaw;
+      if (is_array($orderColorRaw)) {
+        $orderColorRaw = $orderColorRaw['hex'] ?? $orderColorRaw['value'] ?? null;
+      }
+    }
+  }
+
+  // final normalize / friendly label
+  $orderFontKey = strtolower(preg_replace('/[^a-z0-9]+/',' ', trim((string)$orderFontRaw)));
+  $orderFontLabel = $fontMap[$orderFontKey] ?? ($orderFontRaw ? $orderFontRaw : '—');
+
+  $orderColorHex = $normalizeColor($orderColorRaw ?? null);
 @endphp
 
 <div class="container py-4">
@@ -146,6 +262,7 @@
                       $pName = $pObj->name ?? '';
                       $pNumber = $pObj->number ?? '';
                       $pSize = $pObj->size ?? '';
+                      // player font fallback: player's font -> order font
                       $pFontRaw = $pObj->font ?? $order->font ?? '';
                       $pFontKey = strtolower(preg_replace('/[^a-z0-9]+/',' ', trim((string)$pFontRaw)));
                       $pFontLabel = $fontMap[$pFontKey] ?? ($pFontRaw ?: '—');
