@@ -175,7 +175,7 @@ class TeamController extends Controller
             'team_id' => $teamId,
             'order_id' => $linkedOrderId,
             'preview_url' => $previewPathRel ? asset($previewPathRel) : null,
-            'message' => 'Design saved ✅ and linked to order #' . ($linkedOrderId ?? 'N/A'),
+            'message' => 'Design Saved ✅ You Can Click Buy Now',
         ]);
     } catch (\Throwable $e) {
         DB::rollBack();

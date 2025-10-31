@@ -51,6 +51,65 @@ class DesignOrderController extends Controller
             abort(404, 'Design order not found');
         }
 
+        /*
+         * --- NEW: normalize font & color so blade can display them ---
+         * Try payload -> raw_payload -> meta, fallback to existing fields.
+         */
+        try {
+            $font = null;
+            $color = null;
+
+            // payload (structured JSON)
+            if (!empty($order->payload)) {
+                $pl = json_decode($order->payload, true) ?: [];
+                if (!empty($pl['font'])) $font = $pl['font'];
+                if (!empty($pl['color'])) $color = $pl['color'];
+                if (empty($font) && !empty($pl['selectedFont'])) $font = $pl['selectedFont'];
+                if (empty($color) && !empty($pl['selectedColor'])) $color = $pl['selectedColor'];
+                if (empty($font) && !empty($pl['style']['font'])) $font = $pl['style']['font'] ?? null;
+            }
+
+            // raw_payload (sometimes double-encoded or raw JSON)
+            if ((empty($font) || empty($color)) && !empty($order->raw_payload)) {
+                $rp = json_decode($order->raw_payload, true);
+                if (is_string($rp)) $rp = json_decode($rp, true) ?: [];
+                $rp = $rp ?: [];
+                if (empty($font) && !empty($rp['font'])) $font = $rp['font'];
+                if (empty($color) && !empty($rp['color'])) $color = $rp['color'];
+                if (empty($font) && !empty($rp['selectedFont'])) $font = $rp['selectedFont'];
+                if (empty($color) && !empty($rp['selectedColor'])) $color = $rp['selectedColor'];
+            }
+
+            // meta (sometimes used)
+            if ((empty($font) || empty($color)) && !empty($order->meta)) {
+                $m = json_decode($order->meta, true) ?: [];
+                if (empty($font) && !empty($m['font'])) $font = $m['font'];
+                if (empty($color) && !empty($m['color'])) $color = $m['color'];
+                if (empty($font) && !empty($m['selectedFont'])) $font = $m['selectedFont'];
+                if (empty($color) && !empty($m['selectedColor'])) $color = $m['selectedColor'];
+            }
+
+            // final fallback to top-level columns if present
+            if (empty($font) && !empty($order->font)) $font = $order->font;
+            if (empty($color) && !empty($order->color)) $color = $order->color;
+
+            // normalize values
+            $orderFont = is_string($font) ? trim($font) : null;
+            $orderColor = is_string($color) ? trim($color) : null;
+            if ($orderColor && $orderColor !== '' && $orderColor[0] !== '#') {
+                $orderColor = '#' . ltrim($orderColor, '#');
+            }
+
+            // attach back to $order object so blade sees them
+            $order->font = $orderFont;
+            $order->color = $orderColor;
+
+            // Optional debug log - uncomment to debug
+            // Log::info("DesignOrder #{$id} font/color resolved", ['font'=>$orderFont, 'color'=>$orderColor, 'payload_exists'=>!empty($order->payload)]);
+        } catch (\Throwable $e) {
+            Log::warning("DesignOrder #{$id}: font/color extraction failed: " . $e->getMessage());
+        }
+
         $players = collect();
 
         try {

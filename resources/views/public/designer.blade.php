@@ -1203,7 +1203,7 @@ async function doSave() {
     }
 
     saveBtn.remove();
-    alert('Design saved ✔ — you can now Add to Cart.');
+    alert('Design saved ✔ — You Can Now Click Buy Now.');
     return data;
   } catch (err) {
     console.error('doSave error', err);
